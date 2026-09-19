@@ -1,0 +1,109 @@
+/**
+ * El almacén contra el navegador.
+ *
+ * Mismo contrato que el de Firestore, para poder trabajar sin red, probar sin tocar la
+ * base real y arrancar la app aunque no haya sesión. `escuchar` avisa a las demás
+ * pestañas mediante el evento `storage`, así que dos ventanas abiertas se mantienen a la par.
+ */
+
+import { enRango, nuevoId, type Almacen, type Coleccion, type Desuscribir, type Documento } from './almacen';
+import type { Ajustes, Evento, ID, Layout, Rango, Tarea } from './tipos';
+
+const CANAL = 'archicel:cambio';
+
+function leerJSON<T>(clave: string, porDefecto: T): T {
+  if (typeof window === 'undefined') return porDefecto;
+  try {
+    const crudo = window.localStorage.getItem(clave);
+    return crudo ? (JSON.parse(crudo) as T) : porDefecto;
+  } catch {
+    return porDefecto;
+  }
+}
+
+function escribirJSON(clave: string, valor: unknown): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(clave, JSON.stringify(valor));
+    window.dispatchEvent(new CustomEvent(CANAL, { detail: clave }));
+  } catch {
+    /* almacenamiento bloqueado: la app sigue, solo que sin recordar */
+  }
+}
+
+function alCambiar(clave: string, fn: () => void): Desuscribir {
+  if (typeof window === 'undefined') return () => {};
+  const propio = (e: Event) => {
+    if ((e as CustomEvent<string>).detail === clave) fn();
+  };
+  const ajeno = (e: StorageEvent) => {
+    if (e.key === clave) fn();
+  };
+  window.addEventListener(CANAL, propio);
+  window.addEventListener('storage', ajeno);
+  return () => {
+    window.removeEventListener(CANAL, propio);
+    window.removeEventListener('storage', ajeno);
+  };
+}
+
+function crearColeccion<T extends { id: ID; fecha?: string }>(clave: string): Coleccion<T> {
+  const todo = () => leerJSON<T[]>(clave, []);
+
+  return {
+    async listar(rango) {
+      return enRango(todo() as Array<T & { fecha: string }>, rango) as T[];
+    },
+
+    async obtener(id) {
+      return todo().find((d) => d.id === id) ?? null;
+    },
+
+    async guardar(entrada) {
+      const lista = todo();
+      const id = entrada.id ?? nuevoId();
+      const doc = { ...(entrada as object), id } as T;
+      const i = lista.findIndex((d) => d.id === id);
+      if (i >= 0) lista[i] = doc;
+      else lista.push(doc);
+      escribirJSON(clave, lista);
+      return doc;
+    },
+
+    async borrar(id) {
+      escribirJSON(clave, todo().filter((d) => d.id !== id));
+    },
+
+    escuchar(cb, rango) {
+      const emitir = () => cb(enRango(todo() as Array<T & { fecha: string }>, rango) as T[]);
+      emitir();
+      return alCambiar(clave, emitir);
+    },
+  };
+}
+
+function crearDocumento<T>(clave: string): Documento<T> {
+  return {
+    async leer() {
+      return leerJSON<T | null>(clave, null);
+    },
+    async escribir(valor) {
+      escribirJSON(clave, valor);
+    },
+    escuchar(cb) {
+      const emitir = () => cb(leerJSON<T | null>(clave, null));
+      emitir();
+      return alCambiar(clave, emitir);
+    },
+  };
+}
+
+export function crearAlmacenLocal(): Almacen {
+  return {
+    uid: 'local',
+    eventos: crearColeccion<Evento>('archicel.eventos.v1'),
+    tareas: crearColeccion<Tarea>('archicel.tareas-dia.v1'),
+    ajustes: crearDocumento<Ajustes>('archicel.ajustes.v1'),
+    layout: (superficie: string) => crearDocumento<Layout>(`archicel.layout.${superficie}.v3`),
+  };
+}

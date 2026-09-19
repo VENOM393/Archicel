@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════
+   Tokens de Archicel — el contrato vive en docs/design/DESIGN.md.
+   Si cambias un valor aquí, cámbialo allí en el mismo commit.
+   ═══════════════════════════════════════════════════════ */
+@theme {
+  --color-canvas-deep: #0A1317;
+  --color-canvas: #101C21;
+  --color-ink: #EAF2F4;
+  --color-ink-muted: #B6C8CD;
+  --color-ink-subtle: #93A8AF;
+  --color-accent: #F0A85C;
+  --color-accent-soft: #F8CB94;
+  --color-on-accent: #1A1106;
+  --color-cool: #8FB7C4;
+
+  --color-ev-ambar: #F0A85C;
+  --color-ev-rojo: #FF6B5E;
+  --color-ev-naranja: #FF9F45;
+  --color-ev-verde: #54D18C;
+  --color-ev-menta: #4FD6C0;
+  --color-ev-cian: #5AC8E8;
+  --color-ev-azul: #5B9DF9;
+  --color-ev-indigo: #8A8CF0;
+  --color-ev-violeta: #B57BEE;
+  --color-ev-rosa: #FF7AA8;
+  --color-ev-arena: #D6B08A;
+  --color-ev-piedra: #9FB0BA;
+
+  --font-ui: "Outfit", "SF Pro Display", system-ui, sans-serif;
+  --font-data: ui-monospace, "SF Mono", "Cascadia Mono", monospace;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-soft: cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+:root {
+  --panel-rgb: 12, 23, 28;
+  --panel-strong-rgb: 15, 29, 35;
+  --opa: 0.7;
+  --hairline: rgba(214, 234, 240, 0.16);
+  --panel: rgba(var(--panel-rgb), var(--opa));
+  --panel-strong: rgba(var(--panel-strong-rgb), calc(var(--opa) + 0.1));
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--color-canvas-deep);
+  color: var(--color-ink);
+  font-family: var(--font-ui);
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--color-accent); color: var(--color-on-accent); }
+
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; border-radius: 8px; }

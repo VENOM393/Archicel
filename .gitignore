@@ -1,0 +1,28 @@
+# dependencias
+node_modules/
+.pnp
+.pnp.*
+
+# build
+.next/
+out/
+build/
+next-env.d.ts
+
+# entorno — aquí vive la configuración de Firebase
+.env
+.env.local
+.env*.local
+
+# grafo de Graft: caché local regenerable
+graft/
+
+# herramientas
+.playwright/
+.playwright-cli/
+.vercel
+*.tsbuildinfo
+
+# sistema
+.DS_Store
+Thumbs.db
