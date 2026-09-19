@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Outfit } from 'next/font/google';
 
 import { ProveedorSesion } from '@/lib/firebase/sesion';
+import { ProveedorUI } from '@/lib/ui/contexto';
 import './globals.css';
 import '@/styles/archicel.css';
 
@@ -28,7 +29,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className={outfit.variable}>
       <body>
-        <ProveedorSesion>{children}</ProveedorSesion>
+        <ProveedorSesion>
+          <ProveedorUI>{children}</ProveedorUI>
+        </ProveedorSesion>
       </body>
     </html>
   );

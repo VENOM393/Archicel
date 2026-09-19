@@ -16,10 +16,9 @@ import { IMAN, WIDGETS, fusionarLayout, layoutPorDefecto, minimoEnPixeles } from
 
 type Guia = { v: number | null; h: number | null };
 
-export function useEscritorio(lienzo: React.RefObject<HTMLDivElement | null>) {
+export function useEscritorio(lienzo: React.RefObject<HTMLDivElement | null>, editando: boolean) {
   const { almacen } = useArchicel();
   const [layout, setLayout] = useState<Layout>(() => layoutPorDefecto());
-  const [editando, setEditando] = useState(false);
   const [guias, setGuias] = useState<Guia>({ v: null, h: null });
   const [listo, setListo] = useState(false);
   const zTop = useRef(10);
@@ -219,8 +218,6 @@ export function useEscritorio(lienzo: React.RefObject<HTMLDivElement | null>) {
   return {
     layout,
     listo,
-    editando,
-    setEditando,
     guias,
     altoLienzo,
     empezarArrastre,
