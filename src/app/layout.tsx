@@ -3,6 +3,7 @@ import { Outfit } from 'next/font/google';
 
 import { ProveedorSesion } from '@/lib/firebase/sesion';
 import './globals.css';
+import '@/styles/archicel.css';
 
 const outfit = Outfit({
   subsets: ['latin'],

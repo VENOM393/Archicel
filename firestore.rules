@@ -5,7 +5,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function esDueño(uid) {
+    function esPropietario(uid) {
       return request.auth != null && request.auth.uid == uid;
     }
 
@@ -18,23 +18,23 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if esDueño(uid);
-      allow create, update: if esDueño(uid)
+      allow read: if esPropietario(uid);
+      allow create, update: if esPropietario(uid)
         && request.resource.data.keys().hasOnly(['nombre', 'creado', 'actualizado']);
       allow delete: if false;                    // la cuenta no se borra desde el cliente
 
       // ajustes y layout: documentos sueltos, sin forma fija
       match /ajustes/{doc} {
-        allow read, write: if esDueño(uid);
+        allow read, write: if esPropietario(uid);
       }
       match /layout/{superficie} {
-        allow read, write: if esDueño(uid);
+        allow read, write: if esPropietario(uid);
       }
 
       // eventos del curso: entregas, exámenes, presentaciones…
       match /eventos/{eventoId} {
-        allow read, delete: if esDueño(uid);
-        allow create, update: if esDueño(uid)
+        allow read, delete: if esPropietario(uid);
+        allow create, update: if esPropietario(uid)
           && request.resource.data.tipo is string
           && request.resource.data.titulo is string
           && request.resource.data.titulo.size() > 0
@@ -45,8 +45,8 @@ service cloud.firestore {
 
       // tareas por franja horaria
       match /tareas/{tareaId} {
-        allow read, delete: if esDueño(uid);
-        allow create, update: if esDueño(uid)
+        allow read, delete: if esPropietario(uid);
+        allow create, update: if esPropietario(uid)
           && request.resource.data.titulo is string
           && request.resource.data.titulo.size() <= 200
           && fechaValida(request.resource.data.fecha)
@@ -59,7 +59,7 @@ service cloud.firestore {
       // lo que venga después (asignaturas, proyectos, referencias…):
       // mismo dueño, sin validación de forma hasta que el modelo se fije.
       match /{coleccion}/{docId} {
-        allow read, write: if esDueño(uid);
+        allow read, write: if esPropietario(uid);
       }
     }
 
