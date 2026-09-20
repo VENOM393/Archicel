@@ -396,11 +396,21 @@ costar ocho renders. Está en `Escritorio.tsx`, junto al resto de efectos del li
 
 Los widgets no aparecen: se posan, en el orden en que se lee la página. `useEscritorio` calcula
 `orden` agrupando por bandas de 60 px —así dos paneles alineados a ojo entran juntos aunque difieran
-un píxel— y el índice viaja al CSS como `--i`, que se convierte en `52 ms` de retraso por puesto.
+un píxel— y ese orden es el que siguen.
 
-La animación cuelga de `.canvas.posado`, y esa clase solo se pone cuando el layout **real** ya llegó
-del almacén. Sin esa condición se vería a cada widget aterrizar en su posición de fábrica y saltar
-después a la suya.
+Lo lleva **Motion**, no el CSS. El lienzo es un `m.div` con las variantes `ORQUESTA` y cada widget un
+`m.article` con `POSARSE`; el escalonado sale de `staggerChildren`, no de un retraso calculado con
+`--i`. El lienzo se queda en `fuera` mientras `esc.listo` sea falso, que es cuando el layout **real**
+ya llegó del almacén — sin esa condición se vería a cada widget aterrizar en su posición de fábrica
+y saltar después a la suya.
+
+Al volver de otra sección no se repite: `initial={estreno ? 'fuera' : false}`, y `false` significa
+«empieza ya en el estado final». La presentación está bien la primera vez; la vigésima es una espera.
+
+> **Una animación, un dueño.** Las reglas de CSS que hacían esto se borraron, no se dejaron por si
+> acaso. Motion escribe `opacity`, `transform` y `filter` en línea, pero una `animation` de CSS gana
+> sobre el estilo en línea: conviviendo, el widget se quedaba clavado en el último fotograma del CSS.
+> Vale para todo el proyecto — cada propiedad la controla Motion o la controla la hoja de estilos.
 
 ---
 
@@ -419,12 +429,19 @@ día sigue siendo de tareas — mes y día no comparten contenido, solo destino.
 ### El relevo
 
 Los dos paneles ocupan el mismo hueco, así que no se cruzan: se relevan. El saliente se apaga hacia
-el desenfoque (`SALIDA`, 200 ms, que debe coincidir con `calOut`), y **solo entonces** entra el otro.
+el desenfoque y **solo entonces** entra el otro.
 
-`key={modo}` remonta el contenedor, y ahí está el detalle que cuesta una tarde: sin el remonte, la
-clase `.sale` con `forwards` sostiene `opacity:0` sobre el panel **nuevo** y la vista queda en negro
-con el DOM perfectamente correcto. Si alguna vez el calendario aparece vacío pero el DOM tiene sus
-siete columnas, mira la animación de salida antes que los datos.
+Quien lo garantiza es `<AnimatePresence mode="wait">` con `key={modo}`, y la variante es `RELEVO`.
+Antes eran un `setTimeout` de 200 ms que tenía que valer exactamente lo mismo que una duración
+escrita en el CSS, un estado `saliendo` para que nadie cambiara de pestaña a mitad, y un
+`animation-fill-mode:forwards` que sostenía `opacity:0` sobre el panel **nuevo** si algo fallaba — el
+calendario aparecía vacío con el DOM perfectamente correcto. Nada de eso existe ya: no hay dos
+números que mantener iguales, y si alguien pulsa la otra pestaña a mitad de la salida, Motion
+redirige la animación en curso en vez de encolar otra.
+
+La píldora del conmutador va aparte, con `layoutId="seg-pill"`: vive dentro de la pestaña activa y
+Motion la lleva de una a otra midiendo el DOM real. No hay ningún porcentaje que ajustar el día que
+haya una tercera vista.
 
 ### El suelo de opacidad
 

@@ -200,6 +200,42 @@ Dos cosas que no hay que olvidar:
   acceso, las dos vías (Google y correo) y qué hay que activar en la consola están en
   [docs/data/CUENTAS.md](docs/data/CUENTAS.md).
 
+## El movimiento
+
+La animación la lleva **Motion 13** (lo que antes se llamaba Framer Motion), y el vocabulario entero
+—muelles, curvas, tiempos y variantes— vive en un solo fichero: `src/lib/ui/movimiento.ts`. Un
+componente elige **cuál** usa, nunca **cuánto dura**. Sin eso, cada pantalla inventa sus propios
+números y la interfaz deja de ir a compás sin que nadie sepa decir por qué.
+
+Cuatro reglas que cuestan una tarde cada una si se descubren a mano:
+
+1. **Una propiedad la controla Motion o la controla el CSS, nunca las dos.** Al pasar algo a Motion
+   se **borra** la regla de CSS: una `animation` gana sobre el estilo en línea que Motion escribe, y
+   el elemento se queda clavado en el último fotograma. Si un `:hover` lo levantaba dos píxeles, ese
+   `:hover` se convierte en `whileHover`.
+2. **`filter` en un ancestro rompe `position:fixed` dentro.** Por eso la transición de página no
+   lleva desenfoque: envuelve la barra del editor y las hojas modales.
+3. **El indicador que viaja se hace con `layoutId`**, no midiendo posiciones — el agua del dock y la
+   píldora del calendario.
+4. **Menos movimiento se declara una sola vez**, en `MotionConfig reducedMotion="user"`. No se
+   repite en el `@media` del CSS.
+
+**El cambio de página tiene dirección, y la dirección la manda el dock.** Si la sección nueva está
+a la derecha en el dock, la página viaja a la derecha, igual que el agua del indicador; si es el
+detalle de la que se deja —`/dia` dentro de `/calendario`— se entra con escala en vez de cruzar. El
+orden vive en `ORDEN` dentro de `movimiento.ts`: **si el dock se reordena, esa lista va con él**.
+
+Y el reparto: el envoltorio de página solo **viaja**, y lo que aparece es el contenido pieza a pieza.
+Las páginas no declaran `initial` ni `animate` — heredan el estado del envoltorio por el árbol de
+Motion. Añadir una parte a una pantalla es escribir `variants={PIEZA}` y nada más.
+
+Se importa `* as m from 'motion/react-m'` (4,6 kB) y no `motion` (25 kB); `LazyMotion strict` hace
+que confundirlos sea un error y no una regresión silenciosa. Consecuencia práctica: en un fichero
+que importa `m`, no puede haber una variable local llamada `m`.
+
+El detalle, con la tabla de variantes y qué sigue en CSS a propósito, está en
+[docs/frontend/MOVIMIENTO.md](docs/frontend/MOVIMIENTO.md). Léelo antes de animar nada.
+
 ## Arquitectura del escritorio
 
 El panel se construye con un **registro de widgets** sobre una rejilla de 12 columnas, un **layout**
@@ -286,6 +322,7 @@ Cosas que no se deducen mirando:
 ```
 .claude/skills/     las cinco skills de frontend (+ graft, cuando se instale)
 docs/frontend/      SKILLS.md — uso de las skills
+                    MOVIMIENTO.md — el sistema de animación (Motion)
                     WIDGETS.md — arquitectura del escritorio y modo edición
                     INSTALACION.md — la app como programa instalable (PWA)
 docs/arquitectura/  ARQUITECTURA.md — capas, extensión y rendimiento medido
