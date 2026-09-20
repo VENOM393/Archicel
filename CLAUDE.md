@@ -229,9 +229,27 @@ Y el reparto: el envoltorio de página solo **viaja**, y lo que aparece es el co
 Las páginas no declaran `initial` ni `animate` — heredan el estado del envoltorio por el árbol de
 Motion. Añadir una parte a una pantalla es escribir `variants={PIEZA}` y nada más.
 
-Se importa `* as m from 'motion/react-m'` (4,6 kB) y no `motion` (25 kB); `LazyMotion strict` hace
-que confundirlos sea un error y no una regresión silenciosa. Consecuencia práctica: en un fichero
-que importa `m`, no puede haber una variable local llamada `m`.
+Se importa `* as m from 'motion/react-m'` y no `motion`; `LazyMotion strict` hace que confundirlos
+sea un error y no una regresión silenciosa. Consecuencia práctica: en un fichero que importa `m`, no
+puede haber una variable local llamada `m`.
+
+**Las funciones de Motion se cargan con la aplicación, no en diferido**, y eso no es negociable: en
+diferido hay una ventana en la que `m.div` pinta pero no anima, y todo lo que se anime al montarse
+cae dentro de ella en la primera carga. Costó el escritorio en blanco al entrar.
+
+Dos trampas más, las dos con el mismo síntoma —una pantalla que no se anima— y ninguna visible
+leyendo el código:
+
+- **`initial={false}` en un `AnimatePresence` se propaga a todo lo que lleva dentro** y anula la
+  animación de montaje de cada descendiente, no solo la del hijo directo.
+- **El App Router mete la página nueva dentro del envoltorio que está saliendo**, así que el mismo
+  contenido se anima dos veces. Lo arregla `RutaCongelada`.
+
+**Una animación de entrada nunca debe ser lo que decide si algo se ve.** Si falla, lo que se pierde
+tiene que ser el movimiento, no el contenido.
+
+**Esto se verifica con Playwright contra `npm run build && npm start`, no con el panel del navegador**:
+con el panel oculto no hay fotogramas y no se distingue una animación que no corre de una rota.
 
 El detalle, con la tabla de variantes y qué sigue en CSS a propósito, está en
 [docs/frontend/MOVIMIENTO.md](docs/frontend/MOVIMIENTO.md). Léelo antes de animar nada.

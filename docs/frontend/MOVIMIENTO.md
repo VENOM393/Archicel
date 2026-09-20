@@ -264,30 +264,97 @@ interfaz sin desplazamientos, no una interfaz que no le diga cuándo algo ha cam
 
 ---
 
-## 5 · Por qué `LazyMotion` y `m` en vez de `motion`
+## 5 · Las tres trampas que dejaron la aplicación en blanco
+
+Las tres se descubrieron el mismo día, las tres daban el mismo síntoma —una pantalla que no se
+anima, o directamente vacía— y ninguna se ve leyendo el código. Están aquí para no volver a
+pagarlas.
+
+### 5.1 · `initial={false}` en un `AnimatePresence` se propaga a todo lo de dentro
+
+Esta es la peor, porque el nombre no lo sugiere. Parece que dice «esta página no se anima al
+aparecer la primera vez». Lo que hace de verdad es **anular la animación de montaje de todos sus
+descendientes**.
+
+Con ella puesta en el envoltorio de página, en la primera carga:
+
+- los bloques del escritorio nacían ya en `opacity:1`, sin posarse;
+- las piezas del calendario, del día y del horario, igual.
+
+Se descubrió comparando con el plato del dock, que está **fuera** del `AnimatePresence` y sí se
+animaba. Cuando algo dentro de una página no se anima y algo del chrome sí, mira aquí primero.
+
+Lo que esa propiedad evitaba —que la página entrara viajando nada más abrir la aplicación— lo
+resuelve el propio viaje: en la primera carga no hay de dónde venir, el viaje es `quieto`, y su
+estado de partida es idéntico al de reposo. El envoltorio no hace nada y la entrada se la lleva
+entera el contenido.
+
+### 5.2 · Con `LazyMotion` en diferido, lo que se anima al montar se pierde en la primera carga
+
+Hay una ventana de milisegundos en la que `m.div` ya pinta pero todavía no sabe animar. **Todo lo
+que tenga que animarse al montarse cae dentro de esa ventana la primera vez que se abre la
+aplicación**, y cuando las funciones llegan Motion ya no lo dispara: para él la propiedad no ha
+cambiado.
+
+Peor aún si lo que cambia es el propio `animate`. El escritorio tenía
+`animate={listo ? 'dentro' : 'fuera'}` y el almacén local contesta de forma síncrona, así que el
+cambio ocurría **dentro** de la ventana: los bloques se quedaban en `opacity:0` **para siempre**. El
+escritorio en blanco. Al llegar desde otra sección funcionaba, porque las funciones ya estaban — de
+ahí que solo fallara al entrar, que es el peor momento posible.
+
+Dos consecuencias, y las dos están aplicadas:
+
+1. **Las funciones se cargan con la aplicación**, no después (`features={domMax}`). Cuesta 25 kB;
+   la alternativa era que la primera pantalla no tuviera animación, y en este proyecto eso va justo
+   al revés del criterio.
+2. **Un `animate` que cambia no es de fiar para decidir si algo se ve.** El escritorio ya no monta
+   el lienzo hasta que hay layout, y entonces entra con un destino fijo. Un par `initial`/`animate`
+   estable desde el montaje sí sobrevive.
+
+> La regla general: **una animación de entrada nunca debe ser lo que decide si algo se ve.** Si
+> falla, lo que se pierde tiene que ser el movimiento, no el contenido.
+
+### 5.3 · El App Router mete la página nueva dentro del envoltorio que está saliendo
+
+`usePathname()` cambia en el acto, pero los `children` del router se sustituyen **en su sitio**. Con
+una salida animada, la página nueva se anima saliendo y después otra vez entrando: el mismo gesto
+dos veces, el primero cortado a mitad.
+
+Medido: al ir de `/` a `/calendario` el nodo del DOM no se remontaba nunca y la `key` del fiber se
+quedaba en `/` mientras dentro ya estaba el calendario.
+
+Lo arregla `RutaCongelada`, que congela `LayoutRouterContext` en el montaje de cada envoltorio. Está
+documentado entero en su fichero, incluido qué hacer si un día Next mueve ese import.
+
+---
+
+## 6 · Por qué `LazyMotion` y `m` en vez de `motion`
 
 `ProveedorMovimiento.tsx` monta:
 
 ```tsx
-<LazyMotion features={() => import('motion/react').then((m) => m.domMax)} strict>
+<LazyMotion features={domMax} strict>
   <MotionConfig reducedMotion="user">{children}</MotionConfig>
 </LazyMotion>
 ```
 
-`import * as m from 'motion/react-m'` pesa 4,6 kB; `motion` completo pesa 25 kB y entra en el paquete
-inicial. Con `LazyMotion` las funciones llegan después, sin bloquear la primera pantalla — que en una
-aplicación cuyo argumento es que apetezca abrirla, es exactamente donde no se puede gastar.
+Se sigue usando `LazyMotion` con `m`, pero **las funciones se pasan directamente**, no con un import
+en diferido. El porqué está en § 5.2: en diferido, lo que se anima al montarse no se anima la
+primera vez que se abre la aplicación.
 
-`strict` hace que usar `motion.div` en lugar de `m.div` sea un error en vez de una regresión
-silenciosa de 25 kB.
+Lo que sigue aportando `LazyMotion` es `strict`: usar `motion.div` en lugar de `m.div` pasa a ser un
+error en vez de una regresión silenciosa que duplica la biblioteca. Eso nunca dependía del diferido.
+
+Va `domMax` y no `domAnimation` porque hace falta lo que trae de más: animaciones de **layout** —el
+agua del dock y la píldora del calendario viajan con `layoutId`— y **arrastre**.
 
 **Consecuencia práctica:** en un componente que importa `* as m`, no puede haber una variable local
-llamada `m`. Ya obligó a renombrar dos `useMemo` en el calendario. Si aparece un error raro de tipos
-sobre `m.fecha`, es esto.
+llamada `m`. Ya obligó a renombrar dos `useMemo` en el calendario y a importar el espacio de nombres
+como `mo` en el horario. Si aparece un error raro de tipos sobre `m.fecha`, es esto.
 
 ---
 
-## 6 · Lo que sigue estando en CSS a propósito
+## 7 · Lo que sigue estando en CSS a propósito
 
 - **El arrastre y el redimensionado de widgets** (`useEscritorio.ts`). Escriben `style.left/top` en
   píxeles con imantado magnético a los bordes de los vecinos. El `drag` de Motion trabaja con
@@ -304,19 +371,49 @@ sobre `m.fecha`, es esto.
 
 ---
 
-## 7 · Cómo se verifica
+## 8 · Cómo se verifica
 
-Con el navegador, y solo con el navegador. Dos cosas que ahorran una tarde:
+**En un navegador de verdad, con fotogramas de verdad.** El panel del navegador del escritorio de
+Claude **no sirve** para esto: cuando está oculto no hay `requestAnimationFrame`, y ahí no se
+distingue una animación que no corre de una que está rota. Los dos fallos de esta página estuvieron
+delante durante horas sin que se vieran, y cayeron en cuanto se abrió un Chrome de verdad.
 
-1. **Medir a mitad de una animación da números falsos.** Ya llevó a dos diagnósticos equivocados en
-   este proyecto. Hay que esperar a que el gesto termine, o usar `onAnimationComplete`.
-2. **Un panel de navegador oculto congela `requestAnimationFrame`.** Motion no avanza y todo se queda
-   en su estado `fuera` — widgets a `opacity:0`, el hueco del lápiz a `width:0`. Eso **no** es un
-   fallo de la animación: es que no está corriendo. Se comprueba con
+```js
+document.visibilityState  // "hidden" → lo que midas de movimiento no vale
+```
 
-   ```js
-   document.visibilityState  // "hidden" → no hay fotogramas
-   ```
+Lo que sí se puede medir con el panel oculto es la **geometría**, que se calcula igual: tamaños,
+proporciones, si una caja desborda, si un `transform` en reposo es `none`. Todo lo demás hay que
+decir que está sin verificar.
 
-   Si sale `hidden`, la única verificación honesta es la de la geometría, que sí se calcula. Lo demás
-   hay que decir que está sin verificar.
+### La forma que funciona
+
+Un guión de Playwright contra `npm run build && npm start`, con `channel: 'chrome'` para usar el
+Chrome del sistema —descargar el suyo falla a menudo aquí— y `reducedMotion: 'no-preference'`, o el
+navegador puede venir con menos movimiento puesto y no se anima nada.
+
+Tres cosas que conviene medir, porque son las que se rompieron:
+
+1. **Que hay opacidades intermedias.** Llegar al estado final no demuestra que se haya animado: si
+   aparece de golpe, también acaba en `opacity:1`. Lo que lo demuestra es haber pasado por
+   `0.31`, `0.62`, `0.87`…
+2. **Que los hermanos van desfasados.** Si en algún fotograma unos van más adelantados que otros,
+   el escalonado corre.
+3. **Cuántas veces se monta la página.** Un `MutationObserver` sobre `.body` contando altas y bajas
+   de `.pagina`: una navegación tiene que ser **una** baja y **una** alta. Es la forma de cazar el
+   doble disparo de § 5.3, y no depende de poder ver la animación.
+
+```js
+/* instalar el muestreo ANTES de que corra nada de la aplicacion */
+await pagina.addInitScript(() => { /* ... requestAnimationFrame(tic) ... */ });
+await pagina.goto(url, { waitUntil: 'commit' });   // 'networkidle' llega tarde
+```
+
+`waitUntil: 'commit'` y no `'networkidle'`: con lo segundo, la entrada ya ha terminado cuando
+empiezas a mirar, y parece que no existe.
+
+### Y una que sigue valiendo
+
+**Medir a mitad de una animación da números falsos.** Ya llevó a dos diagnósticos equivocados en
+este proyecto. O se espera a que el gesto termine, o se muestrea la curva entera — pero una sola
+lectura a medio camino no dice nada.
