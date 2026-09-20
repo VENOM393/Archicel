@@ -12,7 +12,11 @@
  */
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
+import * as m from 'motion/react-m';
+import { AnimatePresence } from 'motion/react';
+
+import { MUELLE, ORQUESTA, PIEZA, RELEVO } from '@/lib/ui/movimiento';
 
 import { HojaEvento, type PeticionEvento } from '@/components/HojaEvento';
 import { HojaTarea, type PeticionTarea } from '@/components/HojaTarea';
@@ -28,43 +32,32 @@ function pad(n: number) {
   return String(n).padStart(2, '0');
 }
 
-/** Lo que tarda el panel saliente en apagarse. Debe coincidir con `calOut` en el CSS. */
-const SALIDA = 200;
-
 export default function Calendario() {
   const [modo, setModo] = useState<Modo>('mes');
-  const [saliendo, setSaliendo] = useState(false);
   const [ref, setRef] = useState(() => new Date());
   const [hoja, setHoja] = useState<PeticionEvento | null>(null);
   const [hojaTarea, setHojaTarea] = useState<PeticionTarea | null>(null);
-  const relevo = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * El cambio de vista es un relevo, no un corte: la que se va se apaga hacia el
    * desenfoque y solo entonces entra la otra. Dos fases en vez de un cruce porque ambas
    * ocupan el mismo hueco y superponerlas las mezcla.
    *
-   * `key={modo}` remonta el contenedor, y ahí está el detalle que cuesta una tarde: sin
-   * el remonte, la clase de salida con `forwards` sostiene `opacity:0` sobre el panel
-   * **nuevo** y la vista queda en negro con el DOM perfectamente correcto.
+   * Eso era antes un `setTimeout` de 200 ms que tenía que valer lo mismo que una
+   * duración escrita en el CSS, más un estado `saliendo` para guardarse de que nadie
+   * cambiara de pestaña a mitad. Ahora lo dice una palabra: `mode="wait"`. Motion espera
+   * a que la vista vieja termine su salida antes de montar la nueva, y si alguien pulsa
+   * la otra pestaña mientras tanto, redirige la que ya estaba saliendo en vez de
+   * encolarse. No hay dos números que mantener iguales ni un temporizador que limpiar.
    */
-  const cambiarModo = (m: Modo) => {
-    if (m === modo || saliendo) return;
-    setSaliendo(true);
-    relevo.current = setTimeout(() => {
-      setModo(m);
-      setSaliendo(false);
-    }, SALIDA);
-  };
-
-  useEffect(() => () => {
-    if (relevo.current) clearTimeout(relevo.current);
-  }, []);
-
   return (
     <>
-      <section className="vista on" aria-label="Calendario">
-        <div className="sem-top">
+      {/* La sección reparte la llegada de sus partes y cada parte la ejecuta, pero
+          ninguna de las dos declara `initial` ni `animate`: las hereda del envoltorio de
+          página del Marco por el árbol de Motion. Por eso el conmutador y el panel entran
+          exactamente cuando la página entra, sin que nadie haya cuadrado dos números. */}
+      <m.section className="vista on" variants={ORQUESTA} aria-label="Calendario">
+        <m.div className="sem-top" variants={PIEZA}>
           {/* Un `tablist` promete dos cosas: que cada pestaña gobierna un panel concreto
               y que las flechas se mueven entre ellas. Declararlo sin cumplirlas deja al
               lector de pantalla anunciando algo que no existe, así que van las dos. */}
@@ -76,47 +69,67 @@ export default function Calendario() {
               if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
               e.preventDefault();
               const otro: Modo = modo === 'mes' ? 'semana' : 'mes';
-              cambiarModo(otro);
+              setModo(otro);
               document.getElementById(`tab-${otro}`)?.focus();
             }}
           >
-            <span className="seg-pill" style={{ transform: `translateX(${modo === 'mes' ? 0 : 100}%)` }} />
-            {(['mes', 'semana'] as const).map((m) => (
+            {/* La píldora ya no se coloca con un porcentaje: vive dentro de la pestaña
+                activa y lleva `layoutId`. Motion la encuentra en su nuevo sitio y la
+                lleva de una a otra midiendo el DOM real, así que no hay forma de que se
+                despegue del botón — y el día que haya una tercera vista, sigue
+                funcionando sin tocar un solo número. */}
+            {(['mes', 'semana'] as const).map((vista) => (
               <button
-                key={m}
-                id={`tab-${m}`}
+                key={vista}
+                id={`tab-${vista}`}
                 type="button"
                 role="tab"
-                aria-selected={modo === m}
+                aria-selected={modo === vista}
                 aria-controls="cal-panel"
                 /* dentro de un tablist se navega con flechas, no con Tab */
-                tabIndex={modo === m ? 0 : -1}
-                onClick={() => cambiarModo(m)}
+                tabIndex={modo === vista ? 0 : -1}
+                onClick={() => setModo(vista)}
               >
-                {m === 'mes' ? 'Mes' : 'Semana'}
+                {modo === vista && (
+                  <m.span layoutId="seg-pill" className="seg-pill" transition={MUELLE.normal} aria-hidden="true" />
+                )}
+                <span className="seg-txt">{vista === 'mes' ? 'Mes' : 'Semana'}</span>
               </button>
             ))}
           </div>
           <span className="seg-nota">
             {modo === 'mes' ? 'entregas, exámenes y correcciones' : 'tus tareas · toca un día para abrirlo'}
           </span>
-        </div>
+        </m.div>
 
-        <div
-          className={`cal-panel${saliendo ? ' sale' : ''}`}
-          key={modo}
-          id="cal-panel"
-          role="tabpanel"
-          aria-labelledby={`tab-${modo}`}
-          aria-busy={saliendo}
-        >
-          {modo === 'mes' ? (
-            <VistaMes ref_={ref} setRef={setRef} abrirEvento={setHoja} />
-          ) : (
-            <VistaSemana ref_={ref} setRef={setRef} abrirTarea={setHojaTarea} />
-          )}
-        </div>
-      </section>
+        {/* Dos animaciones distintas sobre el mismo sitio, y por eso dos cajas.
+            La de fuera es la **llegada a la página** y lleva `PIEZA`; la de dentro es el
+            **cambio de vista** y lleva `RELEVO`. Sin separarlas habría que elegir una, y el
+            panel o entraría a destiempo con el resto de la página o se relevaría mal al
+            cambiar de pestaña. `initial={false}` en el `AnimatePresence` de dentro deja
+            claro quién manda al llegar: la de fuera. */}
+        <m.div className="cal-pieza" variants={PIEZA}>
+        <AnimatePresence mode="wait" initial={false}>
+          <m.div
+            key={modo}
+            className="cal-panel"
+            variants={RELEVO}
+            initial="fuera"
+            animate="dentro"
+            exit="saliendo"
+            id="cal-panel"
+            role="tabpanel"
+            aria-labelledby={`tab-${modo}`}
+          >
+            {modo === 'mes' ? (
+              <VistaMes ref_={ref} setRef={setRef} abrirEvento={setHoja} />
+            ) : (
+              <VistaSemana ref_={ref} setRef={setRef} abrirTarea={setHojaTarea} />
+            )}
+          </m.div>
+        </AnimatePresence>
+        </m.div>
+      </m.section>
 
       <HojaEvento peticion={hoja} cerrar={() => setHoja(null)} />
       <HojaTarea peticion={hojaTarea} cerrar={() => setHojaTarea(null)} />
@@ -143,10 +156,10 @@ function VistaMes({
   const eventos = useEventos({ desde: primero, hasta: ultimo });
 
   const porDia = useMemo(() => {
-    const m: Record<string, Evento[]> = {};
-    eventos.forEach((e) => (m[e.fecha] = [...(m[e.fecha] ?? []), e]));
-    Object.values(m).forEach((l) => l.sort((a, b) => (a.hora ?? -1) - (b.hora ?? -1)));
-    return m;
+    const mapa: Record<string, Evento[]> = {};
+    eventos.forEach((e) => (mapa[e.fecha] = [...(mapa[e.fecha] ?? []), e]));
+    Object.values(mapa).forEach((l) => l.sort((x, y) => (x.hora ?? -1) - (y.hora ?? -1)));
+    return mapa;
   }, [eventos]);
 
   const offset = (new Date(anio, mes, 1).getDay() + 6) % 7;
@@ -306,9 +319,9 @@ function VistaSemana({
   const tareas = useTareas({ desde: aFecha(lunes), hasta: aFecha(domingo) });
 
   const porDia = useMemo(() => {
-    const m: Record<string, Tarea[]> = {};
-    tareas.forEach((t) => (m[t.fecha] = [...(m[t.fecha] ?? []), t]));
-    return m;
+    const mapa: Record<string, Tarea[]> = {};
+    tareas.forEach((t) => (mapa[t.fecha] = [...(mapa[t.fecha] ?? []), t]));
+    return mapa;
   }, [tareas]);
 
   /* la casilla alterna entre hecha y sin empezar; los demás estados se eligen en la hoja */

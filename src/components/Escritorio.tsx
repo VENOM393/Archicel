@@ -8,6 +8,9 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import * as m from 'motion/react-m';
+
+import { ORQUESTA, POSARSE } from '@/lib/ui/movimiento';
 
 import { CONTENIDOS } from '@/components/widgets';
 import { useEscritorio } from '@/hooks/useEscritorio';
@@ -131,14 +134,26 @@ export function Escritorio() {
 
   return (
     <>
-      {/* Hasta que no se sabe dónde va cada bloque no se enseña ninguno: `posado` es la
-          señal de que el layout real está puesto, y sin ella los widgets están ocultos.
-          `vuelta` distingue el regreso desde otra vista, donde ya no toca la entrada
-          larga sino aparecer y ya. */}
-      <div
-        className={`canvas${esc.listo ? ' posado' : ''}${estreno ? '' : ' vuelta'}`}
+      {/*
+        El lienzo dirige la entrada de sus bloques.
+
+        Antes esto eran dos clases y un retardo calculado en CSS con `--i`, más una bandera
+        para distinguir la primera visita del regreso. Motion lo hace con una propiedad:
+        `initial={false}` significa «empieza ya en el estado final, sin animar», así que al
+        volver del calendario los bloques simplemente están — sin repetir una presentación
+        de 760 ms que la segunda vez ya es una espera.
+
+        Y sigue sin enseñarse nada hasta que `listo`: mientras el layout real no esté
+        puesto, los bloques se quedan en `fuera` y nadie ve un widget en su sitio de
+        fábrica antes de saltar al suyo.
+      */}
+      <m.div
+        className="canvas"
         ref={lienzo}
         style={{ minHeight: esc.altoLienzo }}
+        variants={ORQUESTA}
+        initial={estreno ? 'fuera' : false}
+        animate={esc.listo ? 'dentro' : 'fuera'}
       >
         <div className="grid-guide" ref={guia} aria-hidden="true" />
         {esc.guias.v !== null && (
@@ -153,8 +168,9 @@ export function Escritorio() {
           const Contenido = CONTENIDOS[def.id];
           if (!caja || !Contenido) return null;
           return (
-            <article
+            <m.article
               key={def.id}
+              variants={POSARSE}
               data-id={def.id}
               className={`widget${def.solido ? ' solid' : ''}${caja.desnudo ? ' desnudo' : ''}`}
               aria-label={def.titulo}
@@ -163,7 +179,6 @@ export function Escritorio() {
                 top: caja.y,
                 width: `${caja.fw * 100}%`,
                 height: caja.h,
-                ['--i' as string]: esc.orden[def.id],
               }}
               onPointerDown={(e) => {
                 if ((e.target as HTMLElement).closest('.menu-btn, .resize')) return;
@@ -193,10 +208,10 @@ export function Escritorio() {
                 <Contenido />
               </div>
               <span className="resize" role="presentation" onPointerDown={(e) => esc.empezarResize(e, def.id)} />
-            </article>
+            </m.article>
           );
         })}
-      </div>
+      </m.div>
 
       {menu && (
         <>

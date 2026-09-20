@@ -9,6 +9,9 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import * as m from 'motion/react-m';
+
+import { ORQUESTA, PIEZA } from '@/lib/ui/movimiento';
 
 import { HojaEvento, type PeticionEvento } from '@/components/HojaEvento';
 import { HojaTarea, type PeticionTarea } from '@/components/HojaTarea';
@@ -119,8 +122,11 @@ function Dia() {
 
   return (
     <>
-      <section className="vista on" id="view-dia" aria-label="Agenda del día">
-        <div className="dia-top">
+      {/* Cinco piezas que llegan en el orden en que se leen: la fecha, la semana, los
+          eventos del día, los filtros y la agenda. Ninguna declara cuándo: heredan el
+          estado del envoltorio de página y `ORQUESTA` las reparte. */}
+      <m.section className="vista on" variants={ORQUESTA} id="view-dia" aria-label="Agenda del día">
+        <m.div className="dia-top" variants={PIEZA}>
           <h1 className="dia-fecha">
             <span className="num">{d.getDate()}</span>{' '}
             <span className="txt">
@@ -151,9 +157,9 @@ function Dia() {
               </svg>
             </Button>
           </div>
-        </div>
+        </m.div>
 
-        <div className="semana">
+        <m.div className="semana" variants={PIEZA}>
           {Array.from({ length: 7 }, (_, i) => {
             const x = new Date(lunes);
             x.setDate(lunes.getDate() + i);
@@ -176,10 +182,10 @@ function Dia() {
               </button>
             );
           })}
-        </div>
+        </m.div>
 
         {eventos.length > 0 && (
-          <div className="eventos-dia">
+          <m.div className="eventos-dia" variants={PIEZA}>
             {eventos.map((ev, i) => (
               <button
                 key={ev.id}
@@ -196,14 +202,14 @@ function Dia() {
                 {ev.hora !== null && <span className="ev-hora">{hhmm(ev.hora)}</span>}
               </button>
             ))}
-          </div>
+          </m.div>
         )}
 
         {/* Filtrar no es actuar. Estos botones eran cápsulas ámbar idénticas al de crear,
             así que la pantalla tenía cinco llamadas de la misma fuerza y ninguna guiaba.
             Ahora el filtro activo se marca con contorno y el resto son fantasma: la única
             pieza sólida de la pantalla es la que crea algo. */}
-        <div className="filtros" role="group" aria-label="Filtros de la agenda">
+        <m.div className="filtros" variants={PIEZA} role="group" aria-label="Filtros de la agenda">
           <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {(['todas', 'alta', 'media', 'baja'] as const).map((p) => (
               <Button
@@ -240,9 +246,9 @@ function Dia() {
             </svg>
             Nueva tarea
           </Button>
-        </div>
+        </m.div>
 
-        <div className="agenda" ref={agenda}>
+        <m.div className="agenda" variants={PIEZA} ref={agenda}>
           <div className="horas">
             {Array.from({ length: DIA_FIN - DIA_INICIO }, (_, i) => {
               const h = DIA_INICIO + i;
@@ -316,8 +322,8 @@ function Dia() {
               Toca una hora para añadir algo.
             </div>
           )}
-        </div>
-      </section>
+        </m.div>
+      </m.section>
 
       <HojaTarea peticion={hojaTarea} cerrar={() => setHojaTarea(null)} />
       <HojaEvento peticion={hojaEvento} cerrar={() => setHojaEvento(null)} />

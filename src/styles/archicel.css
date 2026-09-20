@@ -126,11 +126,6 @@
       0 -1px 0 rgba(0,0,0,.35) inset,
       0 22px 44px -26px rgba(0,0,0,.95),
       0 3px 8px -4px rgba(0,0,0,.55);
-    animation:dock-entra 760ms var(--ease-out) 260ms backwards;
-  }
-  @keyframes dock-entra{
-    from{opacity:0;transform:translateY(18px) scale(.95);filter:blur(6px)}
-    to{opacity:1;transform:none;filter:blur(0)}
   }
 
   /* El icono. Crece desde su borde inferior, como en macOS: apoyado en el suelo del
@@ -141,23 +136,33 @@
     text-decoration:none;
   }
 
+  /* Todo el cuadrado sale de `--lado`, que es lo único que escribe Motion.
+     El ancho, el alto, el radio y el glifo de dentro se calculan de él con la proporción
+     que tienen en reposo: 17/56 el radio, 24/56 el dibujo. Escrita así, la proporción
+     existe una sola vez y crecer no puede deformar nada.
+
+     El valor de aquí es el del primer pintado, antes de hidratar; a partir de ahí lo
+     sobreescribe Motion en línea. */
   .dock-btn{
+    --lado:56px;
     position:relative;
-    /* Medidas de reposo. Motion las sobreescribe en línea con su valor animado; están
-       aquí para el primer pintado del servidor, antes de que hidrate. */
-    width:56px;height:56px;flex:none;
-    will-change:width,height;
+    width:var(--lado);height:var(--lado);flex:none;
     display:grid;place-items:center;
-    border-radius:17px;
+    border-radius:calc(var(--lado) * 17 / 56);
     color:var(--ink-subtle);
     background:rgba(255,255,255,.04);
     border:1px solid var(--hairline);
     transform-origin:bottom center;
-    will-change:transform;
+    will-change:width,height,transform;
     transition:color 240ms var(--ease-soft),background 240ms,border-color 240ms;
   }
   .dock-enlace:hover .dock-btn{color:var(--ink);background:rgba(255,255,255,.08);border-color:var(--hairline-lit)}
-  .dock-btn svg{position:relative;z-index:2}
+  /* El glifo, en la misma proporción que su cuadrado. Gana a los atributos `width` y
+     `height` del SVG, que se quedan como medida del primer pintado. */
+  .dock-btn svg{
+    position:relative;z-index:2;
+    width:calc(var(--lado) * 24 / 56);height:calc(var(--lado) * 24 / 56);
+  }
 
   /* ── El agua del activo ──
      La misma que llevaba la gota del raíl, volcada a la escala clara: el brillo especular
@@ -169,7 +174,8 @@
      en un gris: dos tonos vecinos se leen planos, y plano es lo contrario de líquido. */
   .dock-agua{
     position:absolute;inset:0;border-radius:inherit;z-index:1;
-    opacity:0;transform:scale(.72);
+    /* Ni opacidad cero ni escala: este elemento solo se dibuja en la sección activa,
+       y Motion lo traslada de un icono a otro con layoutId. */
     background:
       radial-gradient(46% 38% at 32% 20%, rgba(255,255,255,.96), transparent 68%),
       linear-gradient(118deg, transparent 34%, rgba(255,255,255,.72) 46%, transparent 56%),
@@ -178,24 +184,21 @@
         #FFFFFF, #E4EDFC, #C6D6EE, #F2F6FF, #FFFFFF);
     animation:marea 20s linear infinite;
     box-shadow:0 2px 10px -3px rgba(180,205,245,.5);
-    transition:opacity 320ms var(--ease-out),transform 420ms var(--ease-out);
   }
   .dock-enlace[aria-current="page"] .dock-btn{
     color:#0C1016;
     background:transparent;
     border-color:transparent;
   }
-  .dock-enlace[aria-current="page"] .dock-agua{opacity:1;transform:none}
 
   /* El punto de debajo, como en macOS: dice cuál está abierta sin mover el icono de su
      sitio. Antes esto lo hacía un salto de siete píxeles y el activo se salía de la fila. */
   .dock-punto{
-    position:absolute;left:50%;bottom:-7px;width:4px;height:4px;border-radius:999px;
-    background:var(--ink-muted);
-    transform:translateX(-50%) scale(0);
-    transition:transform 320ms var(--ease-out),background 320ms;
+    /* Centrado con margen y no con transform: el punto lleva layoutId y Motion escribe
+       su propio transform para moverlo entre iconos. */
+    position:absolute;left:50%;margin-left:-2px;bottom:-7px;
+    width:4px;height:4px;border-radius:999px;background:#DCE8FC;
   }
-  .dock-enlace[aria-current="page"] .dock-punto{transform:translateX(-50%) scale(1);background:#DCE8FC}
 
   /* El rótulo, encima y solo al acercarse. Es lo que convierte tres iconos mudos en tres
      destinos con nombre. */
@@ -206,12 +209,8 @@
     background:rgba(var(--panel-strong-rgb),.92);
     border:1px solid var(--hairline-lit);
     box-shadow:0 10px 22px -14px rgba(0,0,0,.9);
-    opacity:0;transform:translateX(-50%) translateY(5px) scale(.94);
     transform-origin:bottom center;
-    transition:opacity 200ms,transform 260ms var(--ease-out);
   }
-  .dock-enlace:hover .dock-nombre,
-  .dock-enlace:focus-visible .dock-nombre{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
 
   .dock-enlace:focus-visible{outline:none}
   .dock-enlace:focus-visible .dock-btn{box-shadow:0 0 0 3px rgba(122,166,232,.45)}
@@ -219,25 +218,40 @@
   @media (max-width:560px){
     .dock{bottom:14px}
     .dock-plato{gap:9px;padding:9px 10px;border-radius:22px}
-    .dock-btn{border-radius:15px}
+    /* El radio ya no se fija aquí: sale de `--lado`, y con el lado de móvil da 14,6 px,
+       que es lo que esta regla pedía a mano. Además nunca llegaba a aplicarse, porque el
+       estilo en línea de Motion gana a la hoja. */
   }
 
   @media (prefers-reduced-motion:reduce){
-    .dock-plato{animation:none}
-    .dock-agua{animation:none;transition:opacity 200ms}
+    .dock-agua{animation:none}
   }
 
   /* Sitio para el dock: sin este hueco, lo ultimo de cada pagina queda debajo de el. */
-  .body{padding:16px 18px 108px;display:grid;gap:12px;align-content:start}
+  /* `overflow-x:clip` por la transición de página: al entrar, la página llega desplazada
+     40 px de lado, y sin esto esos 40 px empujan una barra de desplazamiento horizontal
+     que aparece y desaparece en cada navegación — la pantalla entera pega un tirón.
+     `clip` y no `hidden`: `hidden` crearía un contenedor de desplazamiento y se llevaría
+     por delante el desplazamiento vertical de la página; `clip` es el único valor que deja
+     un eje recortado y el otro libre. */
+  .body{padding:16px 18px 108px;display:grid;gap:12px;align-content:start;overflow-x:clip}
   .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
   .hueco{flex:1}
   .tools{display:flex;align-items:center;gap:7px}
+  /* Quien se encoge hasta desaparecer es el hueco, no el botón. El botón conserva su
+     medida — 34 px aquí, 44 en pantalla táctil, y esa segunda cifra es un mínimo de
+     accesibilidad que no puede depender de un número escrito en un componente. El margen
+     negativo se come el `gap` de `.tools` mientras está cerrado, para que el avatar no se
+     quede con siete píxeles de aire de nadie. */
+  .lapiz-hueco{display:flex;overflow:hidden;flex:none}
   .icon-btn{
-    width:34px;height:34px;border-radius:var(--r-sm);display:grid;place-items:center;cursor:pointer;
+    /* Sin `transform` en la transición ni en el `:hover`: el desplazamiento entero lo
+       lleva Motion, que escribe `transform` en línea y ganaría a cualquier regla de aquí. */
+    width:34px;height:34px;flex:none;border-radius:var(--r-sm);display:grid;place-items:center;cursor:pointer;
     background:var(--panel);border:1px solid var(--hairline);color:var(--ink-muted);
-    transition:color 240ms,transform 240ms var(--ease-soft),background 240ms,border-color 240ms;
+    transition:color 240ms,background 240ms,border-color 240ms;
   }
-  .icon-btn:hover{color:var(--ink);background:var(--panel-strong);transform:translateY(-2px)}
+  .icon-btn:hover{color:var(--ink);background:var(--panel-strong)}
   .icon-btn.is-on{background:var(--accent);border-color:var(--accent-linea);color:var(--on-accent)}
   .avatar{
     width:34px;height:34px;border-radius:999px;display:grid;place-items:center;
@@ -257,23 +271,19 @@
     background:linear-gradient(180deg,rgba(122,166,232,.16),rgba(43,80,144,.20));
     border:1px solid rgba(122,166,232,.34);
     box-shadow:0 1px 0 rgba(255,255,255,.07) inset,0 10px 24px -18px rgba(0,0,0,.9);
-    transition:color 240ms,transform 240ms var(--ease-soft),background 240ms,border-color 240ms,box-shadow 240ms;
-    animation:instalar-entra 520ms var(--ease-out) both;
+    /* Sin `transform` ni en la transición ni en una animación: el desplazamiento del
+       botón —entrar, salir y levantarse al pasar el ratón— lo lleva entero Motion. Lo
+       que queda aquí son los colores, que Motion no toca. */
+    transition:color 240ms,background 240ms,border-color 240ms,box-shadow 240ms;
   }
   .btn-instalar svg{transition:transform 320ms var(--ease-out)}
   .btn-instalar:hover{
-    color:#EAF1FE;border-color:var(--accent-linea);transform:translateY(-2px);
+    color:#EAF1FE;border-color:var(--accent-linea);
     background:linear-gradient(180deg,rgba(122,166,232,.26),rgba(43,80,144,.30));
     box-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 14px 28px -18px rgba(0,0,0,.95);
   }
   /* la flecha baja: es literalmente lo que va a pasar */
   .btn-instalar:hover svg{transform:translateY(1.5px)}
-  .btn-instalar:active{transform:translateY(0)}
-  @keyframes instalar-entra{
-    from{opacity:0;transform:translateY(-6px) scale(.94)}
-    to{opacity:1;transform:none}
-  }
-  @media (prefers-reduced-motion:reduce){ .btn-instalar{animation:none} }
   /* en movil solo cabe el icono; el texto se va y el boton se queda redondo */
   @media (max-width:560px){
     .btn-instalar span{display:none}
@@ -322,26 +332,15 @@
   }
   .widget.solid{background:var(--panel-strong)}
   /* ── llegada del escritorio ──
-     Los paneles no aparecen: se posan, en el orden en que se leen (arriba-izquierda
-     primero). El desenfoque de entrada es el mismo material del cristal aclarándose,
-     no un efecto añadido. Se dispara cuando el layout real ya está puesto, así que
-     nadie ve un widget aterrizar en su sitio de fábrica y saltar después. */
-  @keyframes posarse{
-    from{opacity:0;transform:translateY(16px) scale(.985);filter:blur(7px)}
-    to{opacity:1;transform:none;filter:blur(0)}
-  }
-  .canvas.posado .widget{
-    animation:posarse 760ms var(--ease-out) backwards;
-    animation-delay:calc(var(--i,0) * 52ms);
-  }
-  /* Mientras no haya `posado`, el layout todavia es el de fabrica: no se enseña. Antes
-     se pintaban ahi, con su tamaño estandar, y saltaban a su sitio al fotograma
-     siguiente. La animacion de entrada ya estaba pensada para eso, pero solo animaba;
-     nunca llego a ocultar nada. */
-  .canvas:not(.posado) .widget{opacity:0;pointer-events:none}
-  /* al volver de otra vista: aparecer, no desfilar */
-  .canvas.posado.vuelta .widget{animation:aparecer 200ms var(--ease-out) backwards;animation-delay:0s}
-  @keyframes aparecer{from{opacity:0}to{opacity:1}}
+     La entrada de los bloques ya no vive aquí: la lleva Motion, con la variante
+     `POSARSE` y el escalonado de `ORQUESTA`. Eran dos fotogramas clave, tres reglas y
+     un retardo calculado con `--i`, más dos clases (`posado`, `vuelta`) para distinguir
+     la primera visita del regreso.
+
+     Dejarlas aquí además de allí no sería redundancia inofensiva: las dos escriben
+     `opacity`, `transform` y `filter` sobre el mismo elemento, y una animación de CSS
+     gana sobre el estilo en línea que escribe Motion. El widget se quedaría clavado en
+     el último fotograma del CSS. */
   .widget > .inner{padding:17px 18px;height:100%;overflow:hidden;display:flex;flex-direction:column;min-height:0}
   /* el bloque que lleva la lista se queda con el alto sobrante y desplaza dentro si no cabe */
   .widget .schedule,.widget .todo,.widget .courses,.widget .cal-grid{min-height:0}
@@ -618,10 +617,21 @@
     --sheet-fondo:rgba(15,26,43,.90);
   }
 
+  /* `.vista`/`.on` vienen del prototipo, cuando las tres pantallas vivían en el mismo
+     documento y se turnaban con una clase. Con el App Router cada página se monta sola,
+     así que `on` la lleva siempre puesta y no apaga nada; se quedan porque varias reglas
+     de la agenda del día seleccionan por `.vista`. Había además una `.entrando` con su
+     fotograma clave que nadie aplicaba nunca: la entrada de una página la lleva Motion
+     en el Marco, con `PAGINA`. */
   .vista{display:none}
   .vista.on{display:block}
-  .vista.entrando{animation:vistaIn 520ms var(--ease-out)}
-  @keyframes vistaIn{from{opacity:.4;transform:translateY(10px) scale(.994)}to{opacity:1;transform:none}}
+  /* El envoltorio que anima el cambio de sección. No pinta nada: solo existe para que
+     Motion tenga una caja que mover, y para eso tiene que ser invisible al diseño — de
+     ahí que las reglas de la agenda de abajo lo atraviesen en vez de rodearlo. */
+  .pagina{min-width:0}
+  /* La caja que lleva la llegada del panel del calendario. No pinta ni mide: el panel
+     calcula su alto contra la ventana, no contra ella. */
+  .cal-pieza{min-width:0}
 
   /* ── cabecera del día ── */
   .dia-top{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:16px}
@@ -683,11 +693,21 @@
      una columna lateral y no resta alto, pero en movil es una barra superior y si. Fijando
      la altura aqui, ese descuento lo hace el propio flex y no hay que saber cuanto mide. */
   .app:has(#view-dia){height:100dvh;overflow:hidden}
-  .app:has(#view-dia) > .body{min-height:0;height:auto}
+  /* `height:100%` y no `auto`. Con `auto` la columna crece hasta donde llegue su
+     contenido — 1444 px con la agenda entera dentro—, `.app` la recorta a la altura de
+     la ventana y los últimos 436 píxeles de la agenda quedan fuera y sin forma de llegar
+     a ellos: ni la página se desplaza, porque `.app` tiene `overflow:hidden`, ni la
+     agenda por dentro, porque cree que le sobra sitio. Atarla a la altura del padre es
+     lo que hace que el reparto de más abajo tenga algo que repartir. */
+  .app:has(#view-dia) > .body{min-height:0;height:100%}
   .body:has(#view-dia){display:flex;flex-direction:column;min-height:0;overflow:hidden}
   /* en una columna flex todo encoge por defecto: sin esto la cabecera se comprime y su
      texto se monta encima del titulo de la pagina */
-  .body:has(#view-dia) > :not(.vista){flex:none}
+  .body:has(#view-dia) > :not(.pagina){flex:none}
+  /* El envoltorio de Motion hereda el papel que tenía la vista: se queda con el alto
+     sobrante y se lo pasa entero. Si no repartiera, la agenda mediría contra una caja de
+     alto automático y su propio desplazamiento interno no existiría. */
+  .body:has(#view-dia) > .pagina{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
   #view-dia.on{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
   #view-dia > :not(.agenda){flex:none}
   .horas{position:relative}
@@ -1295,15 +1315,20 @@
   }
   @media (max-width:700px){
     .app{grid-template-columns:1fr}
-    .dock-btn{width:48px;height:48px}
+    /* El lado de móvil lo decide `useLadoBase` en el componente, con la misma consulta
+       que este `@media`. Aquí no puede estar: Motion escribe el lado en línea y el estilo
+       en línea gana siempre, así que la regla que había no se aplicaba nunca. */
     .body{padding:14px 14px 100px}
     .day small{display:none}
   }
 
   /* Quien pide menos movimiento recibe el mismo diseño sin desplazamientos ni
-     desenfoques: lo que se anula es el viaje, nunca el estado final. Las esperas que
-     el JavaScript cronometra (el relevo del calendario) siguen corriendo igual, así
-     que no hace falta tocarlas aquí. */
+     desenfoques: lo que se anula es el viaje, nunca el estado final.
+
+     Aquí solo queda lo que sigue animándose con CSS. De lo que lleva Motion no hay nada
+     en esta lista y no debe haberlo: lo desactiva `MotionConfig reducedMotion="user"`,
+     que lee la misma preferencia del sistema y deja pasar únicamente opacidad. Repetirlo
+     aquí sería tener la regla en dos sitios que nada obliga a mantener de acuerdo. */
   @media (prefers-reduced-motion: reduce){
     .wave .line,.wave .area,.pulse,.rise,.cell{animation:none}
     .wave .line{stroke-dashoffset:0}.wave .area{opacity:1}
@@ -1315,9 +1340,8 @@
     /* el agua se queda quieta: el gradiente sigue ahí, deja de girar */
     .dock-agua{animation:none}
 
-    .canvas.posado .widget,.col-sem,.cal-panel,.tarea-sem{animation:none}
-    .canvas.posado .widget,.col-sem,.cal-panel,.tarea-sem{opacity:1;transform:none;filter:none}
-    .cal-panel.sale{opacity:0}
+    .col-sem,.cal-panel,.tarea-sem{animation:none}
+    .col-sem,.cal-panel,.tarea-sem{opacity:1;transform:none;filter:none}
     .widget::after{transition:none}
     .tarea-sem:hover{transform:none}
     .ts-marca:hover{transform:none}
@@ -1345,11 +1369,16 @@
     background:var(--panel);border:1px solid var(--hairline);
     backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%)
   }
+  /* La píldora ya no se coloca sola: vive dentro de la pestaña activa, la rellena
+     entera y la mueve Motion con `layoutId`. De ahí que aquí no quede ni una posición
+     ni una transición — poner cualquiera de las dos pelearía con el `transform` que
+     Motion escribe en línea, y la píldora se quedaría a medio camino. */
   .seg-pill{
-    position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:var(--r-sm);
-    background:var(--accent);
-    transition:transform 420ms var(--ease-out);pointer-events:none
+    position:absolute;inset:0;border-radius:var(--r-sm);
+    background:var(--accent);pointer-events:none
   }
+  /* el rótulo por encima de la píldora, que es su hermana anterior */
+  .seg-txt{position:relative}
   .seg button{
     position:relative;z-index:1;min-width:96px;height:34px;padding:0 18px;border:0;background:none;
     font:inherit;font-size:13.5px;font-weight:500;color:var(--ink-muted);cursor:pointer;border-radius:var(--r-sm);
@@ -1358,13 +1387,10 @@
   .seg button[aria-selected=true]{color:var(--on-accent)}
   .seg-nota{font-size:12.5px;color:var(--ink-subtle)}
 
-  /* Entra desde el desenfoque y sale hacia él. La salida es más corta que la entrada:
-     lo que se va no merece el mismo tiempo que lo que llega. `forwards` sostiene el
-     último fotograma para que el panel no parpadee de vuelta antes de desmontarse. */
-  .cal-panel{animation:calIn 460ms var(--ease-out)}
-  @keyframes calIn{from{opacity:0;transform:translateY(12px) scale(.994);filter:blur(5px)}}
-  .cal-panel.sale{animation:calOut 200ms var(--ease-soft) forwards}
-  @keyframes calOut{to{opacity:0;transform:translateY(-8px) scale(.996);filter:blur(4px)}}
+  /* Entra desde el desenfoque y sale hacia él, pero eso lo dice ahora la variante
+     `RELEVO` y lo ordena `AnimatePresence mode="wait"`. Aquí estaban las dos mitades y
+     un `forwards` que sostenía el último fotograma — un parche por no poder animar
+     antes de desmontar, que es justo lo que Motion sí sabe hacer. */
 
   .cal-cab{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:14px}
 

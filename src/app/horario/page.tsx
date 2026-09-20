@@ -13,6 +13,9 @@
  */
 
 import { useMemo } from 'react';
+import * as mo from 'motion/react-m';
+
+import { ORQUESTA, PIEZA } from '@/lib/ui/movimiento';
 
 import { useAhora } from '@/hooks/useDatos';
 import { ASIGNATURAS, CLAVES_ASIGNATURA, HORARIO, franjaDelHorario, hhmm, type Clase } from '@/lib/data';
@@ -43,9 +46,12 @@ export default function Horario() {
 
   const totalHoras = HORARIO.reduce((s, c) => s + (c.fin - c.ini), 0) / 60;
 
+  /* Tres piezas en orden de lectura: el título, la rejilla y la leyenda de colores.
+     Ninguna declara cuándo entra: heredan el estado del envoltorio de página del Marco y
+     `ORQUESTA` las reparte. */
   return (
-    <section className="vista on" aria-label="Horario de clases">
-      <div className="cal-cab">
+    <mo.section className="vista on" variants={ORQUESTA} aria-label="Horario de clases">
+      <mo.div className="cal-cab" variants={PIEZA}>
         <h1 className="sem-titulo">
           <span className="rango">Horario</span>{' '}
           <span className="anio">primer cuatrimestre</span>
@@ -53,9 +59,9 @@ export default function Horario() {
         <span className="seg-nota">
           {CLAVES_ASIGNATURA.length} asignaturas · {totalHoras} h de clase a la semana
         </span>
-      </div>
+      </mo.div>
 
-      <div className="hor-panel">
+      <mo.div className="hor-panel" variants={PIEZA}>
         <div className="hor-rejilla" style={{ ['--alto-hora' as string]: `${ALTO_HORA}px`, ['--horas' as string]: horas.length - 1 }}>
           {/* columna de horas */}
           <div className="hor-horas" aria-hidden="true">
@@ -118,11 +124,11 @@ export default function Horario() {
             );
           })}
         </div>
-      </div>
+      </mo.div>
 
       {/* La leyenda no es decorativa: es lo que enseña qué color es cada asignatura, y ese
           código de color es el mismo que usan las tareas en el calendario. */}
-      <div className="hor-leyenda">
+      <mo.div className="hor-leyenda" variants={PIEZA}>
         {CLAVES_ASIGNATURA.map((k) => {
           const a = ASIGNATURAS[k];
           return (
@@ -135,7 +141,7 @@ export default function Horario() {
             </span>
           );
         })}
-      </div>
-    </section>
+      </mo.div>
+    </mo.section>
   );
 }

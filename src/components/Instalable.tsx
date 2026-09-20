@@ -29,7 +29,10 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import * as m from 'motion/react-m';
+import { AnimatePresence } from 'motion/react';
 
+import { MUELLE, TIEMPO, CURVA } from '@/lib/ui/movimiento';
 import { useUI } from '@/lib/ui/contexto';
 
 /** El evento no está en las definiciones estándar: lo declara cada quien. */
@@ -54,6 +57,23 @@ function yaEsPrograma() {
     (navigator as Navigator & { standalone?: boolean }).standalone === true
   );
 }
+
+/**
+ * Cómo entra y cómo se va el botón.
+ *
+ * Entra cayendo dos píxeles, como si el navegador acabara de dejarlo ahí. Y se va de
+ * verdad: antes desaparecía de golpe al instalarse — el momento en que más se mira —
+ * porque React no sabe animar nada antes de desmontarlo.
+ *
+ * El `y` lo lleva Motion de principio a fin, entrada, reposo y roce del ratón. No puede
+ * repartirse con el CSS: Motion escribe `transform` en línea y un `:hover{transform}` de
+ * la hoja de estilos nunca llegaría a verse.
+ */
+const BOTON = {
+  fuera: { opacity: 0, y: -6, scale: 0.94 },
+  dentro: { opacity: 1, y: 0, scale: 1, transition: MUELLE.normal },
+  saliendo: { opacity: 0, y: -4, scale: 0.96, transition: { duration: TIEMPO.roce, ease: CURVA.fuera } },
+};
 
 export function Instalable() {
   const [puede, setPuede] = useState(false);
@@ -108,16 +128,29 @@ export function Instalable() {
     if (outcome === 'dismissed') avisar('Otro día será');
   }, [avisar]);
 
-  if (!puede) return null;
-
   return (
-    <button className="btn-instalar" type="button" onClick={instalar}>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M12 3v11" />
-        <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
-        <path d="M4 17.5v1A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-1" />
-      </svg>
-      <span>Instalar</span>
-    </button>
+    <AnimatePresence>
+      {puede && (
+        <m.button
+          key="instalar"
+          className="btn-instalar"
+          type="button"
+          onClick={instalar}
+          variants={BOTON}
+          initial="fuera"
+          animate="dentro"
+          exit="saliendo"
+          whileHover={{ y: -2, transition: MUELLE.vivo }}
+          whileTap={{ y: 0, scale: 0.97, transition: MUELLE.vivo }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3v11" />
+            <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
+            <path d="M4 17.5v1A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5v-1" />
+          </svg>
+          <span>Instalar</span>
+        </m.button>
+      )}
+    </AnimatePresence>
   );
 }
