@@ -8,6 +8,8 @@
  */
 
 import { usePathname } from 'next/navigation';
+import * as m from 'motion/react-m';
+import { AnimatePresence } from 'motion/react';
 import type { ReactNode } from 'react';
 
 import { Fondo } from '@/components/Fondo';
@@ -16,6 +18,7 @@ import { MenuCuenta } from '@/components/MenuCuenta';
 import { Dock } from '@/components/Dock';
 import { Button } from '@/components/ui/button';
 import { useUI } from '@/lib/ui/contexto';
+import { AVISO } from '@/lib/ui/movimiento';
 
 
 /* La agenda del día NO está aquí a propósito: se entra desde el calendario semanal
@@ -128,9 +131,14 @@ export function Marco({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      <div className={`toast${aviso ? ' on' : ''}`} role="status" aria-live="polite">
-        {aviso}
-      </div>
+      <AnimatePresence>
+        {aviso && (
+          <m.div key="aviso" className="toast" role="status" aria-live="polite"
+            variants={AVISO} initial="fuera" animate="dentro" exit="saliendo">
+            {aviso}
+          </m.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

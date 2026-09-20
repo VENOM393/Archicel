@@ -1,39 +1,42 @@
 'use client';
 
 /**
- * El dock de secciones.
+ * El dock de secciones, con la magnificación de macOS.
  *
- * Copia el comportamiento del dock de macOS, que es el que popularizaron
- * [Build UI](https://buildui.com/recipes/magnified-dock) y Magic UI: se mide la distancia
- * del cursor al centro de cada icono, esa distancia se mapea al tamaño con una caída
- * suave, y el resultado pasa por un muelle. El icono bajo el puntero crece, sus vecinos
- * crecen menos, y el resto se queda quieto.
+ * Es la receta de [Build UI](https://buildui.com/recipes/magnified-dock), la misma que
+ * usan Magic UI y Aceternity: se guarda la X del cursor en un `MotionValue`, cada icono
+ * calcula su distancia al puntero, esa distancia se mapea a una escala y el resultado pasa
+ * por un muelle.
  *
- * ## Lo que cambia respecto a la receta original
+ * Lo importante del `MotionValue` es que **no es estado de React**. Mover el ratón sobre
+ * el dock actualiza un valor que Motion escribe directamente en el DOM: cero renderizados
+ * mientras el cursor viaja. Es la diferencia entre un dock que responde y uno que se
+ * atasca cuando la aplicación está haciendo otra cosa.
  *
- * **La escala.** La receta usa 2.25, pensada para un dock de ocho o diez iconos pequeños.
- * Aquí hay tres y grandes: a 2.25 se convertiría en una caricatura. Se queda en 1.5, que
- * es lo que se nota sin dar risa.
+ * ## Lo que se cambió de la receta original
  *
- * **El empujón lateral.** La receta lo aproxima con un desplazamiento fijo. Aquí se
- * calcula de verdad: cada fotograma se reparten los anchos ya escalados a lo largo de la
- * fila y cada icono va a donde le toca. Sale gratis y no hay forma de que se solapen ni
- * de que la fila se descentre, que es justo lo que pasaba antes.
+ * **La escala.** El original usa 2.25, pensada para docks de ocho o diez iconos pequeños.
+ * Aquí hay tres y grandes: a 2.25 sería una caricatura. Se queda en 1.5.
  *
- * **Sin Framer Motion.** No es dependencia del proyecto, y el muelle son ocho líneas. Todo
- * ocurre en un `requestAnimationFrame` escribiendo `transform` directamente: mover el
- * ratón sobre el dock no provoca ni un renderizado de React.
+ * **El tamaño se anima, no la escala** — y esto se salta la regla general de animar solo
+ * transformaciones, así que hay que justificarlo. Con `scale`, el borde de 1 px pasa a
+ * 1,5 y el radio de 17 px a 25: el icono no crece, se deforma. Con `width`/`height` el
+ * material se queda como es. El coste de recalcular la maquetación está acotado a
+ * propósito: son **tres** elementos, en una fila `position:fixed` que no tiene nada
+ * debajo a lo que empujar, y a cambio los vecinos se apartan solos —los coloca el flex—
+ * en vez de repartirlos a mano cada fotograma.
  *
- * ## El activo
- *
- * No se eleva. Antes subía siete píxeles y se salía de la fila — parecía despegado, no
- * seleccionado. Ahora lo marca el relleno: el agua blanca del proyecto, con su brillo y su
- * cónico girando, detrás del icono; y un punto debajo, como en macOS. El icono baja a
- * tinta oscura porque encima de blanco es lo único que se lee.
+ * **Se ancla abajo.** `align-items: flex-end` en el plato: el icono crece hacia arriba,
+ * apoyado en el suelo del dock, como en macOS. Sin eso crece hacia los dos lados y se ve
+ * flotar.
  */
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef } from 'react';
+import * as m from 'motion/react-m';
+import { useMotionValue, useSpring, useTransform, type MotionValue } from 'motion/react';
+import { useRef } from 'react';
+
+import { MUELLE } from '@/lib/ui/movimiento';
 
 export interface Seccion {
   href: string;
@@ -48,191 +51,88 @@ function estaActiva(s: Seccion, ruta: string): boolean {
 }
 
 /* ── Los números del dock ── */
-const BASE = 56;      // lado del icono en reposo
-const ESCALA = 1.5;   // cuánto crece el que está bajo el cursor
-const ALCANCE = 110;  // a partir de aquí ya no crece (el DISTANCE de la receta)
-const HUECO = 12;     // separación en reposo
-
-/* El muelle de la receta, tal cual. */
-const MASA = 0.1;
-const RIGIDEZ = 170;
-const AMORTIGUACION = 12;
-
-/**
- * Un paso del muelle, integrado a mano (Euler semiimplícito).
- *
- * Es lo único que hace falta de Framer Motion aquí. Lo que no es opcional es **subdividir
- * el paso**: con masa 0.1 y amortiguación 12, el término de rozamiento avanza `c·dt/m` por
- * fotograma, que a 60 Hz vale 4 — y por encima de 2 la integración explícita diverge en
- * vez de frenar. Probado: los iconos se iban a dieciséis mil píxeles de ancho en tres
- * fotogramas. Con pasos internos de 1/240 s el factor baja a 0.5 y el muelle se comporta.
- */
-const PASO = 1 / 240;
-
-function muelle(x: number, v: number, objetivo: number, dt: number): [number, number] {
-  const n = Math.max(1, Math.ceil(dt / PASO));
-  const h = dt / n;
-  let px = x;
-  let pv = v;
-  for (let i = 0; i < n; i++) {
-    const a = (-RIGIDEZ * (px - objetivo) - AMORTIGUACION * pv) / MASA;
-    pv += a * h;
-    px += pv * h;
-  }
-  return [px, pv];
-}
-
-interface Pieza {
-  nodo: HTMLElement;
-  centro: number;   // su centro en reposo, medido desde el borde del plato
-  f: number;        // escala actual
-  vf: number;       // velocidad de la escala
-  x: number;        // desplazamiento lateral actual
-  vx: number;
-}
+const BASE = 56;
+const MAXIMO = 84;   // 1.5 veces la base
+const ALCANCE = 110; // el DISTANCE de la receta
 
 export function Dock({ secciones, ruta }: { secciones: Seccion[]; ruta: string }) {
-  const plato = useRef<HTMLDivElement>(null);
-  const piezas = useRef<Pieza[]>([]);
-  const raton = useRef(Number.POSITIVE_INFINITY);
-  const bucle = useRef(0);
-
-  /** Mide los centros en reposo. Hay que rehacerlo si cambia el tamaño o el catálogo. */
-  const medir = useCallback(() => {
-    const caja = plato.current;
-    if (!caja) return;
-    const r = caja.getBoundingClientRect();
-    piezas.current = [...caja.querySelectorAll<HTMLElement>('.dock-btn')].map((nodo, i) => {
-      const anterior = piezas.current[i];
-      const b = nodo.getBoundingClientRect();
-      return {
-        nodo,
-        /* Con la escala aplicada el rectángulo miente, así que el centro en reposo se
-           reconstruye del ancho base y no de lo medido. */
-        centro: b.left - r.left + BASE / 2 - (anterior?.x ?? 0),
-        f: anterior?.f ?? 1,
-        vf: anterior?.vf ?? 0,
-        x: anterior?.x ?? 0,
-        vx: anterior?.vx ?? 0,
-      };
-    });
-  }, []);
-
-  useEffect(() => {
-    medir();
-    const t = setTimeout(medir, 120);
-    window.addEventListener('resize', medir);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener('resize', medir);
-    };
-  }, [medir, secciones.length]);
-
-  useEffect(() => {
-    const quieto = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let anterior = performance.now();
-
-    const paso = (ahora: number) => {
-      bucle.current = requestAnimationFrame(paso);
-      /* El paso se acota: al volver de una pestaña oculta llega un salto de segundos y un
-         muelle integrado con ese dt sale disparado. */
-      const dt = Math.min((ahora - anterior) / 1000, 1 / 30);
-      anterior = ahora;
-
-      const lista = piezas.current;
-      if (lista.length === 0) return;
-      const m = raton.current;
-
-      /* 1 · el objetivo de cada uno, por distancia al cursor */
-      let total = 0;
-      const objetivo = lista.map((p) => {
-        const d = Math.abs(m - p.centro);
-        const cerca = Math.max(0, 1 - d / ALCANCE);
-        /* Caída suavizada: lineal deja una esquina al entrar y al salir del alcance. */
-        const suave = cerca * cerca * (3 - 2 * cerca);
-        const f = 1 + (ESCALA - 1) * suave;
-        total += BASE * f;
-        return f;
-      });
-      total += HUECO * (lista.length - 1);
-
-      /* 2 · dónde cae cada uno repartiendo los anchos ya crecidos, sin solapes */
-      const anchoBase = BASE * lista.length + HUECO * (lista.length - 1);
-      let cursor = (anchoBase - total) / 2;
-      const destino = lista.map((_, i) => {
-        const c = cursor + (BASE * objetivo[i]) / 2;
-        cursor += BASE * objetivo[i] + HUECO;
-        return c;
-      });
-
-      /* 3 · el muelle, y a escribir */
-      lista.forEach((p, i) => {
-        if (quieto) {
-          p.f = objetivo[i];
-          p.x = destino[i] - p.centro;
-        } else {
-          [p.f, p.vf] = muelle(p.f, p.vf, objetivo[i], dt);
-          [p.x, p.vx] = muelle(p.x, p.vx, destino[i] - p.centro, dt);
-        }
-        p.nodo.style.transform = `translateX(${p.x.toFixed(2)}px) scale(${p.f.toFixed(3)})`;
-      });
-    };
-
-    bucle.current = requestAnimationFrame(paso);
-    return () => cancelAnimationFrame(bucle.current);
-  }, []);
-
-  const seguir = (e: React.PointerEvent) => {
-    if (e.pointerType === 'touch') return;
-    const caja = plato.current;
-    if (!caja) return;
-    raton.current = e.clientX - caja.getBoundingClientRect().left;
-  };
+  /* Infinito en reposo: así la distancia de todos es infinita y nadie crece. */
+  const raton = useMotionValue(Number.POSITIVE_INFINITY);
 
   return (
     <nav className="dock" aria-label="Secciones">
       <div
         className="dock-plato"
-        ref={plato}
-        onPointerMove={seguir}
-        onPointerLeave={() => {
-          raton.current = Number.POSITIVE_INFINITY;
+        onPointerMove={(e) => {
+          if (e.pointerType !== 'touch') raton.set(e.clientX);
         }}
+        onPointerLeave={() => raton.set(Number.POSITIVE_INFINITY)}
       >
-        {secciones.map((s) => {
-          const activa = estaActiva(s, ruta);
-          return (
-            <Link
-              key={s.href}
-              href={s.href}
-              /* Son tres y están siempre en pantalla: precargarlas convierte el salto
-                 entre secciones en instantáneo. */
-              prefetch
-              className="dock-btn"
-              aria-label={s.titulo}
-              aria-current={activa ? 'page' : undefined}
-            >
-              <span className="dock-agua" aria-hidden="true" />
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                {s.icono}
-              </svg>
-              <span className="dock-nombre" aria-hidden="true">
-                {s.titulo}
-              </span>
-              <span className="dock-punto" aria-hidden="true" />
-            </Link>
-          );
-        })}
+        {secciones.map((s) => (
+          <Icono key={s.href} seccion={s} raton={raton} activa={estaActiva(s, ruta)} />
+        ))}
       </div>
     </nav>
+  );
+}
+
+function Icono({ seccion, raton, activa }: { seccion: Seccion; raton: MotionValue<number>; activa: boolean }) {
+  const caja = useRef<HTMLDivElement>(null);
+
+  /**
+   * La distancia del cursor al centro de este icono.
+   *
+   * Se mide en cada lectura y no una sola vez: el centro se mueve cuando crecen los
+   * vecinos, y con un valor cacheado la magnificación se desincroniza del cursor en cuanto
+   * empieza el movimiento — se nota como un tirón al entrar por un lado.
+   */
+  const distancia = useTransform(raton, (x) => {
+    const b = caja.current?.getBoundingClientRect();
+    if (!b) return Number.POSITIVE_INFINITY;
+    return x - b.left - b.width / 2;
+  });
+
+  const crudo = useTransform(distancia, [-ALCANCE, 0, ALCANCE], [BASE, MAXIMO, BASE], { clamp: true });
+  const lado = useSpring(crudo, MUELLE.vivo);
+
+  return (
+    /* El `Link` de Next se queda por fuera y sin animar: es quien precarga la ruta y quien
+       lleva la semántica del enlace. Lo que crece es la caja de dentro. Componerlos así
+       —en vez de convertir el Link en componente animado— evita depender de APIs
+       obsoletas y deja el `aria` donde el lector de pantalla lo espera. */
+    <Link
+      href={seccion.href}
+      prefetch
+      className="dock-enlace"
+      aria-label={seccion.titulo}
+      aria-current={activa ? 'page' : undefined}
+    >
+      {/* `m.div` y no `motion.div`: el proveedor va en modo estricto con las funciones
+          cargadas aparte, y el componente pesado rompería ese ahorro. */}
+      <m.div
+        ref={caja}
+        style={{ width: lado, height: lado }}
+        className="dock-btn"
+        whileTap={{ scale: 0.93, transition: MUELLE.vivo }}
+      >
+        <span className="dock-agua" aria-hidden="true" />
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {seccion.icono}
+        </svg>
+        <span className="dock-punto" aria-hidden="true" />
+      </m.div>
+      <span className="dock-nombre" aria-hidden="true">
+        {seccion.titulo}
+      </span>
+    </Link>
   );
 }

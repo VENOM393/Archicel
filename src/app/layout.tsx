@@ -4,6 +4,7 @@ import { Outfit, Geist } from 'next/font/google';
 import { Marco } from '@/components/Marco';
 import { ProveedorSesion } from '@/lib/firebase/sesion';
 import { ProveedorUI } from '@/lib/ui/contexto';
+import { ProveedorMovimiento } from '@/lib/ui/ProveedorMovimiento';
 import './globals.css';
 import '@/styles/archicel.css';
 import { cn } from "@/lib/utils";
@@ -65,9 +66,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               De eso dependen dos cosas — que el shader no se recompile al cambiar de
               seccion, y que el indicador del rail pueda animarse, porque un elemento
               recien insertado en el DOM nace en su destino y no transiciona. */}
-          <ProveedorUI>
-            <Marco>{children}</Marco>
-          </ProveedorUI>
+          <ProveedorMovimiento>
+            <ProveedorUI>
+              <Marco>{children}</Marco>
+            </ProveedorUI>
+          </ProveedorMovimiento>
         </ProveedorSesion>
       </body>
     </html>

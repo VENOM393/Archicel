@@ -9,6 +9,10 @@
  */
 
 import { useEffect, useState } from 'react';
+import * as m from 'motion/react-m';
+import { AnimatePresence } from 'motion/react';
+
+import { HOJA, VELO } from '@/lib/ui/movimiento';
 
 import { useDialogo } from '@/hooks/useDialogo';
 import { SelectorAsignatura } from '@/components/campos/SelectorAsignatura';
@@ -37,10 +41,30 @@ export interface PeticionTarea {
   desde?: number;
 }
 
+/**
+ * La hoja, separada en dos: presencia y contenido.
+ *
+ * React no sabe animar un elemento **antes** de desmontarlo, así que hasta ahora la hoja
+ * desaparecía de golpe al cerrar: entraba con cuidado y se iba de un tirón. Eso es
+ * exactamente lo que `AnimatePresence` resuelve — retiene el nodo hasta que su animación
+ * de salida termina.
+ *
+ * Para que funcione, el contenido tiene que ser un componente que **solo exista cuando hay
+ * algo que enseñar**, no uno que devuelva `null`: lo que AnimatePresence vigila es si su
+ * hijo está o no está, y un componente montado devolviendo `null` sigue estando.
+ */
 export function HojaTarea({ peticion, cerrar }: { peticion: PeticionTarea | null; cerrar: () => void }) {
+  return (
+    <AnimatePresence>
+      {peticion && <Contenido key="hoja" peticion={peticion} cerrar={cerrar} />}
+    </AnimatePresence>
+  );
+}
+
+function Contenido({ peticion, cerrar }: { peticion: PeticionTarea; cerrar: () => void }) {
   const { almacen } = useArchicel();
   /* el hook va antes de cualquier retorno: los hooks no pueden ir tras un `return` */
-  const caja = useDialogo<HTMLElement>(peticion !== null, cerrar);
+  const caja = useDialogo<HTMLElement>(true, cerrar);
   const { avisar } = useUI();
   const [b, setB] = useState<Omit<Tarea, 'id'> & { id?: string }>({
     fecha: '',
@@ -62,7 +86,6 @@ export function HojaTarea({ peticion, cerrar }: { peticion: PeticionTarea | null
     }
   }, [peticion]);
 
-  if (!peticion) return null;
   const esNueva = !peticion.tarea;
 
   const guardar = async () => {
@@ -93,8 +116,8 @@ export function HojaTarea({ peticion, cerrar }: { peticion: PeticionTarea | null
 
   return (
     <>
-      <div className="telon on" onClick={cerrar} />
-      <aside ref={caja} tabIndex={-1} className="hoja on" role="dialog" aria-modal="true" aria-label={esNueva ? 'Nueva tarea' : 'Editar tarea'}
+      <m.div className="telon" variants={VELO} initial="fuera" animate="dentro" exit="saliendo" onClick={cerrar} />
+      <m.aside ref={caja} tabIndex={-1} className="hoja" variants={HOJA} initial="fuera" animate="dentro" exit="saliendo" role="dialog" aria-modal="true" aria-label={esNueva ? 'Nueva tarea' : 'Editar tarea'}
         style={{ ['--sel-color' as string]: `var(--c-${colorDeAsignatura(b.asignatura)})` }}>
         <span className="asa" />
         <h3>{esNueva ? 'Nueva tarea' : 'Editar tarea'}</h3>
@@ -215,7 +238,7 @@ export function HojaTarea({ peticion, cerrar }: { peticion: PeticionTarea | null
             Guardar
           </Button>
         </div>
-      </aside>
+      </m.aside>
     </>
   );
 }

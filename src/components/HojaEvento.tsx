@@ -6,6 +6,10 @@
  */
 
 import { useEffect, useState } from 'react';
+import * as m from 'motion/react-m';
+import { AnimatePresence } from 'motion/react';
+
+import { HOJA, VELO } from '@/lib/ui/movimiento';
 
 import { useDialogo } from '@/hooks/useDialogo';
 import { SelectorAsignatura } from '@/components/campos/SelectorAsignatura';
@@ -25,10 +29,23 @@ export interface PeticionEvento {
   fecha: string;
 }
 
+/**
+ * La hoja, separada en dos: presencia y contenido. El porqué, en `HojaTarea`: React no
+ * sabe animar antes de desmontar, y `AnimatePresence` solo puede vigilar a un hijo que
+ * aparece y desaparece — no a uno montado devolviendo `null`.
+ */
 export function HojaEvento({ peticion, cerrar }: { peticion: PeticionEvento | null; cerrar: () => void }) {
+  return (
+    <AnimatePresence>
+      {peticion && <Contenido key="hoja" peticion={peticion} cerrar={cerrar} />}
+    </AnimatePresence>
+  );
+}
+
+function Contenido({ peticion, cerrar }: { peticion: PeticionEvento; cerrar: () => void }) {
   const { almacen } = useArchicel();
   /* el hook va antes de cualquier retorno: los hooks no pueden ir tras un `return` */
-  const caja = useDialogo<HTMLElement>(peticion !== null, cerrar);
+  const caja = useDialogo<HTMLElement>(true, cerrar);
   const { avisar } = useUI();
   const [borrador, setBorrador] = useState<Omit<Evento, 'id'> & { id?: string }>({
     tipo: 'entrega',
@@ -48,7 +65,6 @@ export function HojaEvento({ peticion, cerrar }: { peticion: PeticionEvento | nu
     );
   }, [peticion]);
 
-  if (!peticion) return null;
   const esNuevo = !peticion.evento;
 
   const guardar = async () => {
@@ -72,8 +88,8 @@ export function HojaEvento({ peticion, cerrar }: { peticion: PeticionEvento | nu
 
   return (
     <>
-      <div className="telon on" onClick={cerrar} />
-      <aside ref={caja} tabIndex={-1} className="hoja on" role="dialog" aria-modal="true" aria-label={esNuevo ? 'Nuevo evento' : 'Editar evento'}>
+      <m.div className="telon" variants={VELO} initial="fuera" animate="dentro" exit="saliendo" onClick={cerrar} />
+      <m.aside ref={caja} tabIndex={-1} className="hoja" variants={HOJA} initial="fuera" animate="dentro" exit="saliendo" role="dialog" aria-modal="true" aria-label={esNuevo ? 'Nuevo evento' : 'Editar evento'}>
         <span className="asa" />
         <h3>{esNuevo ? 'Nuevo evento' : 'Editar evento'}</h3>
 
@@ -180,7 +196,7 @@ export function HojaEvento({ peticion, cerrar }: { peticion: PeticionEvento | nu
             Guardar
           </Button>
         </div>
-      </aside>
+      </m.aside>
     </>
   );
 }
