@@ -41,7 +41,7 @@
  * Al añadir uno aquí hay que añadirlo **también** en `firestore.rules`, en `esAdmin()`.
  */
 export const ADMINS: readonly string[] = [
-  // 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx',  // Cristian · cristianrosa05@gmail.com
+  'ZM41yJFyUINWbJWzDjWD2FGVLNk2', // Cristian
 ];
 
 /**

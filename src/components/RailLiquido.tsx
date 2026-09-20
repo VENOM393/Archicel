@@ -137,7 +137,10 @@ export function RailLiquido({ secciones, ruta }: { secciones: Seccion[]; ruta: s
     if (!activa.visible) return;
     const origen = desde.current;
     desde.current = activa.pos;
-    const t = (y: number) => `translate(-50%,-50%) translateY(${y}px)`;
+    /* El eje sigue a la orientación. Antes estaba fijo en Y aunque la medición ya fuera
+       en X: tumbado, la gota se iba hacia abajo en vez de viajar entre las burbujas. */
+    const t = (p: number) =>
+      horizontal ? `translate(-50%,-50%) translateX(${p}px)` : `translate(-50%,-50%) translateY(${p}px)`;
     const quieto = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     [
@@ -152,13 +155,17 @@ export function RailLiquido({ secciones, ruta }: { secciones: Seccion[]; ruta: s
         easing: curva,
       });
     });
-  }, [activa]);
+  }, [activa, horizontal]);
 
   /**
    * La gota del ratón sigue al puntero por el eje del raíl, no al enlace más cercano:
    * así el líquido responde al movimiento continuo y no a saltos. Se apaga al salir para
    * que no quede una burbuja huérfana.
    */
+  /** El mismo eje para todo lo que viaja por el raíl: burbujas, gotas y roce. */
+  const eje = (p: number) =>
+    horizontal ? `translate(-50%,-50%) translateX(${p}px)` : `translate(-50%,-50%) translateY(${p}px)`;
+
   const seguir = (e: React.PointerEvent) => {
     const nodo = nucleo.current;
     if (!nodo || e.pointerType === 'touch') return;
@@ -213,7 +220,7 @@ export function RailLiquido({ secciones, ruta }: { secciones: Seccion[]; ruta: s
             creado nace en su destino: la transicion no llega a existir y el indicador
             salta. Con keys, los nodos persisten y el liquido viaja. */}
         {burbujas.map((p, i) => (
-          <span className="rail-burbuja" key={`b${i}`} style={{ transform: `translate(-50%,-50%) translateY(${p}px)` }} />
+          <span className="rail-burbuja" key={`b${i}`} style={{ transform: eje(p) }} />
         ))}
         {activa.visible && (
           <>
@@ -225,7 +232,7 @@ export function RailLiquido({ secciones, ruta }: { secciones: Seccion[]; ruta: s
         <span
           key="roce"
           className={`rail-roce${roce.visible ? ' on' : ''}`}
-          style={{ transform: `translate(-50%,-50%) translateY(${roce.pos}px) scale(${roce.visible ? 1 : 0.35})` }}
+          style={{ transform: `${eje(roce.pos)} scale(${roce.visible ? 1 : 0.35})` }}
         />
       </div>
 

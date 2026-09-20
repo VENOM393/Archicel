@@ -92,7 +92,7 @@
      ═══════════════════════════════════════════════════════ */
   .app{
     position:relative;z-index:1;
-    display:grid;grid-template-columns:70px minmax(0,1fr);min-height:100vh;min-height:100dvh;
+    display:block;min-height:100vh;min-height:100dvh;
     /* sin banda: el raíl es un bloque flotante y el fondo de la aplicación es la foto */
   }
   /* ── El raíl líquido ──
@@ -112,23 +112,26 @@
      El negro es medio, no absoluto: sobre una fotografía nocturna un bloque casi opaco se
      lee como un agujero. */
   .rail{
-    position:sticky;top:0;height:100vh;height:100dvh;z-index:4;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    padding:18px 0;isolation:isolate;pointer-events:none;
+    /* Ancho completo y centrado con flex, NO con translateX: un transform convierte al
+       raíl en el contenedor de sus hijos fijos, y la marca de la esquina —que es fija—
+       se venía aquí abajo con él. */
+    position:fixed;left:0;right:0;bottom:20px;z-index:20;
+    display:flex;align-items:center;justify-content:center;
+    padding:0;isolation:isolate;pointer-events:none;
   }
   .rail-filtro{position:absolute;width:0;height:0;pointer-events:none}
   .brand{
-    position:absolute;top:22px;left:50%;transform:translateX(-50%);
+    position:fixed;top:18px;left:20px;
     width:32px;height:32px;display:grid;place-items:center;color:var(--ink);
     opacity:.55
   }
   .rail-nucleo{
     position:relative;pointer-events:auto;
-    display:flex;flex-direction:column;align-items:center;gap:14px;
+    display:flex;flex-direction:row;align-items:center;gap:14px;
   }
   .rail-fluido{
-    position:absolute;inset:-14px -16px;z-index:0;pointer-events:none;
-    filter:url(#gooey) drop-shadow(0 0 1px var(--hairline-lit)) drop-shadow(0 12px 28px rgba(0,0,0,.6));
+    position:absolute;inset:-16px;z-index:0;pointer-events:none;
+    filter:url(#gooey) drop-shadow(0 0 1px var(--hairline-lit)) drop-shadow(0 14px 30px rgba(0,0,0,.72));
   }
   /* ── El agua de las burbujas ──
      Tres capas apiladas en el mismo `background`, de arriba abajo:
@@ -153,7 +156,7 @@
      exactamente el problema del gris de antes. El punto de frío de los valores (12,12,15
      y no 12,12,12) es el mismo del tema: un negro puro sobre esta fotografía vira a verde. */
   .rail-burbuja{
-    position:absolute;left:50%;top:14px;width:44px;height:44px;border-radius:999px;
+    position:absolute;left:16px;top:50%;width:44px;height:44px;border-radius:999px;
     background:
       /* el brillo de arriba: pequeño y nítido, no un lavado */
       radial-gradient(46% 38% at 33% 22%, rgba(255,255,255,.30), transparent 72%),
@@ -172,14 +175,19 @@
      la costura. Gira al revés y algo más rápido — dos aguas que se cruzan, no un patrón
      repetido dos veces. */
   .rail-gota{
-    position:absolute;left:50%;top:14px;width:48px;height:48px;border-radius:999px;
+    position:absolute;left:16px;top:50%;width:48px;height:48px;border-radius:999px;
     background:
-      radial-gradient(48% 40% at 34% 21%, rgba(255,255,255,.44), transparent 70%),
-      linear-gradient(118deg, transparent 36%, rgba(255,255,255,.17) 46%, transparent 54%),
-      radial-gradient(85% 44% at 50% 106%, rgba(255,255,255,.14), transparent 72%),
+      /* La misma agua, volcada a la escala clara: mismo brillo, misma veta, mismo rebote
+         y el mismo cónico girando — solo que entre blanco y perla en vez de entre negros.
+         El cónico no se queda en un solo blanco por la misma razón que el oscuro no se
+         quedaba en un gris: dos tonos vecinos se leen planos, y plano es lo contrario de
+         líquido. El alfa alto no es opcional, el gooey descarta por debajo de ~0.46. */
+      radial-gradient(46% 38% at 33% 20%, rgba(255,255,255,.95), transparent 68%),
+      linear-gradient(118deg, transparent 34%, rgba(255,255,255,.7) 46%, transparent 56%),
+      radial-gradient(85% 44% at 50% 108%, rgba(214,226,244,.55), transparent 70%),
       conic-gradient(from var(--giro),
-        rgba(24,24,29,.92), rgba(40,40,48,.92), rgba(62,62,72,.92),
-        rgba(31,31,38,.92), rgba(24,24,29,.92));
+        rgba(255,255,255,.97), rgba(226,236,253,.97), rgba(198,214,238,.97),
+        rgba(241,246,255,.97), rgba(255,255,255,.97));
     animation:marea 18s linear infinite reverse;
     will-change:transform;
   }
@@ -187,7 +195,7 @@
 
   /* la gota del ratón: la misma agua, apagada. Acompaña, no protagoniza */
   .rail-roce{
-    position:absolute;left:50%;top:14px;width:40px;height:40px;border-radius:999px;
+    position:absolute;left:16px;top:50%;width:40px;height:40px;border-radius:999px;
     background:
       radial-gradient(50% 40% at 34% 23%, rgba(255,255,255,.20), transparent 72%),
       conic-gradient(from var(--giro), rgba(16,16,20,.64), rgba(42,42,50,.64), rgba(16,16,20,.64));
@@ -210,12 +218,23 @@
      a tinta plena mientras el resto se queda en la apagada, y la gota que tiene debajo es
      un escalón más clara que las otras burbujas. Un acento de color aquí seria el unico
      punto cromatico del raíl y se comeria la pieza. */
+  /* El activo se levanta y se pone en blanco.
+     No lleva relleno propio ni desenfoque: si los llevara, taparía la gota que tiene
+     debajo y el blanco quedaría apagado. Lo que se ve detrás del icono ES la gota, con su
+     misma agua pero en la escala clara — por eso el activo tiene textura y no es un
+     círculo plano. El icono baja a tinta oscura porque encima de blanco eso es lo único
+     que se lee. */
   .nav-btn[aria-current="page"]{
-    color:var(--ink);
-    border-color:var(--hairline-lit);
+    color:#0C1016;
+    border-color:transparent;
+    background:transparent;
+    backdrop-filter:none;-webkit-backdrop-filter:none;
+    transform:translateY(-7px) scale(1.14);
   }
+  .nav-btn[aria-current="page"] svg{filter:drop-shadow(0 1px 0 rgba(255,255,255,.5))}
 
-  .body{padding:16px 18px 22px;display:grid;gap:12px;align-content:start}
+  /* Sitio para el dock: sin este hueco, lo ultimo de cada pagina queda debajo de el. */
+  .body{padding:16px 18px 108px;display:grid;gap:12px;align-content:start}
   .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
   .hueco{flex:1}
   .tools{display:flex;align-items:center;gap:7px}
@@ -1281,24 +1300,8 @@
   }
   @media (max-width:700px){
     .app{grid-template-columns:1fr}
-    .rail{flex-direction:row;justify-content:space-between;padding:10px 12px;border-right:0;
-      position:static;height:auto}
-    .brand{margin:0}
-    .rail .spacer{display:none}
-    .nav-btn{width:34px;height:34px}
-    /* De pie el raíl es una columna y el bulto sale por su derecha; tumbado es una barra
-       superior y sale por abajo. Mismo líquido, eje girado: lo único que cambia es por
-       dónde asoma la gota y en qué dirección viaja. */
-    .rail-gota,.rail-roce{
-      right:auto;left:0;top:auto;bottom:-13px;
-      transform:translateX(-50%) translateX(var(--p));
-    }
-    .rail-gota.lenta{bottom:-10px}
-    .rail-roce{transform:translateX(-50%) translateX(var(--p)) scale(.35)}
-    .rail-roce.on{transform:translateX(-50%) translateX(var(--p)) scale(1)}
-    .rail-fluido{filter:url(#gooey) drop-shadow(0 1.5px 0 var(--hairline-lit)) drop-shadow(0 0 10px rgba(0,0,0,.45))}
-    .nav-btn[aria-current="page"]{transform:translateY(3px)}
-    .body{padding:14px 14px 20px}
+    .nav-btn{width:38px;height:38px}
+    .body{padding:14px 14px 100px}
     .day small{display:none}
   }
 
@@ -1493,7 +1496,7 @@
      Lo que crece es la zona que recibe el toque, no el dibujo: el icono y el texto no se
      mueven de sitio, así que la interfaz se ve idéntica y responde mejor. */
   @media (max-width: 900px){
-    .nav-btn,.icon-btn{width:44px;height:44px}
+    .icon-btn{width:44px;height:44px}
     /* el menu del widget solo aparece en modo edicion, pero cuando aparece hay que poder
        acertarle: el cuadrado dibujado sigue midiendo 26 px y la zona sensible crece fuera */
     .menu-btn{position:relative}

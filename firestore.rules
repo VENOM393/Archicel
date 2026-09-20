@@ -32,14 +32,12 @@ service cloud.firestore {
     // actualiza una de las dos, la aplicación dirá que alguien es admin y el
     // servidor le dirá que no.
     //
-    // Los UID sustituyen al marcador, entre comillas y separados por comas:
-    //   request.auth.uid in ['abc123…']            ← Cristian · cristianrosa05@gmail.com
-    //
-    // El marcador está ahí en vez de una lista vacía para que la regla siempre tenga una
-    // forma que se pueda publicar sin sorpresas, y porque 'sin-configurar' no es un UID
-    // que Firebase pueda emitir jamás: mientras siga ahí, nadie es administrador.
+    // La MISMA lista vive en src/lib/auth/roles.ts. Si solo se actualiza una de las dos,
+    // la aplicación dirá que alguien es administrador y el servidor le dirá que no.
     function esAdmin() {
-      return request.auth != null && request.auth.uid in ['sin-configurar'];
+      return request.auth != null && request.auth.uid in [
+        'ZM41yJFyUINWbJWzDjWD2FGVLNk2'   // Cristian
+      ];
     }
 
     function fechaValida(f) {
