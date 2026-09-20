@@ -276,6 +276,10 @@ Cosas que no se deducen mirando:
   en otra máquina.
 - **La autenticación va por Git Credential Manager**, que abre el navegador. Nunca se
   escribe un token de GitHub en un fichero, en un comando ni en una conversación.
+- **Se publica solo.** El repositorio está conectado a Vercel: cada `push` a `master`
+  publica. No se despliega a mano desde el portátil — eso deja una versión viva que no está
+  en ningún commit. Las variables de entorno y el dominio que hay que autorizar en Firebase,
+  en [docs/tooling/DESPLIEGUE.md](docs/tooling/DESPLIEGUE.md).
 
 ## Estructura
 
@@ -289,6 +293,7 @@ docs/data/          FIRESTORE.md — modelo · SEGURIDAD.md — revisión · CUE
 docs/integraciones/  CANVAS.md — API del campus de la UCAM y el motor que la consume
 docs/design/        DESIGN.md — contrato visual
 docs/tooling/       GRAFT.md — referencia de la capa de contexto
+                    DESPLIEGUE.md — publicar en Vercel
 README.md           la cara del repositorio
 scripts/            iconos.mjs — genera los iconos desde public/icono.svg
 graft/              grafo del código (git-ignored, regenerable — no existe aún)

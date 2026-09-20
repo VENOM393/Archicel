@@ -115,6 +115,7 @@ El porqué está escrito. Cada documento explica decisiones, no funciones:
 | [CUENTAS.md](docs/data/CUENTAS.md) | Acceso, papeles y administrador |
 | [CANVAS.md](docs/integraciones/CANVAS.md) | La API del campus y el motor que la consume |
 | [INSTALACION.md](docs/frontend/INSTALACION.md) | Cómo se convierte en un programa del ordenador |
+| [DESPLIEGUE.md](docs/tooling/DESPLIEGUE.md) | Publicar en Vercel: variables y el dominio que autorizar |
 | [CLAUDE.md](CLAUDE.md) | Cómo se trabaja en este repositorio |
 
 ## Las herramientas del taller
