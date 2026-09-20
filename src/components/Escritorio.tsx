@@ -137,23 +137,42 @@ export function Escritorio() {
       {/*
         El lienzo dirige la entrada de sus bloques.
 
-        Antes esto eran dos clases y un retardo calculado en CSS con `--i`, más una bandera
-        para distinguir la primera visita del regreso. Motion lo hace con una propiedad:
         `initial={false}` significa «empieza ya en el estado final, sin animar», así que al
         volver del calendario los bloques simplemente están — sin repetir una presentación
         de 760 ms que la segunda vez ya es una espera.
 
-        Y sigue sin enseñarse nada hasta que `listo`: mientras el layout real no esté
-        puesto, los bloques se quedan en `fuera` y nadie ve un widget en su sitio de
-        fábrica antes de saltar al suyo.
+        ## Por qué el lienzo no se monta hasta `listo`, en vez de quedarse en `fuera`
+
+        Esto tenía `animate={esc.listo ? 'dentro' : 'fuera'}` y dejaba el escritorio
+        **permanentemente vacío en la primera carga**. Merece la pena contarlo entero,
+        porque el estado era correcto y aun así no se veía nada.
+
+        Las funciones de Motion se cargan aparte (`LazyMotion`, ver
+        `ProveedorMovimiento`). Hay una ventana de unos milisegundos en la que `m.div` ya
+        sabe pintar pero todavía no sabe animar. El almacén local contesta de forma
+        síncrona, así que `listo` pasaba a `true` **dentro de esa ventana**: Motion se
+        quedaba con el destino apuntado, sin nada con que ejecutarlo, y cuando el trozo
+        aterrizaba ya no volvía a dispararlo porque para él la propiedad no había
+        cambiado. Los bloques se quedaban en `opacity:0` para siempre. Al navegar desde
+        otra sección funcionaba —las funciones ya estaban—, y por eso solo fallaba al
+        entrar.
+
+        La regla que sale de aquí, y que vale para todo el proyecto: **con `LazyMotion`,
+        un `animate` que cambia durante el arranque puede perderse.** Lo que sí sobrevive
+        es un par `initial`/`animate` fijo desde el montaje. Así que el lienzo no se monta
+        hasta que hay algo que enseñar, y entonces entra con un destino que ya no cambia.
+
+        De paso se gana lo de antes: mientras el layout real no esté puesto no hay nada en
+        el DOM, y nadie ve un widget en su sitio de fábrica antes de saltar al suyo.
       */}
+      {esc.listo && (
       <m.div
         className="canvas"
         ref={lienzo}
         style={{ minHeight: esc.altoLienzo }}
         variants={ORQUESTA}
         initial={estreno ? 'fuera' : false}
-        animate={esc.listo ? 'dentro' : 'fuera'}
+        animate="dentro"
       >
         <div className="grid-guide" ref={guia} aria-hidden="true" />
         {esc.guias.v !== null && (
@@ -212,6 +231,7 @@ export function Escritorio() {
           );
         })}
       </m.div>
+      )}
 
       {menu && (
         <>

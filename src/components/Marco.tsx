@@ -19,6 +19,7 @@ import { Dock } from '@/components/Dock';
 import { Button } from '@/components/ui/button';
 import { useUI } from '@/lib/ui/contexto';
 import { AVISO, MUELLE, PAGINA, SIN_VIAJE, TIEMPO, CURVA, viajeEntre, type Viaje } from '@/lib/ui/movimiento';
+import { RutaCongelada } from '@/lib/ui/RutaCongelada';
 
 
 /* La agenda del día NO está aquí a propósito: se entra desde el calendario semanal
@@ -206,7 +207,19 @@ export function Marco({ children }: { children: ReactNode }) {
             `mode="wait"` porque las dos páginas ocupan el mismo hueco: solapándolas, la que
             entra empuja a la que sale y la columna da un salto de alto.
           */}
-          <AnimatePresence mode="wait" initial={false} custom={rumbo.viaje}>
+          {/*
+            Sin `initial={false}`, y el motivo cuesta encontrarlo: esa propiedad no se
+            queda en la página, **se propaga a todo lo que lleva dentro** y anula la
+            animación de montaje de cada descendiente en la primera carga. Con ella puesta,
+            el escritorio aparecía de golpe —sus bloques nacían ya en `opacity:1`, sin
+            posarse— y lo mismo las piezas de las demás pantallas. Se veía comparando con
+            el plato del dock, que está fuera de aquí y sí se animaba.
+
+            Lo que esa propiedad evitaba —que la página entrara viajando recién abierta la
+            aplicación— lo resuelve ahora el propio viaje: en la primera carga no hay de
+            dónde venir, el viaje es `quieto` y su estado de partida es el de reposo.
+          */}
+          <AnimatePresence mode="wait" custom={rumbo.viaje}>
             <m.div
               key={ruta}
               className="pagina"
@@ -216,7 +229,11 @@ export function Marco({ children }: { children: ReactNode }) {
               animate="dentro"
               exit="saliendo"
             >
-              {children}
+              {/* Cada envoltorio se queda con el contenido que tenía al montarse. Sin
+                  esto, el router mete la página nueva dentro del envoltorio que está
+                  saliendo, y el mismo contenido se anima dos veces: una al salir y otra
+                  al entrar. El porqué, entero, en `RutaCongelada`. */}
+              <RutaCongelada>{children}</RutaCongelada>
             </m.div>
           </AnimatePresence>
         </div>

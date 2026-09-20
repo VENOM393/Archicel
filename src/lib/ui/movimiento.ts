@@ -287,7 +287,11 @@ export const PAGINA: Variants = {
   fuera: (v: Viaje = SIN_VIAJE) => {
     if (v.eje === 'lateral') return { opacity: 1, x: v.sentido * CRUZA, scale: 1 };
     if (v.eje === 'profundidad') return { opacity: 0, x: 0, scale: v.sentido === 1 ? LEJOS : CERCA };
-    return { opacity: 0, x: 0, scale: 1 };
+    /* El viaje neutro —la primera carga— es idéntico al reposo: el envoltorio no tiene
+       de dónde venir, así que no hace nada y la entrada se la lleva entera el contenido,
+       pieza a pieza. Poner aquí una opacidad 0 añadiría un fundido del bloque encima del
+       escalonado de sus partes: el mismo gesto contado dos veces. */
+    return { opacity: 1, x: 0, scale: 1 };
   },
 
   dentro: (v: Viaje = SIN_VIAJE) => ({
