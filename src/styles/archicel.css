@@ -1229,6 +1229,26 @@
   }
   .prox-vacio{font-size:12px;color:var(--ink-subtle);padding:8px 2px;margin:0}
 
+  /* ── la variante de tareas retrasadas ──
+     Misma estructura y misma apertura que los próximos eventos; solo cambia lo que tiene
+     que cambiar, que es cómo se lee la urgencia y cuántas filas caben. */
+
+  /* La fecha en rojo: es lo que dice «esto ya debería estar hecho» de un vistazo, sin
+     leer el número de al lado. */
+  .prox-tarde .prox-fecha{color:var(--late)}
+  /* Y las horas **no** van también en rojo. Dos rojos seguidos en la misma fila se anulan
+     entre sí: la alarma la da la fecha y este número da la magnitud. Cabe hasta cuatro
+     cifras porque no se convierte a días ni cuando son muchas. */
+  .prox-tarde .prox-faltan{color:var(--ink);min-width:54px}
+  .prox-tarde .prox-scroll{
+    max-height:186px;overflow-y:auto;overscroll-behavior:contain;
+    /* el tope no puede cortar una fila por la mitad y hacer creer que ahí acaba */
+    scrollbar-width:thin
+  }
+  /* En estrecho, los próximos eventos esconden la fecha porque con saber que falta un día
+     basta. Aquí no: la fecha en rojo **es** el mensaje, así que se queda. */
+  @container (max-width: 300px){ .prox-tarde .prox-fecha{display:block} }
+
   .cal-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--ink-subtle)}
   .cal-legend span{display:flex;align-items:center;gap:6px}
   .cal-legend i{width:6px;height:6px;border-radius:999px;display:block}

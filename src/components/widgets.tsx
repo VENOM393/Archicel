@@ -341,6 +341,123 @@ function faltan(f: string, desde: Date): string {
   return `${dias} días`;
 }
 
+/* ───────────────────────── retrasadas, plegables ─────────────────────────
+
+   El mismo desplegable que los próximos eventos del mini calendario —la misma línea, la
+   misma flecha que gira, la misma apertura de `0fr` a `1fr`— pero contando hacia atrás.
+
+   Tres diferencias, y las tres tienen motivo:
+
+     · **No se recorta a tres.** Los próximos eventos se quedan en tres porque lo que
+       viene después ya no cambia lo que haces hoy. Una tarea retrasada sí: esconder la
+       cuarta es esconder trabajo pendiente, y esa lista existe justamente para que no se
+       le pierda ninguna.
+     · **Se ordena por lo que lleva esperando**, no por fecha de calendario. La primera es
+       la que más tiempo lleva sin hacerse. Es el orden en el que conviene atacarlas y
+       además el que no cambia solo: una tarea no se vuelve menos vieja.
+     · **La fecha va en rojo y el hueco de «hoy» lleva las horas**. En el calendario ese
+       sitio dice cuánto falta; aquí dice cuánto hace. Es el mismo sitio contando en la
+       otra dirección.                                                                  */
+
+/** Cuándo termina una tarea, en milisegundos. El mismo cálculo que hace `progresoDe`. */
+function finDe(t: Tarea): number {
+  const d = new Date(`${t.fecha}T00:00:00`);
+  d.setMinutes(t.fin);
+  return d.getTime();
+}
+
+/**
+ * Las horas que lleva esperando, en horas enteras y nunca en minutos.
+ *
+ * Por debajo de una hora no se redondea a `0 h`, que se lee como «no pasa nada» justo
+ * cuando acaba de pasar. Y no hay tope por arriba: una tarea de hace dos semanas dice
+ * `336 h` y no `14 días`, porque el número grande es el aviso.
+ */
+function horasDeRetraso(fin: number, ahora: Date): string {
+  const horas = Math.floor((ahora.getTime() - fin) / 3_600_000);
+  return horas < 1 ? '<1 h' : `${horas} h`;
+}
+
+function Retrasadas() {
+  const [abierto, setAbierto] = useState(true);
+
+  /**
+   * La hora pasa por `useAhora` porque de ella depende todo lo de aquí: qué está
+   * retrasado y cuánto. El servidor prerrenderiza y no sabe qué hora es donde está
+   * Celeste, así que hasta que el componente monta la lista se enseña vacía. Se refresca
+   * cada minuto para que el contador pase de hora sin tener que recargar.
+   */
+  const ahora = useAhora(60_000);
+
+  /**
+   * Un año hacia atrás, no «todo».
+   *
+   * La lista dice «todas las retrasadas» y para un curso eso es un año: más atrás no hay
+   * nada que rescatar, y una suscripción sin límite crece sola con el tiempo hasta que un
+   * día el escritorio tarda en abrir. El límite está aquí, a la vista, y no escondido en
+   * el almacén.
+   */
+  const desde = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 365);
+    return aFecha(d);
+  }, []);
+  const hasta = aFecha(new Date());
+  const tareas = useTareas({ desde, hasta });
+
+  const retrasadas = useMemo(() => {
+    if (!ahora) return [];
+    return tareas
+      .filter((t) => progresoDe(t, ahora) === 'retrasada')
+      .map((t) => ({ t, fin: finDe(t) }))
+      /* la más vieja primero: la que más tiempo lleva esperando */
+      .sort((a, b) => a.fin - b.fin || a.t.id.localeCompare(b.t.id));
+  }, [tareas, ahora]);
+
+  return (
+    <div className={`prox prox-tarde${abierto ? ' on' : ''}`}>
+      <button
+        type="button"
+        className="prox-cab"
+        aria-expanded={abierto}
+        onClick={() => setAbierto((v) => !v)}
+      >
+        <span>Retrasadas</span>
+        <span className="prox-n">{retrasadas.length}</span>
+        <svg className="prox-flecha" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {/* La altura se anima con `grid-template-rows` de 0fr a 1fr: es la única forma de ir
+          a "lo que mida el contenido" sin animar `height`, que provoca reflujo en cada
+          fotograma y no sabe cuánto mide el destino. */}
+      <div className="prox-caja">
+        <div className="prox-lista">
+          {/* Un envoltorio más que en el calendario, y hace falta: aquella lista son tres
+              filas y esta pueden ser treinta. `.prox-lista` no puede desplazar porque su
+              `overflow:hidden` es lo que hace posible el plegado; el que desplaza es este
+              de dentro, con tope de alto, para que una racha mala no se coma el widget. */}
+          <div className="prox-scroll">
+          {retrasadas.length === 0 ? (
+            <p className="prox-vacio">{ahora ? 'Nada retrasado. Vas al día.' : 'Comprobando…'}</p>
+          ) : (
+            retrasadas.map(({ t, fin }) => (
+              <span className="prox-fila" key={t.id} style={{ ['--tc' as string]: `var(--c-${t.color})` }}>
+                <i className="prox-pt" />
+                <span className="prox-tit">{t.titulo}</span>
+                <span className="prox-fecha">{diaCorto(t.fecha)}</span>
+                <span className="prox-faltan">{horasDeRetraso(fin, ahora!)}</span>
+              </span>
+            ))
+          )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ───────────────────────── pendientes ───────────────────────── */
 
 export function Pendientes() {
@@ -433,6 +550,10 @@ export function Pendientes() {
           );
         })}
       </div>
+      {/* Entre la lista y el pie, no después: el pie es el resumen del día que se está
+          mirando, y lo retrasado no pertenece a ese día — viene de todos los anteriores. */}
+      <Retrasadas />
+
       <div className="todo-foot">
         <span>{clave}</span>
         <span>{quedan === 0 ? 'todo hecho' : quedan === 1 ? '1 sin hacer' : `${quedan} sin hacer`}</span>
