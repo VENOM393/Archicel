@@ -95,143 +95,127 @@
     display:block;min-height:100vh;min-height:100dvh;
     /* sin banda: el raíl es un bloque flotante y el fondo de la aplicación es la foto */
   }
-  /* ── El raíl líquido ──
-     No es una columna de arriba abajo ni un bloque macizo: son burbujas de cristal, una
-     por sección, centradas en la altura de la ventana. Añadir una página añade su burbuja
-     y el conjunto crece solo.
-
-     Dos capas superpuestas y cada una aporta una mitad del efecto:
-
-       · `.rail-fluido` — las burbujas y la gota del activo, pasadas por el gooey. De aquí
-         sale el cuerpo y, sobre todo, la fusión: cuando la gota viaja entre dos burbujas
-         el filtro las une con un cuello y el indicador fluye en vez de saltar.
-       · `.nav-btn` — encima y sin filtro, cada uno con su propio desenfoque de fondo. El
-         cristal de verdad vive aquí, porque `backdrop-filter` no sobrevive dentro de un
-         filtro SVG.
-
-     El negro es medio, no absoluto: sobre una fotografía nocturna un bloque casi opaco se
-     lee como un agujero. */
-  .rail{
-    /* Ancho completo y centrado con flex, NO con translateX: un transform convierte al
-       raíl en el contenedor de sus hijos fijos, y la marca de la esquina —que es fija—
-       se venía aquí abajo con él. */
-    position:fixed;left:0;right:0;bottom:20px;z-index:20;
-    display:flex;align-items:center;justify-content:center;
-    padding:0;isolation:isolate;pointer-events:none;
-  }
-  .rail-filtro{position:absolute;width:0;height:0;pointer-events:none}
-  .brand{
-    position:fixed;top:18px;left:20px;
-    width:32px;height:32px;display:grid;place-items:center;color:var(--ink);
-    opacity:.55
-  }
-  .rail-nucleo{
-    position:relative;pointer-events:auto;
-    display:flex;flex-direction:row;align-items:center;gap:14px;
-  }
-  .rail-fluido{
-    position:absolute;inset:-16px;z-index:0;pointer-events:none;
-    filter:url(#gooey) drop-shadow(0 0 1px var(--hairline-lit)) drop-shadow(0 14px 30px rgba(0,0,0,.72));
-  }
-  /* ── El agua de las burbujas ──
-     Tres capas apiladas en el mismo `background`, de arriba abajo:
-
-       1 · el brillo especular, arriba a la izquierda, donde daría la luz en una gota real
-       2 · un velo claro en el borde inferior: el rebote de luz que sube por el vidrio
-       3 · el agua, un gradiente cónico que gira muy despacio
-
-     El giro es lo que la hace parecer líquida y no un círculo pintado. Se anima el ángulo
-     del cónico, y para eso hace falta declararlo con `@property`: una variable CSS normal
-     es texto para el navegador y salta de un valor a otro en vez de interpolar.
-
-     Todos los azules van con alfa alto a propósito. El contraste del filtro gooey descarta
-     lo que baje de ~0.46, así que la transparencia no es una opción libre aquí: lo que da
-     la sensación de vidrio es el brillo y el gradiente, no la opacidad. */
   @property --giro{syntax:'<angle>';inherits:false;initial-value:0deg}
   @keyframes marea{to{--giro:360deg}}
 
-  /* El agua es monocroma: el material lo dibuja el contraste entre tonos de negro, no el
-     color. Por eso el cónico recorre un rango amplio —de casi negro a grafito— en vez de
-     quedarse en un solo gris: un gradiente de tonos vecinos se lee plano, y plano fue
-     exactamente el problema del gris de antes. El punto de frío de los valores (12,12,15
-     y no 12,12,12) es el mismo del tema: un negro puro sobre esta fotografía vira a verde. */
-  .rail-burbuja{
-    position:absolute;left:16px;top:50%;width:44px;height:44px;border-radius:999px;
-    background:
-      /* el brillo de arriba: pequeño y nítido, no un lavado */
-      radial-gradient(46% 38% at 33% 22%, rgba(255,255,255,.30), transparent 72%),
-      /* la veta: un filo de luz cruzando el vidrio, que es el detalle que lo hace caro */
-      linear-gradient(118deg, transparent 38%, rgba(255,255,255,.13) 47%, transparent 53%),
-      /* el rebote que sube desde el canto inferior */
-      radial-gradient(80% 40% at 50% 104%, rgba(255,255,255,.10), transparent 70%),
-      conic-gradient(from var(--giro),
-        rgba(10,10,13,.88), rgba(23,23,28,.88), rgba(42,42,50,.88),
-        rgba(16,16,20,.88), rgba(10,10,13,.88));
-    animation:marea 26s linear infinite;
+  /* ═══════════════════════════════════════════════════════
+     3 · EL DOCK
+     ═══════════════════════════════════════════════════════
+     Una barra flotante abajo y centrada, con el comportamiento del dock de macOS: el
+     icono bajo el cursor crece, los vecinos crecen menos y se apartan. Toda esa parte la
+     lleva `Dock.tsx` escribiendo `transform` en cada fotograma; aquí solo está el
+     material.
+
+     El plato es translúcido y lleva su desenfoque de fondo. Eso lo separa de la
+     fotografía sin taparla — que es lo que hace un dock de verdad: se apoya encima, no
+     hace de suelo. El negro es medio, no absoluto: sobre una imagen nocturna un bloque
+     casi opaco se lee como un agujero. */
+  .dock{
+    position:fixed;left:0;right:0;bottom:22px;z-index:20;
+    display:flex;justify-content:center;pointer-events:none;
+  }
+  .dock-plato{
+    pointer-events:auto;
+    display:flex;align-items:flex-end;gap:12px;
+    padding:11px 13px;border-radius:26px;
+    background:rgba(var(--panel-rgb),.58);
+    border:1px solid var(--hairline);
+    backdrop-filter:blur(24px) saturate(145%);-webkit-backdrop-filter:blur(24px) saturate(145%);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.09) inset,
+      0 -1px 0 rgba(0,0,0,.35) inset,
+      0 22px 44px -26px rgba(0,0,0,.95),
+      0 3px 8px -4px rgba(0,0,0,.55);
+    animation:dock-entra 760ms var(--ease-out) 260ms backwards;
+  }
+  @keyframes dock-entra{
+    from{opacity:0;transform:translateY(18px) scale(.95);filter:blur(6px)}
+    to{opacity:1;transform:none;filter:blur(0)}
   }
 
-  /* La gota del indicador es la misma agua, un escalón más arriba en la escala: se
-     distingue por luminosidad y no por color, así que al fundirse con la burbuja no se ve
-     la costura. Gira al revés y algo más rápido — dos aguas que se cruzan, no un patrón
-     repetido dos veces. */
-  .rail-gota{
-    position:absolute;left:16px;top:50%;width:48px;height:48px;border-radius:999px;
-    background:
-      /* La misma agua, volcada a la escala clara: mismo brillo, misma veta, mismo rebote
-         y el mismo cónico girando — solo que entre blanco y perla en vez de entre negros.
-         El cónico no se queda en un solo blanco por la misma razón que el oscuro no se
-         quedaba en un gris: dos tonos vecinos se leen planos, y plano es lo contrario de
-         líquido. El alfa alto no es opcional, el gooey descarta por debajo de ~0.46. */
-      radial-gradient(46% 38% at 33% 20%, rgba(255,255,255,.95), transparent 68%),
-      linear-gradient(118deg, transparent 34%, rgba(255,255,255,.7) 46%, transparent 56%),
-      radial-gradient(85% 44% at 50% 108%, rgba(214,226,244,.55), transparent 70%),
-      conic-gradient(from var(--giro),
-        rgba(255,255,255,.97), rgba(226,236,253,.97), rgba(198,214,238,.97),
-        rgba(241,246,255,.97), rgba(255,255,255,.97));
-    animation:marea 18s linear infinite reverse;
+  /* El icono. Crece desde su borde inferior, como en macOS: apoyado en el suelo del
+     plato, no flotando. Por eso `transform-origin` abajo y no al centro. */
+  .dock-btn{
+    position:relative;
+    width:56px;height:56px;flex:none;
+    display:grid;place-items:center;
+    border-radius:17px;
+    color:var(--ink-subtle);
+    background:rgba(255,255,255,.04);
+    border:1px solid var(--hairline);
+    transform-origin:bottom center;
     will-change:transform;
+    transition:color 240ms var(--ease-soft),background 240ms,border-color 240ms;
   }
-  .rail-gota.lenta{width:42px;height:42px}
+  .dock-btn:hover{color:var(--ink);background:rgba(255,255,255,.08);border-color:var(--hairline-lit)}
+  .dock-btn svg{position:relative;z-index:2}
 
-  /* la gota del ratón: la misma agua, apagada. Acompaña, no protagoniza */
-  .rail-roce{
-    position:absolute;left:16px;top:50%;width:40px;height:40px;border-radius:999px;
+  /* ── El agua del activo ──
+     La misma que llevaba la gota del raíl, volcada a la escala clara: el brillo especular
+     arriba a la izquierda, la veta de luz cruzando el vidrio, el rebote del canto inferior
+     y el cónico girando muy despacio. Es lo que hace que el activo tenga materia en vez de
+     ser un rectángulo blanco.
+
+     El cónico no se queda en un solo blanco por la misma razón que el oscuro no se quedaba
+     en un gris: dos tonos vecinos se leen planos, y plano es lo contrario de líquido. */
+  .dock-agua{
+    position:absolute;inset:0;border-radius:inherit;z-index:1;
+    opacity:0;transform:scale(.72);
     background:
-      radial-gradient(50% 40% at 34% 23%, rgba(255,255,255,.20), transparent 72%),
-      conic-gradient(from var(--giro), rgba(16,16,20,.64), rgba(42,42,50,.64), rgba(16,16,20,.64));
-    animation:marea 22s linear infinite;
-    opacity:0;transition:transform 320ms var(--ease-soft),opacity 280ms linear;
+      radial-gradient(46% 38% at 32% 20%, rgba(255,255,255,.96), transparent 68%),
+      linear-gradient(118deg, transparent 34%, rgba(255,255,255,.72) 46%, transparent 56%),
+      radial-gradient(85% 44% at 50% 108%, rgba(206,221,243,.6), transparent 70%),
+      conic-gradient(from var(--giro),
+        #FFFFFF, #E4EDFC, #C6D6EE, #F2F6FF, #FFFFFF);
+    animation:marea 20s linear infinite;
+    box-shadow:0 2px 10px -3px rgba(180,205,245,.5);
+    transition:opacity 320ms var(--ease-out),transform 420ms var(--ease-out);
   }
-  .rail-roce.on{opacity:1}
-
-  /* cada icono en su burbuja de cristal: el desenfoque va aquí, fuera del filtro */
-  .nav-btn{
-    position:relative;z-index:2;
-    width:44px;height:44px;border-radius:999px;display:grid;place-items:center;
-    border:1px solid var(--hairline);color:var(--ink-subtle);cursor:pointer;
-    background:rgba(255,255,255,.03);
-    backdrop-filter:blur(16px) saturate(130%);-webkit-backdrop-filter:blur(16px) saturate(130%);
-    transition:color 260ms var(--ease-soft),border-color 260ms,transform 260ms var(--ease-out);
-  }
-  .nav-btn:hover{color:var(--ink-muted);border-color:var(--hairline-lit)}
-  /* Con el raíl monocromo, al activo lo marca el contraste y no el color: el icono sube
-     a tinta plena mientras el resto se queda en la apagada, y la gota que tiene debajo es
-     un escalón más clara que las otras burbujas. Un acento de color aquí seria el unico
-     punto cromatico del raíl y se comeria la pieza. */
-  /* El activo se levanta y se pone en blanco.
-     No lleva relleno propio ni desenfoque: si los llevara, taparía la gota que tiene
-     debajo y el blanco quedaría apagado. Lo que se ve detrás del icono ES la gota, con su
-     misma agua pero en la escala clara — por eso el activo tiene textura y no es un
-     círculo plano. El icono baja a tinta oscura porque encima de blanco eso es lo único
-     que se lee. */
-  .nav-btn[aria-current="page"]{
+  .dock-btn[aria-current="page"]{
     color:#0C1016;
-    border-color:transparent;
     background:transparent;
-    backdrop-filter:none;-webkit-backdrop-filter:none;
-    transform:translateY(-7px) scale(1.14);
+    border-color:transparent;
   }
-  .nav-btn[aria-current="page"] svg{filter:drop-shadow(0 1px 0 rgba(255,255,255,.5))}
+  .dock-btn[aria-current="page"] .dock-agua{opacity:1;transform:none}
+
+  /* El punto de debajo, como en macOS: dice cuál está abierta sin mover el icono de su
+     sitio. Antes esto lo hacía un salto de siete píxeles y el activo se salía de la fila. */
+  .dock-punto{
+    position:absolute;left:50%;bottom:-7px;width:4px;height:4px;border-radius:999px;
+    background:var(--ink-muted);
+    transform:translateX(-50%) scale(0);
+    transition:transform 320ms var(--ease-out),background 320ms;
+  }
+  .dock-btn[aria-current="page"] .dock-punto{transform:translateX(-50%) scale(1);background:#DCE8FC}
+
+  /* El rótulo, encima y solo al acercarse. Es lo que convierte tres iconos mudos en tres
+     destinos con nombre. */
+  .dock-nombre{
+    position:absolute;left:50%;bottom:calc(100% + 12px);
+    padding:5px 10px;border-radius:9px;white-space:nowrap;pointer-events:none;
+    font:500 11.5px/1 var(--ui);letter-spacing:.005em;color:var(--ink);
+    background:rgba(var(--panel-strong-rgb),.92);
+    border:1px solid var(--hairline-lit);
+    box-shadow:0 10px 22px -14px rgba(0,0,0,.9);
+    opacity:0;transform:translateX(-50%) translateY(5px) scale(.94);
+    transform-origin:bottom center;
+    transition:opacity 200ms,transform 260ms var(--ease-out);
+  }
+  .dock-btn:hover .dock-nombre,
+  .dock-btn:focus-visible .dock-nombre{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
+
+  .dock-btn:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(122,166,232,.45)}
+
+  @media (max-width:560px){
+    .dock{bottom:14px}
+    .dock-plato{gap:9px;padding:9px 10px;border-radius:22px}
+    .dock-btn{width:48px;height:48px;border-radius:15px}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    .dock-plato{animation:none}
+    .dock-agua{animation:none;transition:opacity 200ms}
+  }
 
   /* Sitio para el dock: sin este hueco, lo ultimo de cada pagina queda debajo de el. */
   .body{padding:16px 18px 108px;display:grid;gap:12px;align-content:start}
@@ -1300,7 +1284,7 @@
   }
   @media (max-width:700px){
     .app{grid-template-columns:1fr}
-    .nav-btn{width:38px;height:38px}
+    .dock-btn{width:48px;height:48px}
     .body{padding:14px 14px 100px}
     .day small{display:none}
   }
@@ -1316,9 +1300,9 @@
     .bar b,.ring .val,.bars div,.dial .v1,.box svg{transition:none}
     .bar b,.bars div{transform:none}
     .widget.settling{transition:none}
-    .rail-gota,.rail-roce{transition:none}
+    .dock-agua{transition:none}
     /* el agua se queda quieta: el gradiente sigue ahí, deja de girar */
-    .rail-burbuja,.rail-gota,.rail-roce{animation:none}
+    .dock-agua{animation:none}
 
     .canvas.posado .widget,.col-sem,.cal-panel,.tarea-sem{animation:none}
     .canvas.posado .widget,.col-sem,.cal-panel,.tarea-sem{opacity:1;transform:none;filter:none}
@@ -2470,3 +2454,13 @@
     .firma-brillo,.firma-luz{display:none}
     .firma-linea{transform:scaleX(1)}
   }
+
+  /* La marca en la cabecera. Vivía flotando en el raíl; con el dock abajo, su sitio es
+     el principio de la barra superior, donde se lee una vez y deja de estorbar. */
+  .marca{
+    display:inline-flex;align-items:center;gap:8px;
+    color:var(--ink-subtle);
+    transition:color 300ms;
+  }
+  .marca b{font:600 13.5px/1 var(--ui);letter-spacing:.005em}
+  .marca:hover{color:var(--ink-muted)}

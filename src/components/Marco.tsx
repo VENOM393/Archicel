@@ -13,7 +13,7 @@ import type { ReactNode } from 'react';
 import { Fondo } from '@/components/Fondo';
 import { Instalable } from '@/components/Instalable';
 import { MenuCuenta } from '@/components/MenuCuenta';
-import { RailLiquido } from '@/components/RailLiquido';
+import { Dock } from '@/components/Dock';
 import { Button } from '@/components/ui/button';
 import { useUI } from '@/lib/ui/contexto';
 
@@ -84,13 +84,20 @@ export function Marco({ children }: { children: ReactNode }) {
       <Fondo editando={editando} mandoRef={mandoFondo} />
 
       <div className="app">
-        <RailLiquido secciones={SECCIONES} ruta={ruta} />
+        <Dock secciones={SECCIONES} ruta={ruta} />
 
         <div className="body">
           <header className="topbar rise">
             {/* El saludo vive en el widget de bienvenida del escritorio, que es donde
                 tiene sentido. Repetirlo en la cabecera de todas las paginas lo convertia
                 en ruido: se lee una vez al entrar y estorba las otras veinte. */}
+            <span className="marca" aria-hidden="true">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 20 12 4l9 16" />
+                <path d="M7.5 20 12 11l4.5 9" />
+              </svg>
+              <b>Archicel</b>
+            </span>
             <span className="hueco" />
             <div className="tools">
               {/* Solo se pinta cuando el navegador ofrece instalar; el resto del tiempo
