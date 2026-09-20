@@ -1,19 +1,32 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
 /* ═══════════════════════════════════════════════════════
-   Tokens de Archicel — el contrato vive en docs/design/DESIGN.md.
-   Si cambias un valor aquí, cámbialo allí en el mismo commit.
+   TOKENS DE ARCHICEL
+   El contrato vive en docs/design/DESIGN.md. Si cambias un valor aquí,
+   cámbialo allí en el mismo commit.
+
+   Aquí conviven dos vocabularios y es a propósito:
+
+     · los nombres de la casa  (--color-accent, --color-ink…) los usa el CSS propio
+     · los nombres de shadcn   (--primary, --border, --ring…) los usan sus componentes
+
+   Los segundos NO tienen valores propios: apuntan a los primeros. Así un botón de
+   shadcn y un panel escrito a mano sacan el color del mismo sitio, y cambiar la paleta
+   sigue siendo cambiar un único bloque. Si alguna vez un token de shadcn lleva un color
+   literal, hay dos sistemas otra vez y es un error, no una excepción.
    ═══════════════════════════════════════════════════════ */
 @theme {
-  --color-canvas-deep: #0A1317;
-  --color-canvas: #101C21;
-  --color-ink: #EAF2F4;
-  --color-ink-muted: #B6C8CD;
-  --color-ink-subtle: #93A8AF;
-  --color-accent: #F0A85C;
-  --color-accent-soft: #F8CB94;
-  --color-on-accent: #1A1106;
-  --color-cool: #8FB7C4;
+  --color-canvas-deep: #0B0B0D;
+  --color-canvas: #141417;
+  --color-ink: #F4F4F6;
+  --color-ink-muted: #C2C2C9;
+  --color-ink-subtle: #92929B;
+  --color-accent: #2B5090;
+  --color-accent-soft: #A3C2F2;
+  --color-on-accent: #FFFFFF;
+  --color-cool: #A5A5AF;
 
   --color-ev-ambar: #F0A85C;
   --color-ev-rojo: #FF6B5E;
@@ -26,7 +39,9 @@
   --color-ev-violeta: #B57BEE;
   --color-ev-rosa: #FF7AA8;
   --color-ev-arena: #D6B08A;
-  --color-ev-piedra: #9FB0BA;
+  --color-ev-marron: #9A7A52;
+  --color-ev-amarillo: #F2D24B;
+  --color-ev-piedra: #A1A1AA;
 
   --font-ui: "Outfit", "SF Pro Display", system-ui, sans-serif;
   --font-data: ui-monospace, "SF Mono", "Cascadia Mono", monospace;
@@ -36,13 +51,89 @@
 }
 
 :root {
-  --panel-rgb: 12, 23, 28;
-  --panel-strong-rgb: 15, 29, 35;
+  --panel-rgb: 14, 14, 17;
+  --panel-strong-rgb: 23, 23, 27;
   --opa: 0.7;
-  --hairline: rgba(214, 234, 240, 0.16);
+  --hairline: rgba(255, 255, 255, 0.12);
   --panel: rgba(var(--panel-rgb), var(--opa));
   --panel-strong: rgba(var(--panel-strong-rgb), calc(var(--opa) + 0.1));
   color-scheme: dark;
+
+  /* ── La escala de radios ──
+     Cinco pasos y ni uno más. Antes había ocho valores sueltos y treinta y siete
+     cápsulas: cuando todo tiene el radio máximo, ninguna forma dice nada y el conjunto
+     sabe a plantilla. La casa de la fotografía es ortogonal —losas, vidrio, cantos
+     vivos— y la interfaz que va encima se comporta igual: esquinas suaves, nunca
+     blandas. La cápsula sobrevive solo donde significa algo redondo de verdad: un
+     avatar, un punto de color, el pulgar de un deslizador. */
+  --r-xs: 4px;    /* marcas, casillas, chips diminutos */
+  --r-sm: 7px;    /* botones, campos, controles */
+  --r-md: 10px;   /* celdas, filas, tarjetas internas */
+  --r-lg: 14px;   /* widgets y paneles */
+  --r-xl: 20px;   /* superficies grandes: agenda, rejillas, hojas */
+
+  /* ── Tokens de shadcn, anclados a los de arriba ── */
+  --background: var(--color-canvas-deep);
+  --foreground: var(--color-ink);
+  --card: var(--panel-strong);
+  --card-foreground: var(--color-ink);
+  --popover: var(--panel-strong);
+  --popover-foreground: var(--color-ink);
+  --primary: var(--color-accent);
+  --primary-foreground: var(--color-on-accent);
+  --secondary: var(--panel);
+  --secondary-foreground: var(--color-ink);
+  --muted: var(--panel);
+  --muted-foreground: var(--color-ink-subtle);
+  --accent: var(--panel-strong);
+  --accent-foreground: var(--color-ink);
+  --destructive: #E8735A;
+  --border: var(--hairline);
+  --input: var(--hairline);
+  --ring: #7AA6E8;
+  --radius: 7px;
+  --chart-1: var(--color-accent);
+  --chart-2: var(--color-cool);
+  --chart-3: var(--color-ev-menta);
+  --chart-4: var(--color-ev-violeta);
+  --chart-5: var(--color-ev-arena);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-ui: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* El botón de shadcn usa `rounded-lg`, así que ese escalón es el radio de control:
+     7 px. Los de arriba y abajo se corren en consecuencia para que la escala siga siendo
+     una sola —la de la casa— y no dos que casi coinciden. */
+  --radius-sm: var(--r-xs);
+  --radius-md: var(--r-sm);
+  --radius-lg: var(--r-sm);
+  --radius-xl: var(--r-md);
+  --radius-2xl: var(--r-lg);
+}
+
+/* Los tamaños de shadcn están pensados para ratón (32–36 px). En cuanto la pantalla es
+   táctil, cualquier botón suyo cumple los 44 px del pulgar, igual que los de la casa. */
+@media (max-width: 900px) {
+  [data-slot="button"]:not([data-size^="icon"]) { min-height: 44px; }
+  [data-slot="button"][data-size^="icon"] { width: 44px; height: 44px; }
 }
 
 * { box-sizing: border-box; }
@@ -60,4 +151,4 @@ body {
 
 ::selection { background: var(--color-accent); color: var(--color-on-accent); }
 
-:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; border-radius: 8px; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; border-radius: var(--r-sm); }

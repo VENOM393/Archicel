@@ -77,3 +77,27 @@ export const PRIOS: Array<{ id: 'baja' | 'media' | 'alta'; n: string }> = [
 export const DIA_INICIO = 6;
 export const DIA_FIN = 24;
 export const ALTO_HORA = 58;
+
+/**
+ * La prioridad, dicha con tres líneas.
+ *
+ * Trazos paralelos del mismo largo que se encienden de abajo arriba. Ni escalera de
+ * cobertura —que se lee como un icono de sistema prestado— ni anillo de progreso, que es
+ * el cliché de turno: líneas paralelas, que es el idioma de un plano y el de esta casa.
+ *
+ * El nivel lo dice **cuántas** están encendidas, no su longitud, así que se entiende sin
+ * conocer el código de colores y sigue funcionando en blanco y negro o a 10 px. El color
+ * solo refuerza; el `title` y el texto oculto cubren a quien no lo ve.
+ */
+export function Nivel({ prio, tam = 13 }: { prio: 'baja' | 'media' | 'alta'; tam?: number }) {
+  const encendidas = { baja: 1, media: 2, alta: 3 }[prio];
+  const nombre = { baja: 'Prioridad baja', media: 'Prioridad media', alta: 'Prioridad alta' }[prio];
+  return (
+    <span className="nivel" data-p={prio} title={nombre} style={{ ['--w' as string]: `${tam}px` }}>
+      {[3, 2, 1].map((n) => (
+        <i key={n} className={n <= encendidas ? 'on' : undefined} />
+      ))}
+      <span className="sr">{nombre}</span>
+    </span>
+  );
+}

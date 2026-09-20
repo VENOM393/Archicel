@@ -7,26 +7,27 @@
  * Tocar un hueco crea una tarea a esa hora.
  */
 
-import { Suspense, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import { HojaEvento, type PeticionEvento } from '@/components/HojaEvento';
 import { HojaTarea, type PeticionTarea } from '@/components/HojaTarea';
-import { Marco } from '@/components/Marco';
+import { Button } from '@/components/ui/button';
 import { useEventos, useTareas } from '@/hooks/useDatos';
 import { useArchicel } from '@/lib/firebase/sesion';
-import { aFecha, hhmm, type Prioridad, type Tarea } from '@/lib/data';
-import { ALTO_HORA, DIA_FIN, DIA_INICIO, Icono, TIPOS } from '@/lib/ui/catalogo';
+import { NOMBRE_PROGRESO, aFecha, hhmm, progresoDe, type Prioridad, type Tarea } from '@/lib/data';
+import { ALTO_HORA, DIA_FIN, DIA_INICIO, Icono, Nivel, TIPOS } from '@/lib/ui/catalogo';
 
 export default function PaginaDia() {
   return (
-    <Suspense fallback={<Marco><div /></Marco>}>
+    <Suspense fallback={<div />}>
       <Dia />
     </Suspense>
   );
 }
 
 function Dia() {
+  const router = useRouter();
   const params = useSearchParams();
   const inicial = params.get('f');
   const [fechaSel, setFechaSel] = useState<string>(inicial ?? aFecha(new Date()));
@@ -60,7 +61,7 @@ function Dia() {
       tareasSemana
         .filter((t) => t.fecha === fechaSel)
         .filter((t) => filtro === 'todas' || t.prio === filtro)
-        .filter((t) => !(ocultarHechas && t.hecha))
+        .filter((t) => !(ocultarHechas && progresoDe(t) === 'hecha'))
         .sort((a, b) => a.ini - b.ini),
     [tareasSemana, fechaSel, filtro, ocultarHechas],
   );
@@ -86,35 +87,69 @@ function Dia() {
     setFechaSel(aFecha(x));
   };
 
-  const marcar = (t: Tarea) => almacen.tareas.guardar({ ...t, hecha: !t.hecha }).catch(() => {});
+  /* la casilla alterna entre hecha y sin empezar; los demás estados se eligen en la hoja */
+  const marcar = (t: Tarea) => {
+    const hecha = progresoDe(t) !== 'hecha';
+    almacen.tareas.guardar({ ...t, hecha, progreso: hecha ? 'hecha' : 'sin-empezar' }).catch(() => {});
+  };
 
   const mesTxt = d.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
 
+  /**
+   * La agenda se abre donde está el día, no en su primera hora.
+   *
+   * Empezar siempre a las 06:00 obliga a desplazar a mano cada vez que se entra, y en un
+   * móvil eso es media pantalla de horas vacías antes de ver nada. Se aterriza una hora
+   * antes de lo que importa: la hora actual si es hoy, o la primera tarea si no.
+   *
+   * Sin animación: no es un movimiento que la usuaria haya pedido, es el sitio correcto
+   * desde el principio, y verlo deslizarse solo lo haría parecer un error.
+   */
+  const agenda = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const nodo = agenda.current;
+    if (!nodo) return;
+    const foco = esHoy ? minAhora : tareas[0]?.ini;
+    if (foco === undefined) return;
+    const y = ((foco - 60) / 60 - DIA_INICIO) * ALTO_HORA;
+    nodo.scrollTop = Math.max(0, y);
+    /* solo al cambiar de día: mientras se edita, el desplazamiento es de la usuaria */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fechaSel]);
+
   return (
-    <Marco>
+    <>
       <section className="vista on" id="view-dia" aria-label="Agenda del día">
         <div className="dia-top">
-          <div className="dia-fecha">
-            <span className="num">{d.getDate()}</span>
+          <h1 className="dia-fecha">
+            <span className="num">{d.getDate()}</span>{' '}
             <span className="txt">
-              <span className="dow">{d.toLocaleDateString('es-ES', { weekday: 'long' })}</span>
+              <span className="dow">{d.toLocaleDateString('es-ES', { weekday: 'long' })}</span>{' '}
               <span className="mes">{mesTxt.charAt(0).toUpperCase() + mesTxt.slice(1)}</span>
             </span>
-          </div>
+          </h1>
           <div className="dia-nav">
-            <button className="nav-ico" type="button" aria-label="Día anterior" onClick={() => mover(-1)}>
+            {/* La agenda ya no está en el raíl: se entra desde la semana, así que tiene
+                que haber una salida de vuelta que no dependa de recordar el camino. */}
+            <Button variant="ghost" size="sm" type="button" onClick={() => router.push("/calendario")}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m14 6-6 6 6 6" />
+              </svg>
+              Semana
+            </Button>
+            <Button variant="outline" size="icon-sm" type="button" aria-label="Día anterior" onClick={() => mover(-1)}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="m14 6-6 6 6 6" />
               </svg>
-            </button>
-            <button className="hoy-btn" type="button" onClick={() => setFechaSel(aFecha(new Date()))}>
+            </Button>
+            <Button variant="outline" size="sm" type="button" onClick={() => setFechaSel(aFecha(new Date()))}>
               Hoy
-            </button>
-            <button className="nav-ico" type="button" aria-label="Día siguiente" onClick={() => mover(1)}>
+            </Button>
+            <Button variant="outline" size="icon-sm" type="button" aria-label="Día siguiente" onClick={() => mover(1)}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="m10 6 6 6-6 6" />
               </svg>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -164,32 +199,39 @@ function Dia() {
           </div>
         )}
 
-        <div className="filtros">
+        {/* Filtrar no es actuar. Estos botones eran cápsulas ámbar idénticas al de crear,
+            así que la pantalla tenía cinco llamadas de la misma fuerza y ninguna guiaba.
+            Ahora el filtro activo se marca con contorno y el resto son fantasma: la única
+            pieza sólida de la pantalla es la que crea algo. */}
+        <div className="filtros" role="group" aria-label="Filtros de la agenda">
           <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {(['todas', 'alta', 'media', 'baja'] as const).map((p) => (
-              <button
+              <Button
                 key={p}
                 type="button"
-                className={`chip${filtro === p ? ' on' : ''}`}
+                variant={filtro === p ? 'outline' : 'ghost'}
+                aria-pressed={filtro === p}
+                className={filtro === p ? 'filtro-on' : undefined}
                 onClick={() => setFiltro(p)}
               >
                 {p !== 'todas' && (
                   <i className="pt" style={{ background: `var(--c-${p === 'alta' ? 'rojo' : p === 'media' ? 'ambar' : 'menta'})` }} />
                 )}
                 {p === 'todas' ? 'Todas' : p.charAt(0).toUpperCase() + p.slice(1)}
-              </button>
+              </Button>
             ))}
           </span>
-          <button
+          <Button
             type="button"
-            className={`chip${ocultarHechas ? ' on' : ''}`}
+            variant={ocultarHechas ? 'outline' : 'ghost'}
+            aria-pressed={ocultarHechas}
+            className={ocultarHechas ? 'filtro-on' : undefined}
             onClick={() => setOcultarHechas((v) => !v)}
           >
             {ocultarHechas ? 'Solo pendientes' : 'Ocultar hechas'}
-          </button>
+          </Button>
           <span className="sep" />
-          <button
-            className="add-btn"
+          <Button
             type="button"
             onClick={() => setHojaTarea({ tarea: null, fecha: fechaSel })}
           >
@@ -197,10 +239,10 @@ function Dia() {
               <path d="M12 5v14M5 12h14" />
             </svg>
             Nueva tarea
-          </button>
+          </Button>
         </div>
 
-        <div className="agenda">
+        <div className="agenda" ref={agenda}>
           <div className="horas">
             {Array.from({ length: DIA_FIN - DIA_INICIO }, (_, i) => {
               const h = DIA_INICIO + i;
@@ -224,7 +266,8 @@ function Dia() {
                 return (
                   <article
                     key={t.id}
-                    className={`tarea${t.hecha ? ' hecha' : ''}${t.fin - t.ini <= 45 ? ' corta' : ''}`}
+                    className={`tarea prog-${progresoDe(t)}${progresoDe(t) === 'hecha' ? ' hecha' : ''}${t.fin - t.ini <= 45 ? ' corta' : ''}`}
+                    title={`${t.titulo} · ${NOMBRE_PROGRESO[progresoDe(t)]}`}
                     style={{
                       ['--tc' as string]: `var(--c-${t.color})`,
                       top,
@@ -255,7 +298,7 @@ function Dia() {
                         {hhmm(t.ini)} – {hhmm(t.fin)}
                       </span>
                     </span>
-                    {t.prio === 'alta' && <span className="prio" title="Prioridad alta" />}
+                    <Nivel prio={t.prio} tam={11} />
                   </article>
                 );
               }),
@@ -278,6 +321,6 @@ function Dia() {
 
       <HojaTarea peticion={hojaTarea} cerrar={() => setHojaTarea(null)} />
       <HojaEvento peticion={hojaEvento} cerrar={() => setHojaEvento(null)} />
-    </Marco>
+    </>
   );
 }

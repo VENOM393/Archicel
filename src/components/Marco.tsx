@@ -7,15 +7,20 @@
  * reinicia el shader ni vuelve a cargar la fotografía.
  */
 
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { Fondo } from '@/components/Fondo';
+import { Instalable } from '@/components/Instalable';
+import { MenuCuenta } from '@/components/MenuCuenta';
+import { RailLiquido } from '@/components/RailLiquido';
+import { Button } from '@/components/ui/button';
 import { useUI } from '@/lib/ui/contexto';
 
-const USUARIA = 'Celeste';
 
+/* La agenda del día NO está aquí a propósito: se entra desde el calendario semanal
+   pulsando un día. Es una vista de detalle de la semana, no un destino propio, y tener
+   las tres en el raíl obligaba a elegir entre dos pantallas que muestran lo mismo. */
 const SECCIONES = [
   {
     href: '/',
@@ -32,6 +37,9 @@ const SECCIONES = [
   {
     href: '/calendario',
     titulo: 'Calendario',
+    /* La agenda de un día es una vista de detalle del calendario: mientras se está en
+       ella el raíl sigue señalando aquí, en vez de quedarse sin nada marcado. */
+    tambien: ['/dia'],
     icono: (
       <>
         <rect x="3" y="5" width="18" height="16" rx="3" />
@@ -40,12 +48,14 @@ const SECCIONES = [
     ),
   },
   {
-    href: '/dia',
-    titulo: 'Agenda del día',
+    href: '/horario',
+    titulo: 'Horario de clases',
+    /* un reloj: el horario responde a "a qué hora", no a "qué día" — esa es la del
+       calendario, y con dos rejillas seguidas en el raíl no se distinguirían */
     icono: (
       <>
-        <path d="M4 6h3M4 12h3M4 18h3" />
-        <path d="M10 6h10M10 12h10M10 18h6" />
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5.2l3.4 2" />
       </>
     ),
   },
@@ -53,48 +63,39 @@ const SECCIONES = [
 
 export function Marco({ children }: { children: ReactNode }) {
   const ruta = usePathname();
-  const { dia, alternarAmbiente, editando, setEditando, onda, aviso, mandoFondo } = useUI();
+  const { editando, setEditando, onda, aviso, mandoFondo } = useUI();
 
-  const saludo = (() => {
-    const h = new Date().getHours();
-    return h < 6 ? 'Aún despierta' : h < 13 ? 'Buenos días' : h < 21 ? 'Buenas tardes' : 'Buenas noches';
-  })();
+  /* La pantalla de acceso no lleva chrome: ni raíl ni cabecera. Todavía no se está
+     dentro de nada, así que ofrecer navegación sería enseñar puertas de una casa en la
+     que aún no se ha entrado. El fondo sí se queda: es lo que la hace reconocible. */
+  const desnuda = ruta === '/entrar';
+
+  if (desnuda) {
+    return (
+      <>
+        <Fondo editando={false} mandoRef={mandoFondo} />
+        {children}
+      </>
+    );
+  }
 
   return (
     <>
-      <Fondo editando={editando} dia={dia} mandoRef={mandoFondo} />
+      <Fondo editando={editando} mandoRef={mandoFondo} />
 
       <div className="app">
-        <nav className="rail" aria-label="Secciones">
-          <span className="brand" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 20 12 4l9 16" />
-              <path d="M7.5 20 12 11l4.5 9" />
-            </svg>
-          </span>
-          {SECCIONES.map((s) => (
-            <Link
-              key={s.href}
-              href={s.href}
-              className="nav-btn"
-              aria-label={s.titulo}
-              aria-current={ruta === s.href ? 'page' : undefined}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                {s.icono}
-              </svg>
-            </Link>
-          ))}
-          <span className="spacer" />
-        </nav>
+        <RailLiquido secciones={SECCIONES} ruta={ruta} />
 
         <div className="body">
           <header className="topbar rise">
-            <div className="hello">
-              <span className="sub">{saludo}</span>
-              <span className="name">{USUARIA}</span>
-            </div>
+            {/* El saludo vive en el widget de bienvenida del escritorio, que es donde
+                tiene sentido. Repetirlo en la cabecera de todas las paginas lo convertia
+                en ruido: se lee una vez al entrar y estorba las otras veinte. */}
+            <span className="hueco" />
             <div className="tools">
+              {/* Solo se pinta cuando el navegador ofrece instalar; el resto del tiempo
+                  no devuelve nada y la cabecera queda como estaba. */}
+              <Instalable />
               {ruta === '/' && (
                 <button
                   className={`icon-btn${editando ? ' is-on' : ''}`}
@@ -112,26 +113,7 @@ export function Marco({ children }: { children: ReactNode }) {
                   </svg>
                 </button>
               )}
-              <button
-                className="icon-btn"
-                type="button"
-                aria-label={dia ? 'Cambiar a modo noche' : 'Cambiar a modo día'}
-                onClick={alternarAmbiente}
-              >
-                {dia ? (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-                    <circle cx="12" cy="12" r="4.2" />
-                    <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" />
-                  </svg>
-                ) : (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" />
-                  </svg>
-                )}
-              </button>
-              <span className="avatar" aria-hidden="true">
-                {USUARIA.slice(0, 2).toUpperCase()}
-              </span>
+              <MenuCuenta />
             </div>
           </header>
 

@@ -82,20 +82,51 @@ function crearColeccion<T extends { id: ID; fecha?: string }>(clave: string): Co
   };
 }
 
-function crearDocumento<T>(clave: string): Documento<T> {
+/**
+ * Un documento único, con rescate de versiones anteriores.
+ *
+ * Las claves llevan versión (`…​.v3`) para poder cambiar la forma de lo guardado sin leer
+ * basura antigua. El precio, si no se hace nada más, es que **subir la versión borra el
+ * trabajo de la usuaria**: la clave nueva está vacía y la aplicación arranca de cero.
+ *
+ * `anteriores` evita eso. La primera vez que se lee y la clave actual está vacía, se
+ * busca hacia atrás, se copia lo que se encuentre a la clave nueva y se deja la vieja
+ * donde está por si hiciera falta volver. Migrar deja de ser una decisión que se pueda
+ * olvidar.
+ */
+function crearDocumento<T>(clave: string, anteriores: string[] = []): Documento<T> {
+  const rescatar = (): T | null => {
+    const actual = leerJSON<T | null>(clave, null);
+    if (actual !== null) return actual;
+    for (const vieja of anteriores) {
+      const previo = leerJSON<T | null>(vieja, null);
+      if (previo !== null) {
+        escribirJSON(clave, previo);
+        return previo;
+      }
+    }
+    return null;
+  };
+
   return {
     async leer() {
-      return leerJSON<T | null>(clave, null);
+      return rescatar();
     },
     async escribir(valor) {
       escribirJSON(clave, valor);
     },
     escuchar(cb) {
-      const emitir = () => cb(leerJSON<T | null>(clave, null));
+      const emitir = () => cb(rescatar());
       emitir();
       return alCambiar(clave, emitir);
     },
   };
+}
+
+/** Las versiones anteriores de la disposición, de la más reciente a la más vieja. */
+function clavesLayout(superficie: string) {
+  const de = (v: number) => `archicel.layout.${superficie}.v${v}`;
+  return { actual: de(3), anteriores: [de(2), de(1)] };
 }
 
 export function crearAlmacenLocal(): Almacen {
@@ -104,6 +135,9 @@ export function crearAlmacenLocal(): Almacen {
     eventos: crearColeccion<Evento>('archicel.eventos.v1'),
     tareas: crearColeccion<Tarea>('archicel.tareas-dia.v1'),
     ajustes: crearDocumento<Ajustes>('archicel.ajustes.v1'),
-    layout: (superficie: string) => crearDocumento<Layout>(`archicel.layout.${superficie}.v3`),
+    layout: (superficie: string) => {
+      const { actual, anteriores } = clavesLayout(superficie);
+      return crearDocumento<Layout>(actual, anteriores);
+    },
   };
 }

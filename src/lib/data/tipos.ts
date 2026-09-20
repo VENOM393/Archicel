@@ -20,7 +20,7 @@ export type TipoEvento = (typeof TIPOS_EVENTO)[number];
 
 export const COLORES = [
   'ambar', 'rojo', 'naranja', 'verde', 'menta', 'cian',
-  'azul', 'indigo', 'violeta', 'rosa', 'arena', 'piedra',
+  'azul', 'indigo', 'violeta', 'rosa', 'arena', 'marron', 'amarillo', 'piedra',
 ] as const;
 export type Color = (typeof COLORES)[number];
 
@@ -41,15 +41,37 @@ export interface Evento {
 }
 
 /** Lo que ocupa una franja del día. */
+/**
+ * El avance de una tarea.
+ *
+ * Solo tres se eligen a mano. `retrasada` **no se guarda nunca**: depende de qué día se
+ * mire, así que almacenarlo produciría tareas marcadas como retrasadas con fecha futura
+ * en cuanto se editara algo. Se calcula al mostrar, con `progresoDe`.
+ */
+export const PROGRESOS = ['sin-empezar', 'en-curso', 'hecha'] as const;
+export type Progreso = (typeof PROGRESOS)[number];
+/** Lo que se ve en pantalla: los tres de arriba más el que se deduce del calendario. */
+export type ProgresoVisible = Progreso | 'retrasada';
+
 export interface Tarea {
   id: ID;
   fecha: Fecha;
   ini: Minutos;
   fin: Minutos;
   titulo: string;
+  /** De dónde saca su color: el de la asignatura. Vacío mientras no se le asigne una. */
+  asignatura?: string;
   color: Color;
   icono: string;
   prio: Prioridad;
+  progreso?: Progreso;
+  /**
+   * El estado antiguo, de cuando una tarea solo podía estar hecha o no.
+   *
+   * Se sigue escribiendo junto a `progreso` para que nada que aún lo lea se rompa, y se
+   * sigue leyendo para las tareas guardadas antes de que existiera `progreso`. Cuando no
+   * quede ninguna de aquellas, este campo se puede retirar.
+   */
   hecha: boolean;
   creado?: number;
   actualizado?: number;
@@ -67,6 +89,8 @@ export interface Caja {
   fw: number;
   y: number;
   h: number;
+  /** Sin cristal ni borde: el contenido flota directamente sobre la fotografía. */
+  desnudo?: boolean;
 }
 
 /** Disposición de una superficie ("escritorio" hoy; mañana habrá más). */
@@ -98,3 +122,55 @@ export function hhmm(min: Minutos): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${p(Math.floor(min / 60))}:${p(min % 60)}`;
 }
+
+/**
+ * El progreso que se enseña, que no siempre es el que está guardado.
+ *
+ * Una tarea sin terminar cuya hora de fin ya pasó está **retrasada**, y eso no hace falta
+ * que nadie lo marque: se deduce del reloj. Calcularlo aquí en vez de guardarlo evita el
+ * estado imposible —"retrasada" con fecha de la semana que viene— y hace que el aviso
+ * aparezca solo, sin que nadie tenga que volver a abrir la tarea.
+ *
+ * También traduce las tareas viejas, anteriores a que existiera `progreso`, leyendo su
+ * antiguo `hecha`.
+ */
+export function progresoDe(t: Tarea, ahora: Date = new Date()): ProgresoVisible {
+  const guardado: Progreso = t.progreso ?? (t.hecha ? 'hecha' : 'sin-empezar');
+  if (guardado === 'hecha') return 'hecha';
+  const finDeLaTarea = new Date(`${t.fecha}T00:00:00`);
+  finDeLaTarea.setMinutes(t.fin);
+  return finDeLaTarea.getTime() < ahora.getTime() ? 'retrasada' : guardado;
+}
+
+/** Cómo se llama cada estado en pantalla. */
+export const NOMBRE_PROGRESO: Record<ProgresoVisible, string> = {
+  'sin-empezar': 'Sin empezar',
+  'en-curso': 'En curso',
+  hecha: 'Hecha',
+  retrasada: 'Retrasada',
+};
+
+/**
+ * El color de una tarea sale de su asignatura, no de un selector.
+ *
+ * La lista de asignaturas vive en `curso.ts` y es la única fuente: el mismo color que
+ * usa el horario usa la tarea. Se busca con tolerancia —vale la clave, el nombre, el
+ * corto o el código, sin tildes— porque el campo se escribe a mano.
+ *
+ * Una tarea puede no ser de ninguna asignatura, y eso es legítimo: entonces es piedra,
+ * el gris neutro, que no compite con ningún color del horario.
+ *
+ * Vive aquí y no en `curso.ts` para no invertir la dirección de las dependencias: los
+ * tipos no deben importar el catálogo. La implementación se inyecta al arrancar.
+ */
+let buscador: ((texto: string | undefined) => { color: Color } | null) | null = null;
+
+/** Lo llama `curso.ts` al cargarse; así `tipos` no necesita conocerlo. */
+export function registrarCatalogoDeAsignaturas(f: (t: string | undefined) => { color: Color } | null) {
+  buscador = f;
+}
+
+export function colorDeAsignatura(asignatura: string | undefined): Color {
+  return buscador?.(asignatura)?.color ?? 'piedra';
+}
+

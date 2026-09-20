@@ -7,7 +7,7 @@
  * composición— sobre `public/fondo.webp`. Si el navegador no da WebGL, queda la misma
  * imagen como fondo CSS con un velo: la página nunca se queda sin fondo.
  *
- * La interfaz solo le pide dos cosas: el ambiente (día/noche) y si está en modo edición.
+ * La interfaz solo le pide una cosa: si está en modo edición.
  */
 
 import { useEffect, useRef } from 'react';
@@ -19,12 +19,16 @@ const F_SCENE = [
   'precision highp float;',
   'varying vec2 vUv;',
   'uniform sampler2D uTex;uniform vec2 uRes;uniform float uTexAspect;uniform vec2 uTexel;',
-  'uniform float uTime;uniform vec2 uPointer;uniform float uDay;uniform vec3 uRipple;',
+  'uniform float uTime;uniform vec2 uPointer;uniform vec3 uRipple;',
   'void main(){',
   '  vec2 uv=vUv; uv.y=1.0-uv.y;',
   '  float ca=uRes.x/max(uRes.y,1.0);',
-  '  vec2 s = ca>uTexAspect ? vec2(1.0,uTexAspect/ca) : vec2(ca/uTexAspect,1.0);',
-  '  uv=(uv-0.5)/s+0.5;',
+  /* "cover" de verdad: se recorta el eje que sobra, nunca se estira el que falta.
+     Encoger el rango de coordenadas es lo que recorta; agrandarlo sacaba la lectura
+     fuera de la textura y el clamp la embadurnaba contra el borde — muy visible en
+     vertical, donde la pantalla es mucho más estrecha que la fotografía. */
+  '  vec2 s=vec2(min(ca/uTexAspect,1.0),min(uTexAspect/ca,1.0));',
+  '  uv=(uv-0.5)*s+0.5;',
   '  float breathe=1.008+0.010*sin(uTime*0.07);',
   '  uv=(uv-0.5)/breathe+0.5;',
   '  uv+=uPointer*vec2(0.008,0.005);',
@@ -36,32 +40,41 @@ const F_SCENE = [
   '    uv+=normalize(d+vec2(1e-5))*wave*0.016;',
   '  }',
   '  float wet=smoothstep(0.62,0.99,uv.y);',
+  /* dos escalas de onda: la larga mece, la corta riza */
   '  uv.x+=sin(uv.y*54.0+uTime*0.55)*0.0026*wet;',
   '  uv.y+=sin(uv.x*26.0-uTime*0.38)*0.0018*wet;',
+  '  uv.x+=sin(uv.y*131.0-uTime*1.07)*0.0009*wet;',
   '  vec2 suv=clamp(uv,0.002,0.998);',
   '  vec3 col=texture2D(uTex,suv,-0.4).rgb;',
   '  vec3 blr=(texture2D(uTex,suv+vec2(uTexel.x,0.0)).rgb+texture2D(uTex,suv-vec2(uTexel.x,0.0)).rgb',
   '           +texture2D(uTex,suv+vec2(0.0,uTexel.y)).rgb+texture2D(uTex,suv-vec2(0.0,uTexel.y)).rgb)*0.25;',
   '  col+=(col-blr)*0.55;',
   '  float warm=clamp((col.r-col.b)*2.6,0.0,1.0);',
-  '  float flicker=0.05*sin(uTime*0.9+uv.x*5.0)+0.028*sin(uTime*2.3+uv.y*9.0);',
-  '  col+=warm*(0.12+flicker)*vec3(1.0,0.66,0.30);',
-  '  col+=wet*warm*0.18*vec3(1.0,0.60,0.26);',
-  '  vec3 night=mix(col*vec3(0.82,0.94,1.0),vec3(0.035,0.068,0.082),0.42);',
-  '  vec3 day  =mix(col*vec3(1.02,1.0,0.99),vec3(0.792,0.855,0.878),0.44);',
-  '  col=mix(night,day,uDay);',
+  /* tres frecuencias inconmensurables: el latido de la luz nunca se repite a la vista */
+  '  float flicker=0.026*sin(uTime*0.9+uv.x*5.0)+0.014*sin(uTime*2.3+uv.y*9.0)',
+  '               +0.008*sin(uTime*5.77+uv.x*17.0+uv.y*11.0);',
+  '  col+=warm*(0.07+flicker)*vec3(1.0,0.66,0.30);',
+  /* la lámina de agua devuelve la ventana con su propio temblor, más lento */
+  '  float espejo=0.12+0.035*sin(uTime*0.63+uv.x*8.0);',
+  '  col+=wet*warm*espejo*vec3(1.0,0.60,0.26);',
+  /* El tinte del ambiente es `--canvas-deep` traducido a lineal, y la escena pierde
+     parte de su color para acompañarlo: sigue siendo una fotografía, no una radiografía.
+     Si la paleta cambia y esto no, la imagen y la interfaz dejan de ser el mismo sitio. */
+  '  col=mix(col*vec3(0.96,0.97,1.00),vec3(0.043,0.043,0.050),0.56);',
+  '  float gris=dot(col,vec3(0.2126,0.7152,0.0722));',
+  '  col=mix(col,vec3(gris),0.42);',
   '  gl_FragColor=vec4(col,1.0);',
   '}',
 ].join('\n');
 
 const F_BRIGHT = [
   'precision highp float;',
-  'varying vec2 vUv;uniform sampler2D uScene;uniform float uDay;',
+  'varying vec2 vUv;uniform sampler2D uScene;',
   'void main(){',
   '  vec3 c=texture2D(uScene,vUv).rgb;',
   '  float lum=dot(c,vec3(0.2126,0.7152,0.0722));',
   '  float warm=clamp((c.r-c.b)*2.2,0.0,1.0);',
-  '  float umbral=mix(0.42,0.66,uDay);',
+  '  float umbral=0.56;',
   '  float k=smoothstep(umbral,umbral+0.28,lum)*(0.45+0.55*warm);',
   '  gl_FragColor=vec4(c*k,1.0);',
   '}',
@@ -81,20 +94,52 @@ const F_BLUR = [
   '}',
 ].join('\n');
 
+/**
+ * La composición final es donde la fotografía se vuelve cine: lente antes que píxel.
+ *
+ * Por orden — aberración cromática de lente, haces volumétricos desde la ventana,
+ * halación cálida (el halo rojizo que deja la película alrededor de una luz), viñeta y
+ * grano que vive en las sombras, como el negativo real. Nada de esto sube el brillo
+ * medio: reparte el que ya hay para que la imagen tenga profundidad sin comerse la
+ * interfaz que va encima.
+ */
 const F_COMP = [
   'precision highp float;',
   'varying vec2 vUv;',
   'uniform sampler2D uScene;uniform sampler2D uBloom;',
-  'uniform float uTime;uniform float uEdit;uniform float uIntro;uniform float uDay;',
+  'uniform float uTime;uniform float uEdit;uniform float uIntro;',
   'float hash(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}',
   'void main(){',
-  '  vec3 col=texture2D(uScene,vUv).rgb;',
-  '  col+=texture2D(uBloom,vUv).rgb*mix(0.62,0.34,uDay);',
-  '  col*=1.0+0.022*sin(uTime*0.13);',
-  '  float d=length(vUv-0.5); col*=1.0-0.52*d*d;',
+  '  vec2 c=vUv-0.5;',
+  '  float d=length(c);',
+  '  vec2 dir=c/max(d,1e-5);',
+  /* la lente no enfoca los tres canales en el mismo sitio; en el borde se nota */
+  '  float ab=0.0020*d*d;',
+  '  vec3 col;',
+  '  col.r=texture2D(uScene,vUv+dir*ab).r;',
+  '  col.g=texture2D(uScene,vUv).g;',
+  '  col.b=texture2D(uScene,vUv-dir*ab).b;',
+  /* haces volumétricos: el brillo se arrastra hacia fuera desde la casa */
+  '  vec2 origen=vec2(0.5,0.54);',
+  '  vec2 paso=(vUv-origen)*(0.34/10.0);',
+  '  vec2 p=vUv;',
+  '  vec3 rayos=vec3(0.0);',
+  '  float peso=1.0;',
+  '  for(int i=0;i<10;i++){p-=paso;rayos+=texture2D(uBloom,p).rgb*peso;peso*=0.855;}',
+  '  rayos*=0.1;',
+  '  col+=rayos*0.46*vec3(1.0,0.80,0.56)*smoothstep(0.06,0.52,d);',
+  /* halación: el halo de la película tira a ámbar, nunca a blanco */
+  '  vec3 halo=texture2D(uBloom,vUv).rgb;',
+  '  float calido=clamp((halo.r-halo.b)*2.0,0.0,1.0);',
+  '  col+=halo*0.26*mix(vec3(1.0),vec3(1.10,0.74,0.52),calido);',
+  '  col*=1.0+0.012*sin(uTime*0.13);',
+  '  col*=1.0-0.66*d*d;',
   '  col*=mix(1.0,0.5,uEdit);',
   '  col*=mix(0.55,1.0,uIntro);',
-  '  col+=(hash(gl_FragCoord.xy+fract(uTime)*91.7)-0.5)*0.010;',
+  /* el grano del negativo vive en las sombras y desaparece en las luces */
+  '  float lum=dot(col,vec3(0.2126,0.7152,0.0722));',
+  '  float g=hash(gl_FragCoord.xy+fract(uTime)*91.7)-0.5;',
+  '  col+=g*0.026*(1.0-smoothstep(0.0,0.62,lum));',
   '  col+=(hash(gl_FragCoord.xy*1.7)-0.5)/255.0;',
   '  gl_FragColor=vec4(col,1.0);',
   '}',
@@ -114,18 +159,15 @@ export interface MandoFondo {
 
 export function Fondo({
   editando,
-  dia,
   mandoRef,
 }: {
   editando: boolean;
-  dia: boolean;
   mandoRef?: React.MutableRefObject<MandoFondo | null>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const estado = useRef({ edit: 0, objetivo: 0, dia: 0, ripple: [0.5, 0.5, -99] as number[] });
+  const estado = useRef({ edit: 0, objetivo: 0, ripple: [0.5, 0.5, -99] as number[] });
 
   estado.current.objetivo = editando ? 1 : 0;
-  estado.current.dia = dia ? 1 : 0;
 
   useEffect(() => {
     if (mandoRef) {
@@ -201,7 +243,25 @@ export function Fondo({
         g.enableVertexAttribArray(a);
         g.vertexAttribPointer(a, 2, g.FLOAT, false, 0, 0);
       });
-      const U = (p: WebGLProgram, n: string) => g.getUniformLocation(p, n);
+      /**
+       * Las posiciones de los uniformes se piden **una vez**, no en cada fotograma.
+       *
+       * `getUniformLocation` es una consulta al controlador gráfico y obliga a esperar
+       * su respuesta. Había quince por fotograma: a 60 por segundo, novecientas paradas
+       * por segundo para preguntar algo que nunca cambia. Era una de las dos razones de
+       * los tirones al cambiar de página, cuando el hilo principal ya va justo montando
+       * la vista nueva.
+       */
+      const uni = <K extends string>(p: WebGLProgram, nombres: readonly K[]) =>
+        Object.fromEntries(nombres.map((n) => [n, g.getUniformLocation(p, n)])) as Record<
+          K,
+          WebGLUniformLocation | null
+        >;
+
+      const uScene = uni(pScene, ['uTex', 'uRes', 'uTexAspect', 'uTexel', 'uTime', 'uPointer', 'uRipple'] as const);
+      const uBright = uni(pBright, ['uScene'] as const);
+      const uBlur = uni(pBlur, ['uTex', 'uRes', 'uDir'] as const);
+      const uComp = uni(pComp, ['uScene', 'uBloom', 'uTime', 'uEdit', 'uIntro'] as const);
 
       const tex = g.createTexture()!;
       g.bindTexture(g.TEXTURE_2D, tex);
@@ -246,15 +306,56 @@ export function Fondo({
       let W = 0;
       let H = 0;
 
-      const medir = () => {
-        const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      /** Devuelve al controlador gráfico lo que ya no se va a usar. */
+      const liberar = (d: Destino | null) => {
+        if (!d) return;
+        g.deleteTexture(d.tex);
+        g.deleteFramebuffer(d.fbo);
+      };
+
+      /* El tamaño al que se quiere llegar y desde cuándo se quiere. */
+      let pedido: [number, number] = [0, 0];
+      let pedidoDesde = 0;
+
+      /**
+       * Reconstruir los cuatro destinos cuesta, y hay que hacerlo lo menos posible.
+       *
+       * Al pasar de una vista que desplaza a otra que no, la barra de desplazamiento
+       * entra o sale y el ancho de la ventana cambia unos quince píxeles. Eso obligaba a
+       * reservar cuatro texturas a resolución completa **en cada cambio de página**, con
+       * el hilo principal ya ocupado montando la vista nueva: ahí estaban los tirones.
+       *
+       * Ahora el cambio de tamaño espera a asentarse. Durante esa décima de segundo el
+       * navegador estira el lienzo anterior, que sobre una fotografía desenfocada no se
+       * distingue. El primer tamaño, en cambio, no espera nada.
+       */
+      const medir = (now: number) => {
+        /* Dos es suficiente: por encima se multiplican los píxeles a procesar sin que la
+           fotografía gane un detalle que se vea. En una pantalla 4K, tres era pedirle al
+           equipo cuatro veces el trabajo para nada. */
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const w = Math.round(cv.clientWidth * dpr);
         const h = Math.round(cv.clientHeight * dpr);
+        if (w < 2 || h < 2) return;
         if (w === W && h === H) return;
+
+        if (pedido[0] !== w || pedido[1] !== h) {
+          pedido = [w, h];
+          pedidoDesde = now;
+        }
+        if (escena && now - pedidoDesde < 180) return;
+
         W = cv.width = w;
         H = cv.height = h;
         const hw = Math.max(2, w >> 1);
         const hh = Math.max(2, h >> 1);
+        /* Sin esto, cada cambio de tamaño dejaba cuatro texturas huérfanas en la memoria
+           de la tarjeta. Al cabo de unas cuantas navegaciones el navegador tiraba el
+           contexto y la fotografía se quedaba sin filtros. */
+        liberar(escena);
+        liberar(brillo);
+        liberar(blurA);
+        liberar(blurB);
         escena = destino(w, h);
         brillo = destino(hw, hh);
         blurA = destino(hw, hh);
@@ -270,7 +371,7 @@ export function Fondo({
 
       const frame = (now: number) => {
         if (!vivo) return;
-        medir();
+        medir(now);
         if (!escena || !brillo || !blurA || !blurB) {
           raf = requestAnimationFrame(frame);
           return;
@@ -284,21 +385,19 @@ export function Fondo({
         g.useProgram(pScene);
         g.activeTexture(g.TEXTURE0);
         g.bindTexture(g.TEXTURE_2D, tex);
-        g.uniform1i(U(pScene, 'uTex'), 0);
-        g.uniform2f(U(pScene, 'uRes'), W, H);
-        g.uniform1f(U(pScene, 'uTexAspect'), aspect);
-        g.uniform2f(U(pScene, 'uTexel'), texel[0], texel[1]);
-        g.uniform1f(U(pScene, 'uTime'), reduce ? 0 : t);
-        g.uniform2f(U(pScene, 'uPointer'), ptr.x, ptr.y);
-        g.uniform1f(U(pScene, 'uDay'), e.dia);
-        g.uniform3f(U(pScene, 'uRipple'), e.ripple[0], e.ripple[1], e.ripple[2]);
+        g.uniform1i(uScene.uTex, 0);
+        g.uniform2f(uScene.uRes, W, H);
+        g.uniform1f(uScene.uTexAspect, aspect);
+        g.uniform2f(uScene.uTexel, texel[0], texel[1]);
+        g.uniform1f(uScene.uTime, reduce ? 0 : t);
+        g.uniform2f(uScene.uPointer, ptr.x, ptr.y);
+        g.uniform3f(uScene.uRipple, e.ripple[0], e.ripple[1], e.ripple[2]);
         pasada(pScene, escena);
 
         g.useProgram(pBright);
         g.activeTexture(g.TEXTURE0);
         g.bindTexture(g.TEXTURE_2D, escena.tex);
-        g.uniform1i(U(pBright, 'uScene'), 0);
-        g.uniform1f(U(pBright, 'uDay'), e.dia);
+        g.uniform1i(uBright.uScene, 0);
         pasada(pBright, brillo);
 
         let origen = brillo;
@@ -306,15 +405,15 @@ export function Fondo({
           g.useProgram(pBlur);
           g.activeTexture(g.TEXTURE0);
           g.bindTexture(g.TEXTURE_2D, origen.tex);
-          g.uniform1i(U(pBlur, 'uTex'), 0);
-          g.uniform2f(U(pBlur, 'uRes'), blurA.w, blurA.h);
-          g.uniform2f(U(pBlur, 'uDir'), 1 + i, 0);
+          g.uniform1i(uBlur.uTex, 0);
+          g.uniform2f(uBlur.uRes, blurA.w, blurA.h);
+          g.uniform2f(uBlur.uDir, 1 + i, 0);
           pasada(pBlur, blurA);
 
           g.activeTexture(g.TEXTURE0);
           g.bindTexture(g.TEXTURE_2D, blurA.tex);
-          g.uniform2f(U(pBlur, 'uRes'), blurB.w, blurB.h);
-          g.uniform2f(U(pBlur, 'uDir'), 0, 1 + i);
+          g.uniform2f(uBlur.uRes, blurB.w, blurB.h);
+          g.uniform2f(uBlur.uDir, 0, 1 + i);
           pasada(pBlur, blurB);
           origen = blurB;
         }
@@ -322,24 +421,73 @@ export function Fondo({
         g.useProgram(pComp);
         g.activeTexture(g.TEXTURE0);
         g.bindTexture(g.TEXTURE_2D, escena.tex);
-        g.uniform1i(U(pComp, 'uScene'), 0);
+        g.uniform1i(uComp.uScene, 0);
         g.activeTexture(g.TEXTURE1);
         g.bindTexture(g.TEXTURE_2D, blurB.tex);
-        g.uniform1i(U(pComp, 'uBloom'), 1);
-        g.uniform1f(U(pComp, 'uTime'), reduce ? 0 : t);
-        g.uniform1f(U(pComp, 'uEdit'), e.edit);
-        g.uniform1f(U(pComp, 'uIntro'), Math.min(t / 1.6, 1));
-        g.uniform1f(U(pComp, 'uDay'), e.dia);
+        g.uniform1i(uComp.uBloom, 1);
+        g.uniform1f(uComp.uTime, reduce ? 0 : t);
+        g.uniform1f(uComp.uEdit, e.edit);
+        g.uniform1f(uComp.uIntro, Math.min(t / 1.6, 1));
         pasada(pComp, null);
 
         raf = requestAnimationFrame(frame);
       };
       raf = requestAnimationFrame(frame);
 
+      /**
+       * Con la pestaña oculta no se dibuja.
+       *
+       * El navegador ya frena los fotogramas, pero no siempre a cero, y volver a una
+       * pestaña que lleva media hora acumulando trabajo se nota. Al reanudar se corrige
+       * `t0` para que el tiempo del shader continúe donde estaba: si diera el salto
+       * entero, el oleaje y el parpadeo de la luz pegarían un tirón a la vista.
+       */
+      let pausadoEn = 0;
+      const alCambiarVisibilidad = () => {
+        if (document.hidden) {
+          if (raf) cancelAnimationFrame(raf);
+          raf = 0;
+          pausadoEn = performance.now();
+        } else if (vivo && !raf) {
+          t0 += performance.now() - pausadoEn;
+          raf = requestAnimationFrame(frame);
+        }
+      };
+      document.addEventListener('visibilitychange', alCambiarVisibilidad);
+
+      /**
+       * Si el sistema se lleva el contexto, se vuelve al fondo de CSS.
+       *
+       * Pasa de verdad: al suspender el equipo, al cambiar de tarjeta gráfica o cuando el
+       * navegador decide que hay demasiados lienzos. Sin esto, el canvas se quedaba en
+       * negro y la aplicación entera parecía rota. Ahora reaparece la misma fotografía,
+       * ya entonada por CSS, y no se distingue salvo porque deja de moverse.
+       */
+      const alPerderContexto = (e: Event) => {
+        e.preventDefault();
+        vivo = false;
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+        cv.parentElement?.classList.remove('gl');
+      };
+      cv.addEventListener('webglcontextlost', alPerderContexto);
+
       return () => {
         vivo = false;
-        cancelAnimationFrame(raf);
+        if (raf) cancelAnimationFrame(raf);
         window.removeEventListener('pointermove', alMover);
+        document.removeEventListener('visibilitychange', alCambiarVisibilidad);
+        cv.removeEventListener('webglcontextlost', alPerderContexto);
+        /* Se devuelve todo: programas, texturas y destinos. Un contexto que se va sin
+           soltar su memoria es lo que acaba tumbando al siguiente. */
+        liberar(escena);
+        liberar(brillo);
+        liberar(blurA);
+        liberar(blurB);
+        g.deleteTexture(tex);
+        g.deleteBuffer(buf);
+        [pScene, pBright, pBlur, pComp].forEach((p) => g.deleteProgram(p));
+        g.getExtension('WEBGL_lose_context')?.loseContext();
       };
     } catch {
       /* sin shader queda el fondo CSS */

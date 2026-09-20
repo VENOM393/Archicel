@@ -4,8 +4,9 @@
  * El motor del escritorio: dónde está cada widget, cómo se arrastra y dónde se guarda.
  *
  * Las posiciones se leen y escriben por el almacén, así que la misma disposición sigue a
- * Celeste entre dispositivos en cuanto hay sesión. La escritura va con retardo para no
- * mandar un documento por cada píxel arrastrado.
+ * Celeste entre dispositivos en cuanto hay sesión. Se escriben en el acto —sin retardos
+ * que puedan perderse— y siempre con copia en este equipo: lo coloca a mano, bloque a
+ * bloque, y es lo único que no se puede volver a escribir de memoria.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,44 +17,79 @@ import { IMAN, WIDGETS, fusionarLayout, layoutPorDefecto, minimoEnPixeles } from
 
 type Guia = { v: number | null; h: number | null };
 
+/**
+ * La última disposición resuelta, fuera de React.
+ *
+ * El escritorio se desmonta al ir al calendario y se vuelve a montar al volver. Sin esta
+ * memoria, cada regreso empezaba por las posiciones de fábrica y corregía en el
+ * fotograma siguiente: se veían los bloques con su tamaño estándar y pegaban el salto a
+ * su sitio. El almacén responde rápido, pero nunca lo bastante para el primer pintado.
+ *
+ * Vive a nivel de módulo a propósito: tiene que sobrevivir al desmontaje, que es
+ * justamente lo que el estado de React no hace. Está vacía durante el renderizado en
+ * servidor y en la hidratación —ahí no ha habido ningún montaje previo—, así que el
+ * primer pintado del servidor y el del navegador siguen coincidiendo.
+ */
+const memoria = new Map<string, Layout>();
+
 export function useEscritorio(lienzo: React.RefObject<HTMLDivElement | null>, editando: boolean) {
   const { almacen } = useArchicel();
-  const [layout, setLayout] = useState<Layout>(() => layoutPorDefecto());
+  const clave = `${almacen.uid}:escritorio`;
+  const [layout, setLayout] = useState<Layout>(() => memoria.get(clave) ?? layoutPorDefecto());
   const [guias, setGuias] = useState<Guia>({ v: null, h: null });
-  const [listo, setListo] = useState(false);
+  /* Si ya se sabe dónde va cada cosa, se puede pintar en el primer fotograma. */
+  const [listo, setListo] = useState(() => memoria.has(clave));
   const zTop = useRef(10);
-  const guardarTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* carga inicial y escucha: si cambia en otro dispositivo, aquí se entera */
   useEffect(() => {
     const doc = almacen.layout('escritorio');
     let primero = true;
     const off = doc.escuchar((valor) => {
-      setLayout(fusionarLayout(valor));
+      const fusion = fusionarLayout(valor);
+      memoria.set(clave, fusion);
+      setLayout(fusion);
       if (primero) {
         primero = false;
         setListo(true);
       }
     });
     return off;
-  }, [almacen]);
+  }, [almacen, clave]);
 
+  /**
+   * Se guarda en el acto, sin retardo.
+   *
+   * Antes esperaba 400 ms "para no mandar un documento por cada píxel arrastrado", pero
+   * el arrastre mueve el nodo del DOM directamente y solo llama aquí **al soltar**: no
+   * había ninguna avalancha que amortiguar. Lo único que conseguía el retardo era abrir
+   * una ventana de 400 ms en la que recargar o cambiar de página perdía el último
+   * cambio. Y esa ventana caía justo después de mover algo, que es cuando uno mira si
+   * quedó bien y recarga.
+   */
   const guardar = useCallback(
     (siguiente: Layout) => {
-      if (guardarTimer.current) clearTimeout(guardarTimer.current);
-      guardarTimer.current = setTimeout(() => {
-        almacen.layout('escritorio').escribir(siguiente).catch(() => {});
-      }, 400);
+      almacen
+        .layout('escritorio')
+        .escribir(siguiente)
+        .catch(() => {
+          /* El espejo local ya lo tiene; esto solo puede ser la nube, y de eso avisa
+             `registrarAvisoDeFallo` una sola vez en lugar de en cada escritura. */
+        });
     },
     [almacen],
   );
 
   const aplicar = useCallback(
     (siguiente: Layout) => {
+      /* La memoria se actualiza aquí y no al confirmar el guardado: al volver de otra
+         vista, el bloque tiene que estar donde se dejó aunque la nube todavía no haya
+         contestado. */
+      memoria.set(clave, siguiente);
       setLayout(siguiente);
       guardar(siguiente);
     },
-    [guardar],
+    [guardar, clave],
   );
 
   const anchoLienzo = useCallback(() => lienzo.current?.getBoundingClientRect().width ?? 1, [lienzo]);
@@ -203,6 +239,26 @@ export function useEscritorio(lienzo: React.RefObject<HTMLDivElement | null>, ed
     if (nodo) nodo.style.zIndex = String(++zTop.current);
   }, []);
 
+  /** Quita o pone el marco de un widget. */
+  const alternarMarco = useCallback(
+    (id: string) => {
+      const caja = layout[id];
+      aplicar({ ...layout, [id]: { ...caja, desnudo: !caja.desnudo } });
+    },
+    [layout, aplicar],
+  );
+
+  /** Quita o pone el marco de todos a la vez. */
+  const alternarMarcoTodos = useCallback(() => {
+    const algunoConMarco = Object.values(layout).some((c) => !c.desnudo);
+    const siguiente: Layout = {};
+    Object.entries(layout).forEach(([k, c]) => {
+      siguiente[k] = { ...c, desnudo: algunoConMarco };
+    });
+    aplicar(siguiente);
+    return algunoConMarco;
+  }, [layout, aplicar]);
+
   const restablecer = useCallback(() => aplicar(layoutPorDefecto()), [aplicar]);
 
   const restablecerUno = useCallback(
@@ -213,16 +269,36 @@ export function useEscritorio(lienzo: React.RefObject<HTMLDivElement | null>, ed
     [layout, aplicar],
   );
 
-  const altoLienzo = Object.values(layout).reduce((max, c) => Math.max(max, c.y + c.h), 0) + 24;
+  /* Solo cuentan los que se pintan: el layout puede guardar cajas de widgets retirados
+     —se conservan para cuando vuelvan— y esas no deben estirar el lienzo ni ocupar un
+     turno en la entrada. */
+  const visibles = WIDGETS.map((w) => [w.id, layout[w.id]] as const).filter(([, c]) => Boolean(c));
+
+  const altoLienzo = visibles.reduce((max, [, c]) => Math.max(max, c.y + c.h), 0) + 24;
+
+  /**
+   * En qué orden se posan los widgets al entrar: como se lee la página, por filas de
+   * arriba abajo y dentro de cada fila de izquierda a derecha. Se agrupa por bandas de
+   * 60 px para que dos paneles alineados a ojo entren juntos aunque difieran un píxel.
+   */
+  const orden: Record<string, number> = {};
+  [...visibles]
+    .sort(([, a], [, b]) => Math.floor(a.y / 60) - Math.floor(b.y / 60) || a.fx - b.fx)
+    .forEach(([id], i) => {
+      orden[id] = i;
+    });
 
   return {
     layout,
     listo,
     guias,
+    orden,
     altoLienzo,
     empezarArrastre,
     empezarResize,
     cambiarAncho,
+    alternarMarco,
+    alternarMarcoTodos,
     alFrente,
     restablecer,
     restablecerUno,

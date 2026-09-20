@@ -27,6 +27,9 @@ app se usa sobre todo en móvil o en portátil.
 
 - Next.js (App Router) + TypeScript
 - Tailwind CSS v4
+- **shadcn/ui** (base Radix) para los controles. Sus tokens (`--primary`, `--border`, `--ring`…)
+  **apuntan** a los de Archicel en `src/app/globals.css`; nunca llevan un color literal. Un control
+  nuevo se trae con `npx shadcn@latest add <componente>` antes que escribirlo a mano.
 - Verificación en navegador con `@playwright/cli`
 
 ## Cómo se trabaja aquí
@@ -159,6 +162,26 @@ Reglas:
 
 Referencia completa de comandos, flags y solución de problemas: [docs/tooling/GRAFT.md](docs/tooling/GRAFT.md).
 
+## Arquitectura y seguridad
+
+Antes de tocar nada estructural, dos documentos:
+
+- [docs/arquitectura/ARQUITECTURA.md](docs/arquitectura/ARQUITECTURA.md) — las capas, los
+  cuatro puntos donde se extiende sin tocar el resto, cómo añadir una entidad nueva y qué
+  rendimiento está medido (en producción, no en desarrollo).
+- [docs/data/SEGURIDAD.md](docs/data/SEGURIDAD.md) — la revisión de seguridad, qué protege
+  cada capa y por qué no se cifra el contenido extremo a extremo.
+
+Tres reglas que salieron de esa revisión y que no se saltan:
+
+1. **Ningún dato de la usuaria se convierte en HTML.** Nada de `dangerouslySetInnerHTML`
+   con títulos, notas o asignaturas: una tarea llamada `<img onerror=…>` se ejecutaba.
+2. **Al añadir una colección, su nombre va en `estaValidada` de `firestore.rules`.** Los
+   `match` de Firestore se suman, no se encadenan: el comodín del final dejaría entrar
+   cualquier cosa saltándose la validación de forma.
+3. **Lo que dependa del reloj pasa por `useAhora`.** La aplicación se prerrenderiza y el
+   servidor no sabe la hora de la usuaria; sin eso, el texto cambia solo al hidratar.
+
 ## Datos: Firebase
 
 La base de datos del proyecto es **Firestore**. El modelo, las reglas, los índices y los pasos de
@@ -172,6 +195,10 @@ Dos cosas que no hay que olvidar:
   Cambiar de una a otra es una línea y ninguna pantalla se entera.
 - **La clave de la app web es pública** y va en el cliente: lo que protege los datos son las
   reglas. Lo que nunca se comparte ni se sube al repositorio es el JSON de cuenta de servicio.
+- **La cuenta es una invitación, no un muro.** Archicel abre y funciona sin sesión; entrar solo
+  hace que todo la siga a otro dispositivo, y lo guardado sin cuenta sube solo al entrar. El
+  acceso, las dos vías (Google y correo) y qué hay que activar en la consola están en
+  [docs/data/CUENTAS.md](docs/data/CUENTAS.md).
 
 ## Arquitectura del escritorio
 
@@ -187,13 +214,82 @@ cambiar el catálogo, el responsive por contenedor, el modo edición y qué camb
 Antes de tocar el escritorio, léelo. Antes de añadir un widget, léelo también: hay cinco reglas que
 no se deducen mirando el código.
 
+## Se instala como un programa
+
+Archicel es una aplicación instalable: icono propio, ventana sin barra de direcciones y
+arranque sin red. Son tres ficheros —`src/app/manifest.ts`, `public/sw.js` y
+`src/components/Instalable.tsx`— y no condicionan cómo se programa el resto.
+
+Tres cosas que ahorran un rato de desconcierto:
+
+- **El botón de instalar no sale en `npm run dev`.** El service worker se registra solo en
+  producción, porque en desarrollo sirve copias viejas. Para probarlo: `npm run build && npm start`.
+- **El service worker no toca nada de fuera del dominio.** Firestore y el login pasan de
+  largo. Al cambiar su estrategia hay que subir `VERSION` dentro de `sw.js`.
+- **Los iconos no se editan a mano.** Se edita `public/icono.svg` y se lanza `npm run iconos`.
+
+El detalle está en [docs/frontend/INSTALACION.md](docs/frontend/INSTALACION.md).
+
+## Canvas: el campus virtual
+
+Archicel lee del campus de la UCAM, que es **Canvas LMS**. El motor está en `src/lib/canvas/`,
+conectado y probado contra el campus real con la cuenta de Celeste.
+
+**Estado hoy: no está enchufado a ninguna pantalla, y es a propósito.** Canvas devuelve
+doce asignaturas pero solo **dos fechas** — sus profesores publican entregas sin fecha de
+vencimiento y el planificador solo lleva anuncios. El motor funciona; los datos no están.
+Dos líneas de calendario no justifican un hueco en el escritorio, y un widget casi vacío se
+lee como una aplicación rota, no como una universidad que no pone fechas. Cuando empiecen a
+fecharlas no hay que tocar nada: solo decidir dónde se pintan.
+
+Cinco cosas que no se deducen del código:
+
+- **Canvas no admite llamadas desde el navegador** —comprobado: el prevuelo CORS devuelve
+  404 sin cabeceras—, así que todo pasa por `/api/canvas`. Es la única pieza de servidor
+  del proyecto y la razón de que exista.
+- **El token es la cuenta entera** de Celeste: notas, mensajes, entregas. Sin prefijo
+  `NEXT_PUBLIC_`, nunca en el cliente, nunca en el repositorio. `server-only` hace que
+  importarlo desde un componente de navegador **rompa la compilación** en vez de filtrarlo.
+- **Lo de Canvas se convierte en `Evento`, jamás en `Tarea`.** Una tarea ocupa una franja
+  que elige ella; una entrega es un vencimiento que no elige nadie.
+- **Un anuncio no es un vencimiento.** El planificador los mezcla; `dePlan` los descarta.
+  Sin ese filtro, el escritorio se llenaba de tablón marcado como entregas.
+- **El token caduca** (el actual, el 19 de diciembre de 2026). Ese día la aplicación dirá
+  `credencial`, que es lo que tiene que decir.
+
+Todo el detalle —endpoints, paginación, cuota, caché y qué está comprobado y qué no— en
+[docs/integraciones/CANVAS.md](docs/integraciones/CANVAS.md).
+
+## El repositorio
+
+**https://github.com/VENOM393/Archicel** — el repositorio de todo el proyecto: la
+aplicación, las skills del taller y la documentación.
+
+Cosas que no se deducen mirando:
+
+- **La rama es `master`.** No `main`.
+- **`.env.local` no se sube nunca.** Ahí viven las claves de Firebase y el token de
+  Canvas. Está en `.gitignore` y se comprueba con `git check-ignore .env.local` antes de
+  cualquier subida. Un token de Canvas filtrado es la cuenta entera del campus.
+- **`.claude/skills/` sí se versiona.** Son 11 MB de herramientas de terceros, pero están
+  en el historial desde el primer commit y sirven para que el entorno se reproduzca igual
+  en otra máquina.
+- **La autenticación va por Git Credential Manager**, que abre el navegador. Nunca se
+  escribe un token de GitHub en un fichero, en un comando ni en una conversación.
+
 ## Estructura
 
 ```
 .claude/skills/     las cinco skills de frontend (+ graft, cuando se instale)
 docs/frontend/      SKILLS.md — uso de las skills
                     WIDGETS.md — arquitectura del escritorio y modo edición
+                    INSTALACION.md — la app como programa instalable (PWA)
+docs/arquitectura/  ARQUITECTURA.md — capas, extensión y rendimiento medido
+docs/data/          FIRESTORE.md — modelo · SEGURIDAD.md — revisión · CUENTAS.md — acceso
+docs/integraciones/  CANVAS.md — API del campus de la UCAM y el motor que la consume
 docs/design/        DESIGN.md — contrato visual
 docs/tooling/       GRAFT.md — referencia de la capa de contexto
+README.md           la cara del repositorio
+scripts/            iconos.mjs — genera los iconos desde public/icono.svg
 graft/              grafo del código (git-ignored, regenerable — no existe aún)
 ```

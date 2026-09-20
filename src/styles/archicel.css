@@ -3,25 +3,34 @@
   /* ═══════════════════════════════════════════════════════
      1 · TOKENS — muestreados de la fotografía de fondo
      ═══════════════════════════════════════════════════════ */
+  /* Todo el frío de esta paleta está en el matiz 214–218°, que es el que tiene el cielo
+     de la fotografía a la hora azul (#2E528B, muestreado). La versión anterior vivía en
+     193° — eso es turquesa, no azul, y por eso la interfaz y la imagen no casaban.
+     Las luminancias suben en pasos cortos: los paneles flotan sobre la foto y un salto
+     grande rompe la ilusión de vidrio. */
   :root{
-    --canvas-deep:#0A1317;
-    --canvas:#101C21;
-    --panel-rgb:12,23,28;
-    --panel-strong-rgb:15,29,35;
+    --canvas-deep:#0B0B0D;
+    --canvas:#141417;
+    --panel-rgb:14,14,17;
+    --panel-strong-rgb:23,23,27;
     --opa:.70;                       /* la controla el usuario desde el modo edición */
     --halo:0 1px 3px rgba(0,0,0,.6),0 0 14px rgba(0,0,0,.35);
     --panel:rgba(var(--panel-rgb),var(--opa));
     --panel-strong:rgba(var(--panel-strong-rgb),calc(var(--opa) + .10));
-    --hairline:rgba(214,234,240,.16);
-    --hairline-lit:rgba(236,247,250,.4);
+    --hairline:rgba(255,255,255,.12);
+    --hairline-lit:rgba(255,255,255,.30);
     --chrome:rgba(var(--panel-rgb),calc(var(--opa) * .82));
-    --ink:#EAF2F4;
-    --ink-muted:#B6C8CD;
-    --ink-subtle:#93A8AF;
-    --accent:#F0A85C;
-    --accent-soft:#F8CB94;
-    --on-accent:#1A1106;
-    --cool:#8FB7C4;
+    --ink:#F4F4F6;
+    --ink-muted:#C2C2C9;
+    --ink-subtle:#92929B;
+    --accent:#2B5090;
+    /* El acento tiene dos papeles: relleno (con texto encima) y detalle (el color es lo
+       que se lee). En ambar coinciden porque es luminoso; en carbon no pueden, asi que
+       el sistema los separa aqui y cada tema decide si los une. */
+    --accent-linea:#7AA6E8;
+    --accent-soft:#A3C2F2;
+    --on-accent:#FFFFFF;
+    --cool:#A5A5AF;
     --ok:#7FC8A9;
     --late:#E8735A;
     --ui:"Outfit","SF Pro Display",system-ui,sans-serif;
@@ -36,29 +45,12 @@
     --ease-out:cubic-bezier(.16,1,.3,1);
     --ease-soft:cubic-bezier(.33,1,.68,1);
   }
-  @media (prefers-color-scheme: light){
-    :root:not([data-theme="dark"]){
-      --canvas-deep:#AFC4CC;--canvas:#C8D8DE;
-      --panel-rgb:255,255,255;--panel-strong-rgb:255,255,255;
-    --halo:0 1px 3px rgba(255,255,255,.75),0 0 14px rgba(255,255,255,.5);
-      --halo:0 1px 3px rgba(255,255,255,.75),0 0 14px rgba(255,255,255,.5);
-      --hairline:rgba(13,27,32,.13);--hairline-lit:rgba(13,27,32,.28);
-      --chrome:rgba(var(--panel-rgb),calc(var(--opa) * .92));
-      --ink:#0D1B20;--ink-muted:#3A5058;--ink-subtle:#4E6970;
-      --accent:#9A5613;--accent-soft:#C07A24;--on-accent:#FFFFFF;
-      --cool:#37606F;--ok:#15704F;--late:#BC4227;
-    }
-  }
-  :root[data-theme="light"]{
-    --canvas-deep:#AFC4CC;--canvas:#C8D8DE;
-    --panel-rgb:255,255,255;--panel-strong-rgb:255,255,255;
-    --halo:0 1px 3px rgba(255,255,255,.75),0 0 14px rgba(255,255,255,.5);
-    --hairline:rgba(13,27,32,.13);--hairline-lit:rgba(13,27,32,.28);
-    --chrome:rgba(var(--panel-rgb),calc(var(--opa) * .92));
-    --ink:#0D1B20;--ink-muted:#3A5058;--ink-subtle:#4E6970;
-    --accent:#9A5613;--accent-soft:#C07A24;--on-accent:#FFFFFF;
-    --cool:#37606F;--ok:#15704F;--late:#BC4227;
-  }
+  /* Un solo ambiente: la noche. La aplicacion vive sobre una fotografia a la hora azul
+     y no existe una version clara de esa fotografia, asi que un tema claro obligaba a
+     inventar un segundo mundo visual que nunca casaba con la imagen. `color-scheme` le
+     dice al navegador que pinte sus propias superficies -barras, controles nativos- en
+     oscuro, para que no asome un rectangulo blanco donde no lo hemos dibujado. */
+  :root{color-scheme:dark}
 
   html,body{height:100%}
   body{background:var(--canvas-deep);color:var(--ink);font-family:var(--ui);font-weight:300;overflow-x:hidden}
@@ -67,58 +59,212 @@
   *::-webkit-scrollbar{width:9px;height:9px}
   *::-webkit-scrollbar-thumb{background:var(--hairline);border-radius:999px}
   *::-webkit-scrollbar-track{background:transparent}
-  :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+  :focus-visible{outline:2px solid var(--accent-linea);outline-offset:3px;border-radius:var(--r-sm)}
 
   /* ═══════════════════════════════════════════════════════
      2 · FONDO — shader sobre la fotografía
      ═══════════════════════════════════════════════════════ */
   .bg{position:fixed;inset:0;z-index:0;background:var(--canvas-deep);overflow:hidden}
   .bg canvas{display:block;width:100%;height:100%}
-  .bg .still{position:absolute;inset:0;background-size:cover;background-position:center;background-image:var(--photo)}
-  .bg .tint{position:absolute;inset:0;background:linear-gradient(175deg,transparent 28%,var(--canvas) 96%);opacity:.55}
-  .bg.gl .still,.bg.gl .tint{display:none}
+  /* ── el fondo antes del shader ──
+     Esta es la fotografia cruda, y durante mucho tiempo se veia tal cual: al cargar
+     aparecia a plena luz y un instante despues el lienzo la sustituia ya entonada. Ese
+     fogonazo era el unico momento en que la aplicacion parecia otra. Ahora el respaldo
+     de CSS imita el revelado del shader —oscurecido y desaturado— y el relevo se hace
+     con un fundido, no con un corte. Si el sistema se lleva el contexto de WebGL, esto
+     es lo que queda: la misma imagen, solo que quieta. */
+  .bg .still{
+    position:absolute;inset:0;background-size:cover;background-position:center;background-image:var(--photo);
+    filter:brightness(.5) saturate(.58);
+    transition:opacity 520ms var(--ease-soft);
+  }
+  .bg .tint{
+    position:absolute;inset:0;opacity:.55;
+    background:
+      radial-gradient(120% 90% at 50% 46%,transparent 30%,rgba(0,0,0,.55) 100%),
+      linear-gradient(175deg,transparent 28%,var(--canvas) 96%);
+    transition:opacity 520ms var(--ease-soft);
+  }
+  .bg.gl .still,.bg.gl .tint{opacity:0}
 
   /* ═══════════════════════════════════════════════════════
      3 · MARCO
      ═══════════════════════════════════════════════════════ */
   .app{
     position:relative;z-index:1;
-    display:grid;grid-template-columns:64px minmax(0,1fr);min-height:100vh;min-height:100dvh;
-    background:linear-gradient(90deg,var(--chrome) 0 64px,transparent 64px);
+    display:grid;grid-template-columns:70px minmax(0,1fr);min-height:100vh;min-height:100dvh;
+    /* sin banda: el raíl es un bloque flotante y el fondo de la aplicación es la foto */
   }
+  /* ── El raíl líquido ──
+     No es una columna de arriba abajo ni un bloque macizo: son burbujas de cristal, una
+     por sección, centradas en la altura de la ventana. Añadir una página añade su burbuja
+     y el conjunto crece solo.
+
+     Dos capas superpuestas y cada una aporta una mitad del efecto:
+
+       · `.rail-fluido` — las burbujas y la gota del activo, pasadas por el gooey. De aquí
+         sale el cuerpo y, sobre todo, la fusión: cuando la gota viaja entre dos burbujas
+         el filtro las une con un cuello y el indicador fluye en vez de saltar.
+       · `.nav-btn` — encima y sin filtro, cada uno con su propio desenfoque de fondo. El
+         cristal de verdad vive aquí, porque `backdrop-filter` no sobrevive dentro de un
+         filtro SVG.
+
+     El negro es medio, no absoluto: sobre una fotografía nocturna un bloque casi opaco se
+     lee como un agujero. */
   .rail{
-    display:flex;flex-direction:column;align-items:center;gap:6px;
-    padding:18px 0 calc(18px + env(safe-area-inset-bottom,0px));
-    border-right:1px solid var(--hairline);background:var(--chrome);
-    backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);
     position:sticky;top:0;height:100vh;height:100dvh;z-index:4;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:18px 0;isolation:isolate;pointer-events:none;
   }
-  .brand{width:32px;height:32px;display:grid;place-items:center;margin-bottom:12px;color:var(--accent)}
+  .rail-filtro{position:absolute;width:0;height:0;pointer-events:none}
+  .brand{
+    position:absolute;top:22px;left:50%;transform:translateX(-50%);
+    width:32px;height:32px;display:grid;place-items:center;color:var(--ink);
+    opacity:.55
+  }
+  .rail-nucleo{
+    position:relative;pointer-events:auto;
+    display:flex;flex-direction:column;align-items:center;gap:14px;
+  }
+  .rail-fluido{
+    position:absolute;inset:-14px -16px;z-index:0;pointer-events:none;
+    filter:url(#gooey) drop-shadow(0 0 1px var(--hairline-lit)) drop-shadow(0 12px 28px rgba(0,0,0,.6));
+  }
+  /* ── El agua de las burbujas ──
+     Tres capas apiladas en el mismo `background`, de arriba abajo:
+
+       1 · el brillo especular, arriba a la izquierda, donde daría la luz en una gota real
+       2 · un velo claro en el borde inferior: el rebote de luz que sube por el vidrio
+       3 · el agua, un gradiente cónico que gira muy despacio
+
+     El giro es lo que la hace parecer líquida y no un círculo pintado. Se anima el ángulo
+     del cónico, y para eso hace falta declararlo con `@property`: una variable CSS normal
+     es texto para el navegador y salta de un valor a otro en vez de interpolar.
+
+     Todos los azules van con alfa alto a propósito. El contraste del filtro gooey descarta
+     lo que baje de ~0.46, así que la transparencia no es una opción libre aquí: lo que da
+     la sensación de vidrio es el brillo y el gradiente, no la opacidad. */
+  @property --giro{syntax:'<angle>';inherits:false;initial-value:0deg}
+  @keyframes marea{to{--giro:360deg}}
+
+  /* El agua es monocroma: el material lo dibuja el contraste entre tonos de negro, no el
+     color. Por eso el cónico recorre un rango amplio —de casi negro a grafito— en vez de
+     quedarse en un solo gris: un gradiente de tonos vecinos se lee plano, y plano fue
+     exactamente el problema del gris de antes. El punto de frío de los valores (12,12,15
+     y no 12,12,12) es el mismo del tema: un negro puro sobre esta fotografía vira a verde. */
+  .rail-burbuja{
+    position:absolute;left:50%;top:14px;width:44px;height:44px;border-radius:999px;
+    background:
+      /* el brillo de arriba: pequeño y nítido, no un lavado */
+      radial-gradient(46% 38% at 33% 22%, rgba(255,255,255,.30), transparent 72%),
+      /* la veta: un filo de luz cruzando el vidrio, que es el detalle que lo hace caro */
+      linear-gradient(118deg, transparent 38%, rgba(255,255,255,.13) 47%, transparent 53%),
+      /* el rebote que sube desde el canto inferior */
+      radial-gradient(80% 40% at 50% 104%, rgba(255,255,255,.10), transparent 70%),
+      conic-gradient(from var(--giro),
+        rgba(10,10,13,.88), rgba(23,23,28,.88), rgba(42,42,50,.88),
+        rgba(16,16,20,.88), rgba(10,10,13,.88));
+    animation:marea 26s linear infinite;
+  }
+
+  /* La gota del indicador es la misma agua, un escalón más arriba en la escala: se
+     distingue por luminosidad y no por color, así que al fundirse con la burbuja no se ve
+     la costura. Gira al revés y algo más rápido — dos aguas que se cruzan, no un patrón
+     repetido dos veces. */
+  .rail-gota{
+    position:absolute;left:50%;top:14px;width:48px;height:48px;border-radius:999px;
+    background:
+      radial-gradient(48% 40% at 34% 21%, rgba(255,255,255,.44), transparent 70%),
+      linear-gradient(118deg, transparent 36%, rgba(255,255,255,.17) 46%, transparent 54%),
+      radial-gradient(85% 44% at 50% 106%, rgba(255,255,255,.14), transparent 72%),
+      conic-gradient(from var(--giro),
+        rgba(24,24,29,.92), rgba(40,40,48,.92), rgba(62,62,72,.92),
+        rgba(31,31,38,.92), rgba(24,24,29,.92));
+    animation:marea 18s linear infinite reverse;
+    will-change:transform;
+  }
+  .rail-gota.lenta{width:42px;height:42px}
+
+  /* la gota del ratón: la misma agua, apagada. Acompaña, no protagoniza */
+  .rail-roce{
+    position:absolute;left:50%;top:14px;width:40px;height:40px;border-radius:999px;
+    background:
+      radial-gradient(50% 40% at 34% 23%, rgba(255,255,255,.20), transparent 72%),
+      conic-gradient(from var(--giro), rgba(16,16,20,.64), rgba(42,42,50,.64), rgba(16,16,20,.64));
+    animation:marea 22s linear infinite;
+    opacity:0;transition:transform 320ms var(--ease-soft),opacity 280ms linear;
+  }
+  .rail-roce.on{opacity:1}
+
+  /* cada icono en su burbuja de cristal: el desenfoque va aquí, fuera del filtro */
   .nav-btn{
-    width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
-    background:none;border:1px solid transparent;color:var(--ink-subtle);cursor:pointer;
-    transition:color 240ms var(--ease-soft),background 240ms,border-color 240ms;
+    position:relative;z-index:2;
+    width:44px;height:44px;border-radius:999px;display:grid;place-items:center;
+    border:1px solid var(--hairline);color:var(--ink-subtle);cursor:pointer;
+    background:rgba(255,255,255,.03);
+    backdrop-filter:blur(16px) saturate(130%);-webkit-backdrop-filter:blur(16px) saturate(130%);
+    transition:color 260ms var(--ease-soft),border-color 260ms,transform 260ms var(--ease-out);
   }
-  .nav-btn:hover{color:var(--ink);background:var(--panel)}
-  .nav-btn[aria-current="page"]{color:var(--accent);background:var(--panel-strong);border-color:var(--hairline)}
-  .rail .spacer{flex:1}
+  .nav-btn:hover{color:var(--ink-muted);border-color:var(--hairline-lit)}
+  /* Con el raíl monocromo, al activo lo marca el contraste y no el color: el icono sube
+     a tinta plena mientras el resto se queda en la apagada, y la gota que tiene debajo es
+     un escalón más clara que las otras burbujas. Un acento de color aquí seria el unico
+     punto cromatico del raíl y se comeria la pieza. */
+  .nav-btn[aria-current="page"]{
+    color:var(--ink);
+    border-color:var(--hairline-lit);
+  }
 
   .body{padding:16px 18px 22px;display:grid;gap:12px;align-content:start}
   .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
-  .hello{display:flex;flex-direction:column;gap:2px}
-  .hello .sub{font-size:12px;color:var(--ink-muted)}
-  .hello .name{font-size:17px;font-weight:600;letter-spacing:-.015em}
+  .hueco{flex:1}
   .tools{display:flex;align-items:center;gap:7px}
   .icon-btn{
-    width:34px;height:34px;border-radius:999px;display:grid;place-items:center;cursor:pointer;
+    width:34px;height:34px;border-radius:var(--r-sm);display:grid;place-items:center;cursor:pointer;
     background:var(--panel);border:1px solid var(--hairline);color:var(--ink-muted);
     transition:color 240ms,transform 240ms var(--ease-soft),background 240ms,border-color 240ms;
   }
   .icon-btn:hover{color:var(--ink);background:var(--panel-strong);transform:translateY(-2px)}
-  .icon-btn.is-on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+  .icon-btn.is-on{background:var(--accent);border-color:var(--accent-linea);color:var(--on-accent)}
   .avatar{
     width:34px;height:34px;border-radius:999px;display:grid;place-items:center;
     background:var(--accent);color:var(--on-accent);font-weight:700;font-size:12.5px
+  }
+
+  /* ── instalar como programa ──
+     Lleva texto y no solo icono: es una oferta que hay que entender a la primera y que
+     desaparece para siempre en cuanto se acepta. Entra con una animacion corta porque
+     el navegador la ofrece cuando quiere, y algo que aparece de golpe en una cabecera
+     quieta parece un error. */
+  .btn-instalar{
+    display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px 0 11px;
+    border-radius:999px;cursor:pointer;white-space:nowrap;
+    font:600 12.5px/1 var(--ui);letter-spacing:.01em;
+    color:var(--accent-soft);
+    background:linear-gradient(180deg,rgba(122,166,232,.16),rgba(43,80,144,.20));
+    border:1px solid rgba(122,166,232,.34);
+    box-shadow:0 1px 0 rgba(255,255,255,.07) inset,0 10px 24px -18px rgba(0,0,0,.9);
+    transition:color 240ms,transform 240ms var(--ease-soft),background 240ms,border-color 240ms,box-shadow 240ms;
+    animation:instalar-entra 520ms var(--ease-out) both;
+  }
+  .btn-instalar svg{transition:transform 320ms var(--ease-out)}
+  .btn-instalar:hover{
+    color:#EAF1FE;border-color:var(--accent-linea);transform:translateY(-2px);
+    background:linear-gradient(180deg,rgba(122,166,232,.26),rgba(43,80,144,.30));
+    box-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 14px 28px -18px rgba(0,0,0,.95);
+  }
+  /* la flecha baja: es literalmente lo que va a pasar */
+  .btn-instalar:hover svg{transform:translateY(1.5px)}
+  .btn-instalar:active{transform:translateY(0)}
+  @keyframes instalar-entra{
+    from{opacity:0;transform:translateY(-6px) scale(.94)}
+    to{opacity:1;transform:none}
+  }
+  @media (prefers-reduced-motion:reduce){ .btn-instalar{animation:none} }
+  /* en movil solo cabe el icono; el texto se va y el boton se queda redondo */
+  @media (max-width:560px){
+    .btn-instalar span{display:none}
+    .btn-instalar{width:34px;padding:0;justify-content:center}
   }
 
   /* ═══════════════════════════════════════════════════════
@@ -131,17 +277,58 @@
   .widget{container-type:size}
   @media (max-width:900px){ .widget{container-type:inline-size} }
   .widget{
-    border-radius:16px;background:var(--panel);border:1px solid var(--hairline);
+    border-radius:var(--r-lg);background:var(--panel);border:1px solid var(--hairline);
     backdrop-filter:blur(15px) saturate(135%);-webkit-backdrop-filter:blur(15px) saturate(135%);
     overflow:hidden;
+    box-shadow:0 14px 34px -22px rgba(0,0,0,.72);
     transition:box-shadow 240ms var(--ease-soft),border-color 240ms,background 240ms;
   }
+  /* ── la materialidad del cristal ──
+     Dos capas que no se ven por separado y juntas convierten un rectángulo traslúcido
+     en un panel con espesor: el filo donde la luz rasa se queda, y el reflejo que
+     sigue al cursor como si la lámina tuviera brillo especular propio.
+     Ambas son decorativas: no capturan puntero ni entran en el flujo. */
+  .widget::before,.widget::after{content:"";position:absolute;inset:0;pointer-events:none}
+  .widget::before{
+    background:linear-gradient(180deg,
+      color-mix(in srgb,var(--hairline-lit) 78%,transparent) 0 1px,
+      transparent 1px 100%);
+    opacity:.85;
+  }
+  .widget::after{
+    background:radial-gradient(420px 320px at var(--mx,50%) var(--my,-30%),
+      color-mix(in srgb,var(--ink) 9%,transparent), transparent 62%);
+    opacity:0;transition:opacity 420ms var(--ease-soft);
+  }
+  .widget:hover::after{opacity:1}
+  .widget.desnudo::before,.widget.desnudo::after{display:none}
   .widget.settling{
     transition:left 420ms var(--ease-out),top 420ms var(--ease-out),
                width 420ms var(--ease-out),height 420ms var(--ease-out),
                box-shadow 240ms var(--ease-soft),border-color 240ms;
   }
   .widget.solid{background:var(--panel-strong)}
+  /* ── llegada del escritorio ──
+     Los paneles no aparecen: se posan, en el orden en que se leen (arriba-izquierda
+     primero). El desenfoque de entrada es el mismo material del cristal aclarándose,
+     no un efecto añadido. Se dispara cuando el layout real ya está puesto, así que
+     nadie ve un widget aterrizar en su sitio de fábrica y saltar después. */
+  @keyframes posarse{
+    from{opacity:0;transform:translateY(16px) scale(.985);filter:blur(7px)}
+    to{opacity:1;transform:none;filter:blur(0)}
+  }
+  .canvas.posado .widget{
+    animation:posarse 760ms var(--ease-out) backwards;
+    animation-delay:calc(var(--i,0) * 52ms);
+  }
+  /* Mientras no haya `posado`, el layout todavia es el de fabrica: no se enseña. Antes
+     se pintaban ahi, con su tamaño estandar, y saltaban a su sitio al fotograma
+     siguiente. La animacion de entrada ya estaba pensada para eso, pero solo animaba;
+     nunca llego a ocultar nada. */
+  .canvas:not(.posado) .widget{opacity:0;pointer-events:none}
+  /* al volver de otra vista: aparecer, no desfilar */
+  .canvas.posado.vuelta .widget{animation:aparecer 200ms var(--ease-out) backwards;animation-delay:0s}
+  @keyframes aparecer{from{opacity:0}to{opacity:1}}
   .widget > .inner{padding:17px 18px;height:100%;overflow:hidden;display:flex;flex-direction:column;min-height:0}
   /* el bloque que lleva la lista se queda con el alto sobrante y desplaza dentro si no cabe */
   .widget .schedule,.widget .todo,.widget .courses,.widget .cal-grid{min-height:0}
@@ -169,12 +356,12 @@
   .hola > *{min-height:0;max-width:100%}
   .nombre{
     margin:0;font-weight:700;line-height:1;letter-spacing:-.045em;
-    display:flex;flex-wrap:wrap;align-items:baseline;cursor:default;border-radius:8px;
+    display:flex;flex-wrap:wrap;align-items:baseline;cursor:default;border-radius:var(--r-sm);
     font-size:clamp(20px,9cqw + 6px,84px);
     font-size:clamp(20px,min(12cqw, 34cqh),88px);
     min-width:0
   }
-  .nombre:focus-visible{outline:2px solid var(--accent);outline-offset:6px}
+  .nombre:focus-visible{outline:2px solid var(--accent-linea);outline-offset:6px}
   .nombre .saludo{
     font-size:.34em;font-weight:300;letter-spacing:-.012em;color:var(--ink-muted);
     white-space:nowrap;margin-right:.30em;
@@ -193,7 +380,7 @@
   }
   @keyframes ola{
     0%{transform:none;color:inherit}
-    32%{transform:translateY(-11px) scale(1.05);color:var(--accent)}
+    32%{transform:translateY(-11px) scale(1.05);color:var(--accent-linea)}
     100%{transform:none;color:inherit}
   }
   .mensaje{
@@ -243,21 +430,20 @@
 
   /* ── calendario como acceso directo ── */
   .ir-cal{
-    display:inline-flex;align-items:center;gap:5px;background:none;border:0;padding:2px 4px;border-radius:8px;
+    display:inline-flex;align-items:center;gap:5px;background:none;border:0;padding:2px 4px;border-radius:var(--r-sm);
     color:var(--ink-subtle);font:inherit;font-size:12px;cursor:pointer;
     transition:color 200ms,gap 200ms var(--ease-soft)
   }
-  .ir-cal:hover{color:var(--accent);gap:8px}
+  .ir-cal:hover{color:var(--accent-linea);gap:8px}
   .cell.clicable{cursor:pointer}
   body.en-dia #edit-btn{display:none}
   /* banda de eventos en la vista día */
   .eventos-dia{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
   .ev-dia{
-    display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:13px;cursor:pointer;
+    display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:var(--r-md);cursor:pointer;
     background:color-mix(in srgb,var(--tc) 17%,transparent);
     border:1px solid color-mix(in srgb,var(--tc) 42%,transparent);
     color:var(--ink);font:inherit;font-size:13px;
-    opacity:0;transform:translateY(6px);animation:tareaIn 420ms var(--ease-out) forwards;
     transition:transform 200ms var(--ease-soft),border-color 200ms
   }
   .ev-dia:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--tc) 75%,transparent)}
@@ -273,23 +459,29 @@
   .sem-titulo .anio{font-family:var(--data);font-size:13px;color:var(--ink-subtle)}
 
   /* el mes entero, sin scroll: la rejilla se come el alto que queda */
-  #view-mes{display:flex;flex-direction:column;gap:12px;height:calc(100dvh - 168px);min-height:430px}
+  /* El calendario no es un widget del escritorio: el deslizador de opacidad no manda
+     aquí. Un panel al 30% sobre una fotografía deja el texto por debajo del mínimo
+     legible, así que esta superficie tiene su propio suelo y solo puede subir de ahí. */
+  .cal-panel{
+    --suelo:max(var(--opa),.66);
+    display:flex;flex-direction:column;gap:12px;height:calc(100dvh - 196px);min-height:430px
+  }
   .mes-rejilla{
     flex:1 1 auto;min-height:0;
     display:grid;grid-template-columns:repeat(7,minmax(0,1fr));
     grid-template-rows:auto repeat(var(--filas,6),minmax(0,1fr));
-    gap:6px;padding:10px;border-radius:20px;
-    background:color-mix(in srgb,var(--panel) 92%,var(--canvas));
+    gap:6px;padding:10px;border-radius:var(--r-xl);
+    background:rgba(var(--panel-rgb),var(--suelo,var(--opa)));
     border:1px solid var(--hairline);
     backdrop-filter:blur(22px) saturate(145%);-webkit-backdrop-filter:blur(22px) saturate(145%)
   }
   .dow-mes{
-    text-align:center;font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;
-    color:var(--ink-subtle);padding-bottom:4px
+    text-align:center;font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-subtle);padding-bottom:6px
   }
   .celda{
     position:relative;display:flex;flex-direction:column;gap:3px;min-height:0;overflow:hidden;
-    padding:6px 7px;border-radius:12px;cursor:pointer;container-type:size;
+    padding:6px 7px;border-radius:var(--r-md);cursor:pointer;container-type:size;
     background:color-mix(in srgb,var(--hairline) 16%,transparent);
     border:1px solid transparent;
     transition:background 200ms,border-color 200ms,transform 200ms var(--ease-soft)
@@ -298,25 +490,31 @@
   .celda.finde{background:color-mix(in srgb,var(--hairline) 26%,transparent)}
   .celda.fuera{opacity:.3}
   .celda.hoy{
-    background:color-mix(in srgb,var(--accent) 13%,transparent);
-    border-color:color-mix(in srgb,var(--accent) 50%,transparent)
+    background:color-mix(in srgb,var(--accent-linea) 13%,transparent);
+    border-color:color-mix(in srgb,var(--accent-linea) 50%,transparent)
   }
   .celda-top{display:flex;align-items:center;justify-content:space-between;gap:4px;flex:none}
-  .dia-num{font-family:var(--data);font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink-muted)}
-  .celda.hoy .dia-num{color:var(--accent);font-weight:600}
+  .dia-num{font-family:var(--data);font-size:15.5px;font-weight:500;letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums;color:var(--ink-muted)}
+  .celda.hoy .dia-num{color:var(--accent-linea);font-weight:700}
   .mas-ev{
-    width:18px;height:18px;border-radius:6px;border:0;background:none;cursor:pointer;
+    width:18px;height:18px;border-radius:var(--r-xs);border:0;background:none;cursor:pointer;
     color:var(--ink-subtle);font:inherit;font-size:14px;line-height:1;opacity:0;
     display:grid;place-items:center;transition:opacity 180ms,color 180ms,background 180ms
   }
   .celda:hover .mas-ev{opacity:1}
-  .mas-ev:hover{color:var(--accent);background:var(--panel)}
+  .mas-ev:hover{color:var(--accent-linea);background:var(--panel)}
 
+  /* La caja de los chips es la que cede, no los chips. Antes el recorte caia sobre el
+     propio chip y lo dejaba en 11 px: una raya ilegible. */
+  .chips-ev{display:flex;flex-direction:column;gap:3px;min-height:0;overflow:hidden;flex:0 1 auto}
+  /* fila de puntos: el plan B cuando la celda no da para chips */
+  .puntos-ev{display:none;gap:3px;flex-wrap:wrap;align-items:center;margin-top:auto;padding-top:2px}
+  .puntos-ev i{width:5px;height:5px;border-radius:999px;display:block;flex:none}
   .chip-ev{
-    display:flex;align-items:center;gap:4px;min-width:0;flex:none;
-    padding:2px 5px;border-radius:6px;border:0;cursor:pointer;font:inherit;text-align:left;
+    display:flex;align-items:center;gap:4px;min-width:0;flex:0 0 auto;min-height:18px;
+    padding:2px 5px;border-radius:var(--r-xs);border:0;cursor:pointer;font:inherit;text-align:left;
     background:color-mix(in srgb,var(--tc) 20%,transparent);color:var(--ink);
-    opacity:0;animation:tareaIn 360ms var(--ease-out) forwards;
     transition:background 180ms
   }
   .chip-ev:hover{background:color-mix(in srgb,var(--tc) 40%,transparent)}
@@ -335,8 +533,17 @@
 
   /* celdas bajas o estrechas: el color dice lo que el texto ya no cabe */
   /* cuantos menos píxeles, menos detalle: primero cae el tercer evento, luego el texto */
-  @container (max-height: 96px){ .chip-ev:nth-of-type(n+3){display:none} .mas-chips{display:none} }
-  @container (max-height: 74px){ .chip-ev:nth-of-type(n+2){display:none} .marca-tareas{display:none} }
+  /* Por debajo de cierto alto no caben chips legibles, asi que se cambia de lenguaje en
+     vez de esconder eventos: un punto por cada uno. Ocultarlos -que es lo que hacia antes
+     esta regla, incluido el contador "+N"- dejaba dias con cosas que parecian vacios. */
+  @container (max-height: 96px){
+    .chips-ev .chip-ev:nth-of-type(n+3){display:none}
+  }
+  @container (max-height: 78px){
+    .chips-ev,.mas-chips{display:none}
+    .puntos-ev{display:flex}
+    .marca-tareas{display:none}
+  }
   @container (max-height: 52px){ .chip-ev .txt{display:none} .chip-ev{padding:3px;gap:0} }
   @container (max-width: 92px){ .chip-ev .txt b{display:none} }
 
@@ -347,7 +554,7 @@
   /* hoja de evento */
   .tipos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
   .tipo-btn{
-    display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 6px;border-radius:12px;
+    display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 6px;border-radius:var(--r-md);
     border:1px solid var(--hairline);background:var(--panel);color:var(--ink-subtle);
     font:inherit;font-size:11.5px;cursor:pointer;
     transition:color 200ms,background 200ms,border-color 200ms,transform 180ms var(--ease-soft)
@@ -358,27 +565,27 @@
     background:color-mix(in srgb,var(--tc) 16%,transparent)
   }
   .hoja input[type="date"]{
-    width:100%;height:44px;border-radius:13px;border:1px solid var(--hairline);background:var(--panel);
+    width:100%;height:44px;border-radius:var(--r-md);border:1px solid var(--hairline);background:var(--panel);
     color:var(--ink);font:inherit;font-family:var(--data);font-size:14px;padding:0 13px
   }
-  .hoja input[type="date"]:focus{outline:none;border-color:var(--accent)}
+  .hoja input[type="date"]:focus{outline:none;border-color:var(--accent-linea)}
   .hoja textarea{
-    width:100%;min-height:74px;border-radius:13px;border:1px solid var(--hairline);background:var(--panel);
+    width:100%;min-height:74px;border-radius:var(--r-md);border:1px solid var(--hairline);background:var(--panel);
     color:var(--ink);font:inherit;font-size:14px;padding:11px 13px;resize:vertical;line-height:1.5
   }
-  .hoja textarea:focus{outline:none;border-color:var(--accent);background:var(--panel-strong)}
+  .hoja textarea:focus{outline:none;border-color:var(--accent-linea);background:var(--panel-strong)}
   .fila-hora{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
   .todo-dia{
-    height:44px;padding:0 15px;border-radius:13px;border:1px solid var(--hairline);background:var(--panel);
+    height:44px;padding:0 15px;border-radius:var(--r-md);border:1px solid var(--hairline);background:var(--panel);
     color:var(--ink-subtle);font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;
     transition:color 200ms,background 200ms,border-color 200ms
   }
-  .todo-dia[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:500}
+  .todo-dia[aria-pressed="true"]{background:var(--accent);border-color:var(--accent-linea);color:var(--on-accent);font-weight:500}
   .hoja select:disabled{opacity:.45;cursor:not-allowed}
 
   /* en pantallas pequeñas el mes deja de caber: se permite crecer y desplazar */
   @media (max-width:760px){
-    #view-mes{height:auto;min-height:0}
+    .cal-panel{height:auto;min-height:0}
     .mes-rejilla{grid-template-rows:auto repeat(var(--filas,6),minmax(64px,1fr));padding:7px;gap:4px}
     .celda{padding:4px 5px}
   }
@@ -392,14 +599,11 @@
   :root{
     --c-rojo:#FF6B5E;   --c-naranja:#FF9F45;  --c-ambar:#F0A85C;  --c-verde:#54D18C;
     --c-menta:#4FD6C0;  --c-cian:#5AC8E8;     --c-azul:#5B9DF9;   --c-indigo:#8A8CF0;
-    --c-violeta:#B57BEE;--c-rosa:#FF7AA8;     --c-arena:#D6B08A;  --c-piedra:#9FB0BA;
+    --c-violeta:#B57BEE;--c-rosa:#FF7AA8;     --c-arena:#D6B08A;  --c-piedra:#A1A1AA;
+    --c-marron:#9A7A52; --c-amarillo:#F2D24B;
     --hora-alto:58px;
-    --sheet-fondo:rgba(16,28,34,.88);
+    --sheet-fondo:rgba(15,26,43,.90);
   }
-  @media (prefers-color-scheme: light){
-    :root:not([data-theme="dark"]){ --sheet-fondo:rgba(248,251,253,.92); }
-  }
-  :root[data-theme="light"]{ --sheet-fondo:rgba(248,251,253,.92); }
 
   .vista{display:none}
   .vista.on{display:block}
@@ -414,62 +618,65 @@
   .dia-fecha .dow{font-size:15px;font-weight:600;letter-spacing:-.01em;text-transform:capitalize}
   .dia-fecha .mes{font-size:12.5px;color:var(--ink-subtle)}
   .dia-nav{display:flex;align-items:center;gap:6px}
-  .nav-ico{
-    width:34px;height:34px;border-radius:999px;display:grid;place-items:center;cursor:pointer;
-    background:var(--panel);border:1px solid var(--hairline);color:var(--ink-muted);
-    transition:color 200ms,background 200ms,transform 200ms var(--ease-soft)
-  }
-  .nav-ico:hover{color:var(--ink);background:var(--panel-strong);transform:translateY(-1px)}
-  .hoy-btn{
-    padding:0 14px;height:34px;border-radius:999px;border:1px solid var(--hairline);
-    background:var(--panel);color:var(--ink-muted);font:inherit;font-size:13px;cursor:pointer;
-    transition:color 200ms,background 200ms
-  }
-  .hoy-btn:hover{color:var(--ink);background:var(--panel-strong)}
 
   /* ── tira de la semana ── */
   .semana{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-bottom:14px}
+  /* Cada día lleva su propio contorno y su fondo. Con el borde transparente, la tira se
+     leía como texto suelto flotando sobre la fotografía y no como una fila de destinos
+     en la que se puede pulsar: no había nada que dijera dónde empieza y acaba cada uno. */
   .sem-dia{
-    display:flex;flex-direction:column;align-items:center;gap:5px;padding:9px 4px 8px;border-radius:14px;
-    background:transparent;border:1px solid transparent;cursor:pointer;color:var(--ink-subtle);
+    display:flex;flex-direction:column;align-items:center;gap:5px;padding:9px 4px 8px;border-radius:var(--r-lg);
+    background:rgba(var(--panel-rgb),calc(var(--opa) * .5));
+    border:1px solid var(--hairline);cursor:pointer;color:var(--ink-subtle);
+    backdrop-filter:blur(14px) saturate(130%);-webkit-backdrop-filter:blur(14px) saturate(130%);
     font:inherit;transition:background 220ms,color 220ms,border-color 220ms,transform 220ms var(--ease-soft)
   }
-  .sem-dia:hover{background:var(--panel);color:var(--ink-muted);transform:translateY(-1px)}
-  .sem-dia .d{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase}
-  .sem-dia .n{font-family:var(--data);font-size:15px;font-variant-numeric:tabular-nums;color:var(--ink-muted)}
+  .sem-dia:hover{background:var(--panel-strong);border-color:var(--hairline-lit);color:var(--ink-muted);transform:translateY(-1px)}
+  .sem-dia .d{font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
+  .sem-dia .n{font-family:var(--data);font-size:19px;font-weight:500;letter-spacing:-.025em;
+    font-variant-numeric:tabular-nums;color:var(--ink-muted)}
   .sem-dia .pts{display:flex;gap:2px;height:4px}
   .sem-dia .pts i{width:4px;height:4px;border-radius:999px;display:block;background:currentColor}
-  .sem-dia.sel{background:var(--panel-strong);border-color:var(--hairline);color:var(--ink)}
+  /* Ahora que todos tienen contorno, al seleccionado hay que subirle el tono: si no, se
+     confunde con el resto de la fila. */
+  .sem-dia.sel{
+    background:color-mix(in srgb,var(--accent) 34%,rgba(var(--panel-strong-rgb),.9));
+    border-color:color-mix(in srgb,var(--accent-linea) 52%,transparent);
+    color:var(--ink)
+  }
   .sem-dia.sel .n{color:var(--ink);font-weight:600}
-  .sem-dia.hoy .n{color:var(--accent)}
+  .sem-dia.hoy .n{color:var(--accent-linea)}
 
   /* ── filtros ── */
   .filtros{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-  .chip{
-    display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;border-radius:999px;
-    border:1px solid var(--hairline);background:var(--panel);color:var(--ink-muted);
-    font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;
-    transition:color 200ms,background 200ms,border-color 200ms,transform 160ms var(--ease-soft)
-  }
-  .chip:hover{color:var(--ink);transform:translateY(-1px)}
-  .chip.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:500}
-  .chip i.pt{width:7px;height:7px;border-radius:999px;display:block;background:currentColor}
   .filtros .sep{flex:1}
-  .add-btn{
-    display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 16px 0 13px;border-radius:999px;
-    border:0;background:var(--accent);color:var(--on-accent);font:inherit;font-size:13.5px;font-weight:600;
-    cursor:pointer;transition:transform 200ms var(--ease-soft),filter 200ms
-  }
-  .add-btn:hover{transform:translateY(-1px);filter:brightness(1.06)}
-  .add-btn:active{transform:scale(.97)}
 
   /* ── rejilla horaria ── */
+  /* La agenda se desplaza por dentro, no arrastrando la pagina entera: la fecha, la
+     tira de la semana y los filtros se quedan donde estan mientras se recorren las horas.
+     La altura sale de una columna flexible, no de un numero magico, asi que una cabecera
+     mas alta -mas eventos ese dia, filtros en dos lineas en el movil- se descuenta sola. */
   .agenda{
-    position:relative;border-radius:20px;border:1px solid var(--hairline);
+    position:relative;border-radius:var(--r-xl);border:1px solid var(--hairline);
     background:color-mix(in srgb,var(--panel-strong) 88%,var(--canvas));
     backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);
-    overflow:hidden
+    flex:1 1 auto;min-height:260px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain
   }
+  /* Nada de restar una cabecera a ojo: el contenedor se hace columna a la altura de la
+     ventana solo en esta pagina -de ahi el :has()- y la agenda se queda con lo que sobre.
+     Asi una topbar mas alta, una tira de eventos o filtros en dos lineas se descuentan
+     solos, en cualquier pantalla. */
+  /* El limite se pone en `.app`, que es quien contiene el rail: en escritorio el rail es
+     una columna lateral y no resta alto, pero en movil es una barra superior y si. Fijando
+     la altura aqui, ese descuento lo hace el propio flex y no hay que saber cuanto mide. */
+  .app:has(#view-dia){height:100dvh;overflow:hidden}
+  .app:has(#view-dia) > .body{min-height:0;height:auto}
+  .body:has(#view-dia){display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  /* en una columna flex todo encoge por defecto: sin esto la cabecera se comprime y su
+     texto se monta encima del titulo de la pagina */
+  .body:has(#view-dia) > :not(.vista){flex:none}
+  #view-dia.on{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+  #view-dia > :not(.agenda){flex:none}
   .horas{position:relative}
   .hora{
     position:relative;height:var(--hora-alto);display:grid;grid-template-columns:62px 1fr;
@@ -481,9 +688,9 @@
     font-variant-numeric:tabular-nums;user-select:none
   }
   .hora .hueco{cursor:copy;transition:background 200ms}
-  .hora .hueco:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .hora .hueco:hover{background:color-mix(in srgb,var(--accent-linea) 7%,transparent)}
   .hora .hueco::after{
-    content:"+";position:absolute;right:16px;font-size:16px;color:var(--accent);opacity:0;
+    content:"+";position:absolute;right:16px;font-size:16px;color:var(--accent-linea);opacity:0;
     transition:opacity 200ms;pointer-events:none;margin-top:4px
   }
   .hora .hueco:hover::after{opacity:.75}
@@ -503,19 +710,19 @@
   /* ── tareas ── */
   .capa-tareas{position:absolute;left:62px;right:10px;top:0;bottom:0;pointer-events:none}
   .tarea{
-    position:absolute;pointer-events:auto;border-radius:13px;padding:8px 11px;overflow:hidden;cursor:pointer;
+    position:absolute;pointer-events:auto;border-radius:var(--r-md);padding:8px 11px;overflow:hidden;cursor:pointer;
     background:color-mix(in srgb,var(--tc) 20%,transparent);
     border:1px solid color-mix(in srgb,var(--tc) 42%,transparent);
     color:var(--ink);display:flex;gap:9px;align-items:flex-start;
     opacity:0;transform:translateY(8px) scale(.98);
-    animation:tareaIn 460ms var(--ease-out) forwards;
+    animation:tareaIn 460ms var(--ease-out) backwards;
     transition:transform 220ms var(--ease-soft),box-shadow 220ms,border-color 220ms
   }
-  @keyframes tareaIn{to{opacity:1;transform:none}}
+  @keyframes tareaIn{from{opacity:0;transform:translateY(6px)}}
   .tarea:hover{transform:translateY(-2px);box-shadow:0 12px 26px -16px rgba(0,0,0,.6);
     border-color:color-mix(in srgb,var(--tc) 75%,transparent)}
   .tarea .ico{
-    width:26px;height:26px;border-radius:9px;flex:none;display:grid;place-items:center;
+    width:26px;height:26px;border-radius:var(--r-sm);flex:none;display:grid;place-items:center;
     background:color-mix(in srgb,var(--tc) 30%,transparent);color:var(--tc)
   }
   .tarea .cuerpo{min-width:0;flex:1}
@@ -523,7 +730,7 @@
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tarea .rango{font-family:var(--data);font-size:11px;color:var(--ink-muted);margin-top:2px;display:block}
   .tarea.corta{padding:5px 10px;align-items:center}
-  .tarea.corta .ico{width:20px;height:20px;border-radius:7px}
+  .tarea.corta .ico{width:20px;height:20px;border-radius:var(--r-xs)}
   .tarea.corta .rango{display:none}
   .tarea .marca{
     width:18px;height:18px;border-radius:999px;border:1.5px solid color-mix(in srgb,var(--tc) 70%,transparent);
@@ -546,48 +753,122 @@
     color:var(--ink-subtle);font-size:13.5px;text-align:center;padding:0 24px
   }
 
-  /* ── hoja inferior ── */
+  /* ── el formulario flotante ──
+     Era una hoja pegada al fondo con 460 px fijos, centrada restando la mitad de ese
+     ancho con un `transform`: en cuanto el ancho cambiaba, el centrado se iba. Ahora se
+     centra con `inset:0` y `margin:auto`, que funciona en los dos ejes y con cualquier
+     medida, y deja el `transform` libre para la animación de entrada. */
   .telon{
-    position:fixed;inset:0;z-index:70;background:rgba(4,10,13,.42);
-    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
-    opacity:0;pointer-events:none;transition:opacity 320ms
+    position:fixed;inset:0;z-index:70;
+    background:rgba(3,3,5,.55);
+    backdrop-filter:blur(6px) saturate(115%);-webkit-backdrop-filter:blur(6px) saturate(115%);
+    opacity:0;pointer-events:none;transition:opacity 380ms var(--ease-soft)
   }
   .telon.on{opacity:1;pointer-events:auto}
+
   .hoja{
-    position:fixed;left:50%;bottom:0;z-index:75;width:min(460px,100%);
-    transform:translate(-50%,102%);
-    background:var(--sheet-fondo);border:1px solid var(--hairline);border-bottom:0;
-    border-radius:26px 26px 0 0;
-    backdrop-filter:blur(30px) saturate(160%);-webkit-backdrop-filter:blur(30px) saturate(160%);
-    box-shadow:0 -30px 70px -30px rgba(0,0,0,.7);
-    padding:10px 20px calc(22px + env(safe-area-inset-bottom,0px));
-    max-height:88vh;overflow-y:auto;
-    transition:transform 480ms var(--ease-out)
+    position:fixed;inset:0;margin:auto;z-index:75;
+    width:min(92vw,620px);height:max-content;max-height:min(86vh,900px);
+    overflow-y:auto;overscroll-behavior:contain;
+    padding:18px 26px calc(24px + env(safe-area-inset-bottom,0px));
+    border-radius:var(--r-xl);
+    border:1px solid var(--hairline);
+    /* El cristal: un negro profundo con mucho desenfoque y saturación alta, que es lo que
+       hace que la fotografía de detrás se lea como luz de color y no como una imagen
+       borrosa. El gradiente sobre el relleno da el espesor —arriba entra más luz que
+       abajo—, y el filo superior es el canto donde la luz rasa se queda. */
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.055), transparent 38%),
+      rgba(9,9,12,.80);
+    backdrop-filter:blur(44px) saturate(185%);-webkit-backdrop-filter:blur(44px) saturate(185%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.14),
+      0 40px 90px -30px rgba(0,0,0,.9),
+      0 0 0 1px rgba(0,0,0,.4);
+    /* entra creciendo desde el desenfoque, no deslizándose desde un borde */
+    opacity:0;transform:translateY(16px) scale(.965);filter:blur(6px);
+    transition:opacity 300ms var(--ease-soft),
+               transform 460ms var(--ease-out),
+               filter 340ms var(--ease-soft)
   }
-  .hoja.on{transform:translate(-50%,0)}
-  .hoja .asa{width:38px;height:4px;border-radius:999px;background:var(--hairline);margin:0 auto 14px}
-  .hoja h3{margin:0 0 16px;font-size:17px;font-weight:600;letter-spacing:-.02em}
-  .campo{margin-bottom:16px}
-  .campo > label{display:block;font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;
-    color:var(--ink-subtle);margin-bottom:8px}
+  .hoja.on{opacity:1;transform:none;filter:blur(0)}
+
+  /* el asa deja de tener sentido en un panel centrado: no se arrastra desde ningún borde */
+  .hoja .asa{display:none}
+
+  .hoja h3{
+    margin:0 0 20px;font-size:20px;font-weight:600;letter-spacing:-.025em;
+    color:var(--ink)
+  }
+
+  /* ── el cuerpo, en dos columnas cuando hay ancho ──
+     Con 620 px caben dos campos por fila, y eso acorta el formulario de diez filas a
+     seis: se ve entero sin desplazar, que es la diferencia entre revisarlo de un vistazo
+     y tener que recorrerlo. */
+  .hoja-cuerpo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 20px}
+  .hoja-cuerpo > .ancho{grid-column:1 / -1}
+  @media (max-width:620px){
+    .hoja-cuerpo{grid-template-columns:1fr}
+  }
+
+  .campo{margin-bottom:18px;min-width:0}
+  .campo > label{
+    display:block;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-subtle);margin-bottom:9px
+  }
+
   .hoja input[type="text"]{
-    width:100%;height:44px;border-radius:13px;border:1px solid var(--hairline);background:var(--panel);
-    color:var(--ink);font:inherit;font-size:15px;padding:0 14px;transition:border-color 200ms,background 200ms
+    width:100%;height:46px;border-radius:var(--r-sm);
+    border:1px solid var(--hairline);background:rgba(255,255,255,.045);
+    color:var(--ink);font:inherit;font-size:15px;padding:0 14px;
+    transition:border-color 200ms,background 200ms,box-shadow 200ms
   }
-  .hoja input[type="text"]:focus{outline:none;border-color:var(--accent);background:var(--panel-strong)}
+  .hoja input[type="text"]:hover{background:rgba(255,255,255,.07)}
+  .hoja input[type="text"]:focus{
+    outline:none;border-color:color-mix(in srgb,var(--accent-linea) 60%,transparent);
+    background:rgba(255,255,255,.08);
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--accent-linea) 16%,transparent)
+  }
   .hoja input::placeholder{color:var(--ink-subtle)}
 
   .horas-fila{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center}
   .horas-fila .flecha{color:var(--ink-subtle);font-size:13px}
+
+  /* ── los botones del cuerpo: iconos, prioridad, progreso ──
+     Todos responden al dedo igual: se elevan al pasar por encima y se hunden al pulsar.
+     Esa coherencia es lo que hace que un formulario se sienta de una pieza. */
+  .ico-btn,.prio-btn,.prog-btn,.color{
+    transition:color 200ms,border-color 200ms,background 200ms,
+               transform 160ms var(--ease-soft),box-shadow 200ms
+  }
+  .ico-btn:hover,.prio-btn:hover,.prog-btn:hover{transform:translateY(-1px)}
+  .ico-btn:active,.prio-btn:active,.prog-btn:active{transform:translateY(0) scale(.96)}
+  .ico-btn[aria-pressed="true"]{
+    box-shadow:0 0 0 1px color-mix(in srgb,var(--sel-color,var(--accent-linea)) 55%,transparent),
+               0 6px 18px -8px var(--sel-color,var(--accent-linea))
+  }
+
+  /* la rejilla de iconos aprovecha el ancho en vez de amontonarse en tres filas */
+  .iconos{display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:7px}
+
+  /* ── el pie, pegado al fondo del panel ── */
+  .hoja-pie{
+    display:flex;gap:10px;align-items:center;
+    margin-top:6px;padding-top:18px;border-top:1px solid var(--hairline)
+  }
+  .hoja-pie .guardar{margin-left:auto;min-width:130px}
+  .hoja-pie [data-slot="button"]{transition:transform 160ms var(--ease-soft),filter 200ms,background 200ms}
+  .hoja-pie [data-slot="button"]:hover{transform:translateY(-1px)}
+  .hoja-pie [data-slot="button"]:active{transform:scale(.97)}
   .hoja select{
-    width:100%;height:44px;border-radius:13px;border:1px solid var(--hairline);background:var(--panel);
+    width:100%;height:44px;border-radius:var(--r-md);border:1px solid var(--hairline);background:var(--panel);
     color:var(--ink);font:inherit;font-family:var(--data);font-size:14px;padding:0 12px;cursor:pointer;
     -webkit-appearance:none;appearance:none;
     background-image:linear-gradient(45deg,transparent 50%,var(--ink-subtle) 50%),linear-gradient(135deg,var(--ink-subtle) 50%,transparent 50%);
     background-position:calc(100% - 17px) 20px,calc(100% - 12px) 20px;
     background-size:5px 5px,5px 5px;background-repeat:no-repeat
   }
-  .hoja select:focus{outline:none;border-color:var(--accent)}
+  .hoja select:focus{outline:none;border-color:var(--accent-linea)}
 
   .colores{display:flex;gap:9px;flex-wrap:wrap}
   .color{
@@ -599,20 +880,20 @@
 
   .iconos{display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:8px}
   .ico-btn{
-    aspect-ratio:1;border-radius:12px;border:1px solid var(--hairline);background:var(--panel);
+    aspect-ratio:1;border-radius:var(--r-md);border:1px solid var(--hairline);background:var(--panel);
     display:grid;place-items:center;cursor:pointer;color:var(--ink-muted);padding:0;
     transition:color 200ms,background 200ms,border-color 200ms,transform 180ms var(--ease-soft)
   }
   .ico-btn:hover{transform:translateY(-2px);color:var(--ink)}
   .ico-btn[aria-pressed="true"]{
     background:color-mix(in srgb,var(--sel-color,var(--accent)) 22%,transparent);
-    border-color:color-mix(in srgb,var(--sel-color,var(--accent)) 60%,transparent);
-    color:var(--sel-color,var(--accent))
+    border-color:color-mix(in srgb,var(--sel-color,var(--accent-linea)) 60%,transparent);
+    color:var(--sel-color,var(--accent-linea))
   }
 
   .prios{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
   .prio-btn{
-    height:40px;border-radius:12px;border:1px solid var(--hairline);background:var(--panel);
+    height:40px;border-radius:var(--r-md);border:1px solid var(--hairline);background:var(--panel);
     color:var(--ink-muted);font:inherit;font-size:13px;cursor:pointer;display:flex;align-items:center;
     justify-content:center;gap:7px;transition:color 200ms,background 200ms,border-color 200ms
   }
@@ -624,7 +905,7 @@
 
   .hoja-pie{display:flex;gap:10px;margin-top:22px}
   .hoja-pie button{
-    flex:1;height:46px;border-radius:14px;border:0;font:inherit;font-size:14.5px;font-weight:600;cursor:pointer;
+    flex:1;height:46px;border-radius:var(--r-lg);border:0;font:inherit;font-size:14.5px;font-weight:600;cursor:pointer;
     transition:transform 200ms var(--ease-soft),filter 200ms
   }
   .hoja-pie .guardar{background:var(--accent);color:var(--on-accent)}
@@ -645,10 +926,10 @@
      ═══════════════════════════════════════════════════════ */
   .grid-guide{
     position:absolute;inset:calc(var(--gap) * -.5);pointer-events:none;opacity:0;
-    border-radius:18px;
+    border-radius:var(--r-lg);
     background-image:
-      repeating-linear-gradient(90deg,color-mix(in srgb,var(--accent) 26%,transparent) 0 1px,transparent 1px var(--cw)),
-      repeating-linear-gradient(180deg,color-mix(in srgb,var(--accent) 18%,transparent) 0 1px,transparent 1px calc(var(--row) + var(--gap)));
+      repeating-linear-gradient(90deg,color-mix(in srgb,var(--accent-linea) 26%,transparent) 0 1px,transparent 1px var(--cw)),
+      repeating-linear-gradient(180deg,color-mix(in srgb,var(--accent-linea) 18%,transparent) 0 1px,transparent 1px calc(var(--row) + var(--gap)));
     background-position:calc(var(--gap) * .5) calc(var(--gap) * .5);
     clip-path:circle(0% at 50% 0%);
     transition:opacity 420ms var(--ease-out),clip-path 900ms var(--ease-out);
@@ -659,21 +940,21 @@
   .editing .widget .grip,.editing .widget .menu-btn,.editing .widget .resize{opacity:1;pointer-events:auto}
 
   .editing .widget{cursor:grab;border-color:var(--hairline-lit)}
-  .editing .widget:hover{box-shadow:0 0 0 1px var(--accent) inset}
+  .editing .widget:hover{box-shadow:0 0 0 1px var(--accent-linea) inset}
   .editing .widget > .inner{-webkit-user-select:none;user-select:none}
 
   .grip{
-    position:absolute;top:8px;left:10px;display:flex;gap:2px;padding:6px;border-radius:8px;
+    position:absolute;top:8px;left:10px;display:flex;gap:2px;padding:6px;border-radius:var(--r-sm);
     transform:translateY(-4px);color:var(--ink-subtle)
   }
   .grip i{width:3px;height:3px;border-radius:999px;background:currentColor;display:block;
     box-shadow:0 5px 0 currentColor,5px 0 0 currentColor,5px 5px 0 currentColor}
   .menu-btn{
-    position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
+    position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:var(--r-sm);display:grid;place-items:center;
     background:var(--panel-strong);border:1px solid var(--hairline);color:var(--ink-muted);cursor:pointer;
     transform:translateY(-4px)
   }
-  .menu-btn:hover{color:var(--ink);border-color:var(--accent)}
+  .menu-btn:hover{color:var(--ink);border-color:var(--accent-linea)}
   .resize{
     position:absolute;right:3px;bottom:3px;width:20px;height:20px;cursor:nwse-resize;
     color:var(--ink-subtle);transform:scale(.7);transform-origin:bottom right
@@ -683,10 +964,10 @@
     content:"";position:absolute;right:5px;bottom:5px;width:9px;height:9px;
     border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;border-radius:0 0 3px 0
   }
-  .resize:hover{color:var(--accent)}
+  .resize:hover{color:var(--accent-linea)}
 
   .widget.dragging{
-    cursor:grabbing;box-shadow:0 30px 70px -24px rgba(0,0,0,.7),0 0 0 1px var(--accent) inset;
+    cursor:grabbing;box-shadow:0 30px 70px -24px rgba(0,0,0,.7),0 0 0 1px var(--accent-linea) inset;
     transition:box-shadow 200ms;will-change:left,top,width,height
   }
   .guia{position:absolute;pointer-events:none;background:var(--accent);opacity:0;z-index:35;
@@ -694,17 +975,9 @@
   .guia-v{top:-10px;bottom:-10px;width:1px;left:0}
   .guia-h{left:-10px;right:-10px;height:1px;top:0}
 
-  .ghost{
-    position:absolute;border-radius:16px;pointer-events:none;
-    background:color-mix(in srgb,var(--accent) 12%,transparent);
-    border:1px dashed color-mix(in srgb,var(--accent) 60%,transparent);
-    opacity:0;transition:opacity 200ms,transform 260ms var(--ease-out),width 260ms var(--ease-out),height 260ms var(--ease-out)
-  }
-  .ghost.on{opacity:1}
-
   /* menú de widget */
   .menu{
-    position:absolute;z-index:40;min-width:186px;padding:6px;border-radius:14px;
+    position:absolute;z-index:40;min-width:186px;padding:6px;border-radius:var(--r-lg);
     background:var(--panel-strong);border:1px solid var(--hairline);
     backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);
     box-shadow:0 22px 50px -26px rgba(0,0,0,.75);
@@ -714,17 +987,19 @@
   .menu.on{opacity:1;transform:none}
   .menu button{
     display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;
-    padding:8px 10px;border:0;border-radius:9px;background:none;cursor:pointer;
+    padding:8px 10px;border:0;border-radius:var(--r-sm);background:none;cursor:pointer;
     color:var(--ink-muted);font:inherit;font-size:13px;text-align:left;transition:background 160ms,color 160ms
   }
   .menu button:hover{background:var(--panel);color:var(--ink)}
-  .menu button span{font-family:var(--data);font-size:11px;color:var(--ink-subtle)}
+  .menu button span{font-family:var(--data);font-size:11px;color:var(--ink-subtle);
+    display:inline-flex;align-items:center}
+  .menu button:hover span{color:var(--accent-linea)}
   .menu hr{border:0;border-top:1px solid var(--hairline);margin:5px 8px}
 
   /* barra del modo edición */
   .editbar{
     position:fixed;left:50%;bottom:22px;z-index:50;display:flex;align-items:center;gap:14px;
-    padding:9px 9px 9px 18px;border-radius:999px;
+    padding:9px 9px 9px 18px;border-radius:var(--r-lg);
     background:var(--panel-strong);border:1px solid var(--hairline);
     backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);
     box-shadow:0 26px 60px -28px rgba(0,0,0,.8);
@@ -754,18 +1029,12 @@
   #opa:hover::-webkit-slider-thumb{transform:scale(1.18)}
   #opa:active::-webkit-slider-thumb{transform:scale(.94)}
 
-  .editbar kbd{font-family:var(--data);font-size:11px;padding:2px 6px;border-radius:6px;
+  .editbar kbd{font-family:var(--data);font-size:11px;padding:2px 6px;border-radius:var(--r-xs);
     background:var(--panel);border:1px solid var(--hairline);color:var(--ink-muted)}
-  .editbar button{
-    border:0;border-radius:999px;padding:9px 16px;font:inherit;font-size:13px;font-weight:500;cursor:pointer;
-    background:var(--accent);color:var(--on-accent);transition:transform 200ms var(--ease-soft),filter 200ms
-  }
-  .editbar button.ghost-btn{background:transparent;color:var(--ink-muted);border:1px solid var(--hairline)}
-  .editbar button:hover{transform:translateY(-1px);filter:brightness(1.06)}
 
   /* aviso flotante */
   .toast{
-    position:fixed;left:50%;bottom:22px;z-index:60;padding:10px 18px;border-radius:999px;
+    position:fixed;left:50%;bottom:22px;z-index:60;padding:10px 18px;border-radius:var(--r-sm);
     background:var(--panel-strong);border:1px solid var(--hairline);color:var(--ink);font-size:13px;
     backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
     transform:translate(-50%,16px);opacity:0;pointer-events:none;
@@ -778,7 +1047,7 @@
      ═══════════════════════════════════════════════════════ */
   .project h1{margin:0;font-size:clamp(26px,3.4cqw + 14px,50px);font-weight:700;line-height:.97;
     letter-spacing:-.032em;text-wrap:balance;max-width:15ch}
-  .project h1 span{display:block;color:var(--accent)}
+  .project h1 span{display:block;color:var(--accent-linea)}
   .project p{margin:11px 0 0;max-width:54ch;font-size:13.5px;line-height:1.55;color:var(--ink-muted)}
   .facts{display:flex;gap:22px;flex-wrap:wrap;margin-top:14px}
   .fact{display:flex;flex-direction:column;gap:3px}
@@ -786,16 +1055,16 @@
   .fact .k{font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-subtle)}
   .wave{margin-top:auto;padding-top:12px}
   .wave svg{display:block;width:100%;height:74px;overflow:visible}
-  .wave .line{fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round;
+  .wave .line{fill:none;stroke:var(--accent-linea);stroke-width:2;stroke-linecap:round;
     stroke-dasharray:1200;stroke-dashoffset:1200;animation:draw 2.2s var(--ease-out) .25s forwards}
   @keyframes draw{to{stroke-dashoffset:0}}
   .wave .area{fill:url(#waveFill);opacity:0;animation:fadein 1.4s ease .9s forwards}
   @keyframes fadein{to{opacity:1}}
-  .wave .today{fill:var(--accent)}
-  .wave .pulse{fill:var(--accent);opacity:.35;animation:pulse 2.6s ease-out infinite}
+  .wave .today{fill:var(--accent-linea)}
+  .wave .pulse{fill:var(--accent-linea);opacity:.35;animation:pulse 2.6s ease-out infinite}
   @keyframes pulse{0%{r:5;opacity:.5}70%{r:17;opacity:0}100%{r:17;opacity:0}}
   .days{display:flex;justify-content:space-between;gap:6px;margin-top:4px}
-  .day{flex:1;text-align:center;font-size:12px;color:var(--ink-subtle);padding:6px 2px;border-radius:10px;
+  .day{flex:1;text-align:center;font-size:12px;color:var(--ink-subtle);padding:6px 2px;border-radius:var(--r-md);
     transition:color 240ms,background 240ms}
   .day.is-today{color:var(--ink);font-weight:600;background:var(--panel-strong);border:1px solid var(--hairline)}
   .day small{display:block;font-family:var(--data);font-size:12px;color:var(--ink-subtle);margin-top:3px}
@@ -808,9 +1077,9 @@
   .countdown{display:grid;gap:11px;align-content:start}
   .countdown .top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
   .countdown .title{font-size:13.5px;font-weight:600}
-  .tag{font-family:var(--data);font-size:12px;letter-spacing:.06em;padding:4px 9px;border-radius:999px;
-    background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent);
-    border:1px solid color-mix(in srgb,var(--accent) 42%,transparent);white-space:nowrap}
+  .tag{font-family:var(--data);font-size:12px;letter-spacing:.06em;padding:4px 9px;border-radius:var(--r-xs);
+    background:color-mix(in srgb,var(--accent-linea) 20%,transparent);color:var(--accent-linea);
+    border:1px solid color-mix(in srgb,var(--accent-linea) 42%,transparent);white-space:nowrap}
   .metric{display:flex;align-items:flex-end;gap:10px}
   .metric .n{font-size:clamp(26px,min(7cqw + 8px,40cqh),52px);font-weight:700;line-height:.88;
     letter-spacing:-.042em;font-variant-numeric:tabular-nums}
@@ -824,7 +1093,18 @@
     background:linear-gradient(90deg,var(--accent-soft),var(--accent));
     transform:scaleX(.02);transform-origin:left;transition:transform 1.6s var(--ease-out) .4s}
   .ready .bar b{transform:none}
-  .legend{display:flex;justify-content:space-between;font-family:var(--data);font-size:12px;color:var(--ink-subtle)}
+  /* Los dos rótulos del pie compiten por la misma línea. Sin permiso para encoger, el
+     segundo se cortaba a media palabra; con él, cede y termina en puntos suspensivos. */
+  /* `min-width:0` en la propia fila, no solo en sus hijos: como ítem de rejilla su
+     mínimo automático es el del contenido, y sin esto la fila entera se sale de su
+     pista y los puntos suspensivos no llegan a activarse nunca. */
+  .legend{display:flex;justify-content:space-between;gap:10px;min-width:0;
+    font-family:var(--data);font-size:12px;color:var(--ink-subtle)}
+  .legend > *{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* la asignatura es el dato; la nota es el acompañamiento y cede primero, pero la
+     asignatura nunca se queda con más de la mitad de la línea */
+  .legend > :first-child{flex:0 0 auto;max-width:50%}
+  .legend > :last-child{flex:0 1 auto;text-align:right}
   @container (max-width: 230px){ .legend span:last-child,.tag{display:none} }
 
   .schedule{display:grid;gap:10px;align-content:start}
@@ -833,46 +1113,112 @@
   .class .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   @container (max-height: 190px){ .class{padding:2px 0 9px} .class .w{display:none} }
   .class:last-child{border-bottom:0;padding-bottom:2px}
-  .class .h{font-family:var(--data);font-size:12px;font-variant-numeric:tabular-nums;color:var(--accent);padding-top:1px}
+  .class .h{font-family:var(--data);font-size:12px;font-variant-numeric:tabular-nums;color:var(--accent-linea);padding-top:1px}
   .class .n{display:block;font-size:13.5px;line-height:1.3}
   .class .w{display:block;font-family:var(--data);font-size:12px;color:var(--ink-subtle);margin-top:3px}
   @container (max-width: 250px){ .class .w{display:none} }
 
-  .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;
-    grid-auto-rows:minmax(0,1fr);flex:1 1 auto;overflow:hidden}
-  .cal-grid .dow{text-align:center;font-size:11px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--ink-subtle);padding-bottom:8px}
-  .cell{min-height:0;border-radius:10px;display:flex;flex-direction:column;align-items:center;
-    justify-content:center;gap:4px;border:1px solid transparent;
-    font-family:var(--data);font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink-muted);
-    opacity:.3;transform:translateY(6px);animation:cellin 520ms var(--ease-out) forwards;
-    transition:background 240ms,border-color 240ms,color 240ms}
-  @keyframes cellin{to{opacity:1;transform:none}}
-  .cell.out{color:var(--ink-subtle);opacity:.35}
-  .cell.today{background:var(--panel-strong);border-color:var(--hairline);color:var(--ink);font-weight:500}
-  .cell .dots{display:flex;gap:3px;height:4px}
-  .cell .dots i{width:4px;height:4px;border-radius:999px;display:block}
-  .dot-entrega{background:var(--accent)}
-  .dot-correccion{background:var(--cool)}
-  .dot-clase{background:var(--ink-subtle)}
-  .cell.has-entrega{color:var(--accent);font-weight:600}
+  /* ── mini calendario del escritorio ──
+     La rejilla no se estira hasta llenar el widget: las filas tienen su alto y lo que
+     sobra va a los próximos eventos. Un calendario con celdas enormes no se lee mejor,
+     solo ocupa más. */
+  /* Con los números a su tamaño de verdad la rejilla pide más alto del que a veces hay.
+     Se le deja repartir lo disponible entre sus filas (`1fr`) en vez de exigir un mínimo
+     por fila: así encoge antes de empujar a los próximos eventos fuera del widget. */
+  .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;
+    grid-auto-rows:minmax(26px,1fr);flex:1 1 auto;min-height:0}
+  .cal-grid .dow{text-align:center;font-size:11.5px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-subtle);padding-bottom:9px}
+  .cell{
+    min-height:0;border-radius:var(--r-sm);display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:3px;border:1px solid transparent;padding:3px 0 4px;
+    animation:cellin 520ms var(--ease-out) backwards;
+    transition:background 240ms,border-color 240ms,color 240ms
+  }
+  @keyframes cellin{from{opacity:.3;transform:translateY(6px)}}
+  /* Los números son material: mono tabular, para que las columnas caigan a plomo aunque
+     cambien las cifras. El peso lo lleva el día, no el adorno. */
+  .cell .n{
+    font-family:var(--data);font-size:15.5px;font-variant-numeric:tabular-nums;
+    font-weight:500;letter-spacing:-.02em;color:var(--ink-muted);line-height:1
+  }
+  .cell.out .n{color:var(--ink-subtle);opacity:.45}
+  /* hoy: el azul del acento, en anillo y no en relleno, para no competir con los puntos */
+  .cell.today{
+    background:color-mix(in srgb,var(--accent) 45%,transparent);
+    border-color:color-mix(in srgb,var(--accent-linea) 55%,transparent)
+  }
+  .cell.today .n{color:var(--ink);font-weight:600}
+  /* el hueco de los puntos se reserva siempre: si no, las filas con evento son mas altas */
+  .cell .dots{display:flex;gap:3px;height:5px;align-items:center}
+  .cell .dots i{width:5px;height:5px;border-radius:999px;display:block}
+
+  /* ── próximos eventos, plegables ── */
+  .prox{flex:0 0 auto;margin-top:auto;padding-top:12px;min-width:0}
+  .prox-cab{
+    display:flex;align-items:center;gap:8px;width:100%;padding:7px 2px;
+    background:none;border:0;border-top:1px solid var(--hairline);cursor:pointer;
+    font:inherit;font-size:12px;letter-spacing:.02em;color:var(--ink-muted);
+    transition:color 220ms
+  }
+  .prox-cab:hover{color:var(--ink)}
+  .prox-n{
+    font-family:var(--data);font-size:11px;color:var(--ink-subtle);
+    margin-left:auto;font-variant-numeric:tabular-nums
+  }
+  .prox-flecha{flex:none;transition:transform 420ms var(--ease-out);color:var(--ink-subtle)}
+  .prox.on .prox-flecha{transform:rotate(180deg)}
+  .prox-cab:hover .prox-flecha{color:var(--accent-linea)}
+  /* De 0fr a 1fr: la unica manera de animar hasta "lo que mida el contenido" sin tocar
+     `height`, que obliga a recalcular la maquetacion en cada fotograma y ademas exige
+     saber de antemano cuanto mide el destino. */
+  .prox-caja{display:grid;grid-template-rows:0fr;transition:grid-template-rows 460ms var(--ease-out)}
+  .prox.on .prox-caja{grid-template-rows:1fr}
+  .prox-lista{overflow:hidden;min-height:0}
+  .prox-fila{
+    display:flex;align-items:center;gap:8px;padding:6px 2px;min-width:0;
+    border-bottom:1px solid color-mix(in srgb,var(--hairline) 50%,transparent)
+  }
+  .prox-fila:last-child{border-bottom:0}
+  .prox-pt{width:6px;height:6px;border-radius:999px;background:var(--tc);flex:none}
+  .prox-tit{
+    font-size:12.5px;color:var(--ink);min-width:0;flex:1 1 auto;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+  }
+  .prox-fecha{
+    font-family:var(--data);font-size:11px;color:var(--ink-muted);flex:none;
+    font-variant-numeric:tabular-nums
+  }
+  .prox-faltan{
+    font-family:var(--data);font-size:11px;color:var(--accent-linea);flex:none;
+    font-variant-numeric:tabular-nums;min-width:48px;text-align:right
+  }
+  .prox-vacio{font-size:12px;color:var(--ink-subtle);padding:8px 2px;margin:0}
+
   .cal-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--ink-subtle)}
   .cal-legend span{display:flex;align-items:center;gap:6px}
   .cal-legend i{width:6px;height:6px;border-radius:999px;display:block}
-  @container (max-width: 300px){ .cal-legend{display:none} .cell .dots{height:3px} }
+  @container (max-width: 300px){ .cal-legend{display:none} .prox-fecha{display:none} }
   @container (max-width: 330px){ .ir-cal span,.ir-cal{font-size:0} .ir-cal svg{width:15px;height:15px} }
   @container (max-height: 260px){ .cal-legend{display:none} }
+  /* con poco alto, los puntos y la lista sobran antes que la rejilla */
+  @container (max-height: 200px){ .prox{display:none} }
   @container (max-height: 150px){ .cell .dots{display:none} .cal-grid .dow{padding-bottom:3px} }
 
-  .todo{display:grid;gap:2px}
-  .task{display:grid;grid-template-columns:20px 1fr;gap:10px;align-items:start;
-    padding:8px 7px;border-radius:10px;cursor:pointer;transition:background 240ms;
+  /* `align-content:start` es la diferencia entre dos tareas y una lista de dos tareas:
+     sin él, las filas se reparten todo el alto del widget y dos elementos ocupan la
+     pantalla entera. Con él toman su alto natural y el hueco sobrante queda abajo,
+     esperando a las siguientes. */
+  .todo{display:grid;gap:2px;align-content:start;grid-auto-rows:max-content;
+    min-height:0;overflow-y:auto;overscroll-behavior:contain}
+  .task{display:grid;grid-template-columns:20px 1fr auto;gap:10px;align-items:center;
+    padding:8px 7px;border-radius:var(--r-md);cursor:pointer;transition:background 240ms;
     border:0;background:none;text-align:left;width:100%;color:inherit;font:inherit}
   .task:hover{background:var(--panel)}
-  .box{width:18px;height:18px;border-radius:6px;border:1.5px solid var(--hairline-lit);
+  .box{width:18px;height:18px;border-radius:var(--r-xs);border:1.5px solid var(--hairline-lit);
     display:grid;place-items:center;margin-top:1px;transition:background 240ms,border-color 240ms}
   .box svg{opacity:0;transform:scale(.6);transition:opacity 220ms,transform 260ms var(--ease-out);color:var(--on-accent)}
-  .task[aria-pressed="true"] .box{background:var(--accent);border-color:var(--accent)}
+  .task[aria-pressed="true"] .box{background:var(--accent);border-color:var(--accent-linea)}
   .task[aria-pressed="true"] .box svg{opacity:1;transform:none}
   .task .t{font-size:13.5px;line-height:1.4;transition:color 240ms}
   .task .m{display:block;font-family:var(--data);font-size:12px;color:var(--ink-subtle);margin-top:3px}
@@ -888,7 +1234,7 @@
   .ring{width:36px;height:36px;transform:rotate(-90deg)}
   .ring circle{fill:none;stroke-width:3.5;stroke-linecap:round}
   .ring .track{stroke:var(--hairline)}
-  .ring .val{stroke:var(--accent);stroke-dasharray:120;stroke-dashoffset:120;
+  .ring .val{stroke:var(--accent-linea);stroke-dasharray:120;stroke-dashoffset:120;
     transition:stroke-dashoffset 1.5s var(--ease-out) .5s}
   .ready .ring .val{stroke-dashoffset:var(--off,60)}
   .course .name{display:block;font-size:13.5px;line-height:1.3}
@@ -905,7 +1251,7 @@
     background:linear-gradient(180deg,var(--cool),color-mix(in srgb,var(--cool) 20%,transparent));
     transform:scaleY(.06);transform-origin:bottom;transition:transform 1.1s var(--ease-out)}
   .ready .bars div{transform:none}
-  .bars div.peak{background:linear-gradient(180deg,var(--accent),color-mix(in srgb,var(--accent) 18%,transparent))}
+  .bars div.peak{background:linear-gradient(180deg,var(--accent),color-mix(in srgb,var(--accent-linea) 18%,transparent))}
   .scale{flex:none;display:flex;justify-content:space-between;font-family:var(--data);font-size:12px;
     color:var(--ink-subtle);margin-top:10px}
   @container (max-height: 120px){ .scale{display:none} }
@@ -916,7 +1262,7 @@
   .dial{width:46px;height:46px;flex:none}
   .dial circle{fill:none;stroke-width:3}
   .dial .t1{stroke:var(--hairline)}
-  .dial .v1{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:160;stroke-dashoffset:160;
+  .dial .v1{stroke:var(--accent-linea);stroke-linecap:round;stroke-dasharray:160;stroke-dashoffset:160;
     transition:stroke-dashoffset 1.8s var(--ease-out) .6s}
   .ready .dial .v1{stroke-dashoffset:52}
   @container (max-width: 220px){ .bluehour .c,.dial{display:none} }
@@ -936,14 +1282,30 @@
   @media (max-width:700px){
     .app{grid-template-columns:1fr}
     .rail{flex-direction:row;justify-content:space-between;padding:10px 12px;border-right:0;
-      border-bottom:1px solid var(--hairline);position:static;height:auto}
+      position:static;height:auto}
     .brand{margin:0}
     .rail .spacer{display:none}
     .nav-btn{width:34px;height:34px}
+    /* De pie el raíl es una columna y el bulto sale por su derecha; tumbado es una barra
+       superior y sale por abajo. Mismo líquido, eje girado: lo único que cambia es por
+       dónde asoma la gota y en qué dirección viaja. */
+    .rail-gota,.rail-roce{
+      right:auto;left:0;top:auto;bottom:-13px;
+      transform:translateX(-50%) translateX(var(--p));
+    }
+    .rail-gota.lenta{bottom:-10px}
+    .rail-roce{transform:translateX(-50%) translateX(var(--p)) scale(.35)}
+    .rail-roce.on{transform:translateX(-50%) translateX(var(--p)) scale(1)}
+    .rail-fluido{filter:url(#gooey) drop-shadow(0 1.5px 0 var(--hairline-lit)) drop-shadow(0 0 10px rgba(0,0,0,.45))}
+    .nav-btn[aria-current="page"]{transform:translateY(3px)}
     .body{padding:14px 14px 20px}
     .day small{display:none}
   }
 
+  /* Quien pide menos movimiento recibe el mismo diseño sin desplazamientos ni
+     desenfoques: lo que se anula es el viaje, nunca el estado final. Las esperas que
+     el JavaScript cronometra (el relevo del calendario) siguen corriendo igual, así
+     que no hace falta tocarlas aquí. */
   @media (prefers-reduced-motion: reduce){
     .wave .line,.wave .area,.pulse,.rise,.cell{animation:none}
     .wave .line{stroke-dashoffset:0}.wave .area{opacity:1}
@@ -951,4 +1313,1157 @@
     .bar b,.ring .val,.bars div,.dial .v1,.box svg{transition:none}
     .bar b,.bars div{transform:none}
     .widget.settling{transition:none}
+    .rail-gota,.rail-roce{transition:none}
+    /* el agua se queda quieta: el gradiente sigue ahí, deja de girar */
+    .rail-burbuja,.rail-gota,.rail-roce{animation:none}
+
+    .canvas.posado .widget,.col-sem,.cal-panel,.tarea-sem{animation:none}
+    .canvas.posado .widget,.col-sem,.cal-panel,.tarea-sem{opacity:1;transform:none;filter:none}
+    .cal-panel.sale{opacity:0}
+    .widget::after{transition:none}
+    .tarea-sem:hover{transform:none}
+    .ts-marca:hover{transform:none}
+  }
+
+
+  /* ── widget sin marco ──
+     El contenido flota directamente sobre la fotografía: sin cristal, sin borde y
+     sin sombra propia. El texto gana un halo para no perderse sobre la imagen. */
+  .widget.desnudo{
+    background:none;border-color:transparent;box-shadow:none;
+    backdrop-filter:none;-webkit-backdrop-filter:none
+  }
+  .widget.desnudo > .inner{text-shadow:var(--halo,0 1px 3px rgba(0,0,0,.6))}
+  .editing .widget.desnudo{border-color:color-mix(in srgb,var(--accent-linea) 30%,transparent);border-style:dashed}
+  .widget.desnudo .head,.widget.desnudo .class,.widget.desnudo .todo-foot,
+  .widget.desnudo .bars,.widget.desnudo .cal-grid .dow{border-color:transparent}
+
+
+  /* ── conmutador de calendario ──
+     Dos modos que no compiten: el mes enseña eventos, la semana enseña tareas.
+     La píldora se desliza; el panel entra y sale con desenfoque. */
+  .seg{
+    position:relative;display:inline-flex;padding:3px;border-radius:var(--r-md);
+    background:var(--panel);border:1px solid var(--hairline);
+    backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%)
+  }
+  .seg-pill{
+    position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:var(--r-sm);
+    background:var(--accent);
+    transition:transform 420ms var(--ease-out);pointer-events:none
+  }
+  .seg button{
+    position:relative;z-index:1;min-width:96px;height:34px;padding:0 18px;border:0;background:none;
+    font:inherit;font-size:13.5px;font-weight:500;color:var(--ink-muted);cursor:pointer;border-radius:var(--r-sm);
+    transition:color 300ms var(--ease-soft)
+  }
+  .seg button[aria-selected=true]{color:var(--on-accent)}
+  .seg-nota{font-size:12.5px;color:var(--ink-subtle)}
+
+  /* Entra desde el desenfoque y sale hacia él. La salida es más corta que la entrada:
+     lo que se va no merece el mismo tiempo que lo que llega. `forwards` sostiene el
+     último fotograma para que el panel no parpadee de vuelta antes de desmontarse. */
+  .cal-panel{animation:calIn 460ms var(--ease-out)}
+  @keyframes calIn{from{opacity:0;transform:translateY(12px) scale(.994);filter:blur(5px)}}
+  .cal-panel.sale{animation:calOut 200ms var(--ease-soft) forwards}
+  @keyframes calOut{to{opacity:0;transform:translateY(-8px) scale(.996);filter:blur(4px)}}
+
+  .cal-cab{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:14px}
+
+  /* ── semana de tareas ── */
+  /* La semana es una hoja de planos: siete cajetines separados por filete, no siete
+     tarjetas flotando. El filete lo pone la propia rejilla con un gradiente repetido,
+     así que añadir o quitar columnas nunca deja un separador huérfano. */
+  .semana-rejilla{
+    flex:1 1 auto;min-height:0;overflow:hidden;position:relative;
+    display:grid;grid-template-columns:repeat(7,minmax(0,1fr));
+    border-radius:var(--r-xl);padding:10px;
+    background:rgba(var(--panel-rgb),var(--suelo,var(--opa)));
+    border:1px solid var(--hairline);
+    backdrop-filter:blur(22px) saturate(145%);-webkit-backdrop-filter:blur(22px) saturate(145%)
+  }
+  .semana-rejilla::before{
+    content:"";position:absolute;inset:10px;pointer-events:none;border-radius:var(--r-md);
+    background:repeating-linear-gradient(90deg,
+      transparent 0 calc(100%/7 - 1px),
+      color-mix(in srgb,var(--hairline) 85%,transparent) calc(100%/7 - 1px) calc(100%/7));
+    /* el último filete cae justo en el borde; se recorta para no doblar la línea */
+    -webkit-mask-image:linear-gradient(90deg,#000 0 calc(100% - 1px),transparent calc(100% - 1px));
+    mask-image:linear-gradient(90deg,#000 0 calc(100% - 1px),transparent calc(100% - 1px));
+  }
+  .col-sem{
+    display:flex;flex-direction:column;gap:6px;min-width:0;padding:4px 7px;
+    transition:background 300ms var(--ease-soft);
+    animation:colIn 560ms var(--ease-out) backwards;
+    animation-delay:calc(var(--d,0) * 38ms);
+  }
+  @keyframes colIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  /* el fin de semana se marca como en un plano: tramado, no relleno */
+  .col-sem.finde{
+    background:repeating-linear-gradient(135deg,
+      color-mix(in srgb,var(--hairline) 26%,transparent) 0 1px,
+      transparent 1px 7px);
+  }
+  /* hoy recibe luz de arriba, como si la ventana cayera sobre esa columna */
+  .col-sem.es-hoy{
+    background:linear-gradient(180deg,
+      color-mix(in srgb,var(--accent-linea) 17%,transparent),
+      color-mix(in srgb,var(--accent-linea) 3%,transparent) 55%,
+      transparent);
+    box-shadow:inset 0 1px 0 color-mix(in srgb,var(--accent-linea) 55%,transparent);
+  }
+  .col-sem:hover:not(.es-hoy){background:color-mix(in srgb,var(--ink) 5%,transparent)}
+  /* El cajetín del día: rótulo arriba, contenido en medio, recuento abajo. Toda la
+     columna es un destino — cabecera, tareas y pie llevan al mismo día. */
+  .col-cab{
+    display:flex;align-items:baseline;justify-content:center;gap:6px;flex:none;
+    padding:5px 2px 7px;background:none;border:0;cursor:pointer;color:inherit;
+    border-bottom:1px solid var(--hairline);
+    transition:border-color 220ms
+  }
+  .col-cab:hover{border-color:var(--hairline-lit)}
+  .col-cab .dw{
+    font-size:11.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-subtle);transition:color 220ms
+  }
+  .col-cab .dn{
+    font-family:var(--data);font-size:19px;font-weight:500;letter-spacing:-.025em;
+    font-variant-numeric:tabular-nums;color:var(--ink-muted);transition:color 220ms
+  }
+  .col-cab:hover .dw,.col-cab:hover .dn{color:var(--ink)}
+  .es-hoy .col-cab{border-color:color-mix(in srgb,var(--accent-linea) 40%,transparent)}
+  .es-hoy .col-cab .dw{color:var(--accent-soft)}
+  .es-hoy .col-cab .dn{color:var(--accent-linea);font-weight:700}
+
+  .col-tareas{display:flex;flex-direction:column;gap:5px;flex:1 1 auto;min-height:0;overflow-y:auto;padding:4px 0}
+
+  .col-pie{
+    display:flex;align-items:center;justify-content:center;gap:5px;flex:none;
+    padding:6px 2px 2px;background:none;border:0;cursor:pointer;
+    font-family:var(--data);font-size:10.5px;font-variant-numeric:tabular-nums;
+    color:var(--ink-subtle);transition:color 200ms
+  }
+  .col-pie:hover{color:var(--accent-linea)}
+  .col-pie .pt{width:4px;height:4px;border-radius:999px;background:currentColor;flex:none}
+  /* el "+ tarea" solo se ofrece cuando la columna está a mano: nunca compite con el contenido */
+  .col-pie .mas{opacity:0;transition:opacity 200ms}
+  .col-sem:hover .col-pie .mas,.col-pie:focus-visible .mas{opacity:1}
+
+  .tarea-sem{
+    display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:var(--r-md);cursor:pointer;min-width:0;
+    background:color-mix(in srgb,var(--tc) 17%,transparent);
+    border:1px solid color-mix(in srgb,var(--tc) 36%,transparent);
+    animation:tareaIn 420ms var(--ease-out) backwards;
+    transition:transform 220ms var(--ease-soft),border-color 220ms,box-shadow 220ms
+  }
+  .tarea-sem:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--tc) 70%,transparent);
+    box-shadow:0 10px 22px -14px rgba(0,0,0,.6)}
+  .tarea-sem.hecha{opacity:.5}
+  .tarea-sem.hecha .ts-tit{text-decoration:line-through;text-decoration-thickness:1px}
+  .ts-marca{
+    width:22px;height:22px;flex:none;border-radius:var(--r-sm);display:grid;place-items:center;cursor:pointer;
+    background:color-mix(in srgb,var(--tc) 26%,transparent);border:0;color:var(--tc);
+    transition:background 200ms,transform 200ms var(--ease-soft)
+  }
+  .ts-marca:hover{transform:scale(1.08);background:color-mix(in srgb,var(--tc) 45%,transparent)}
+  .tarea-sem.hecha .ts-marca{background:var(--tc);color:var(--canvas)}
+  /* el cuerpo se queda con el espacio libre para que el nivel de prioridad caiga al
+     final de la fila y no pegado al texto, que lo hacia parecer parte del titulo */
+  .ts-cuerpo{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:1px}
+  .tarea-sem > .nivel{margin-left:auto;flex:none}
+  .ts-tit{font-size:12px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ts-hora{font-family:var(--data);font-size:10.5px;color:var(--ink-subtle)}
+  .ts-prio{width:5px;height:5px;border-radius:999px;background:var(--c-rojo);flex:none;margin-left:auto}
+
+  @container (max-width: 120px){ .ts-cuerpo{display:none} }
+
+  @media (max-width:900px){
+    .semana-rejilla{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .col-tareas{min-height:100px}
+  }
+  @media (max-width:560px){ .semana-rejilla{grid-template-columns:1fr} }
+
+
+  /* ═══════════════════════════════════════════════════════
+     12 · DIANAS TÁCTILES
+     ═══════════════════════════════════════════════════════
+     Un ratón apunta al píxel; un pulgar no. En escritorio los controles se quedan como
+     están —engordarlos ahí solo roba aire a la composición—, y a partir de la primera
+     anchura donde la pantalla es táctil suben a 44 px, que es el ancho real de una yema.
+     Lo que crece es la zona que recibe el toque, no el dibujo: el icono y el texto no se
+     mueven de sitio, así que la interfaz se ve idéntica y responde mejor. */
+  @media (max-width: 900px){
+    .nav-btn,.icon-btn{width:44px;height:44px}
+    /* el menu del widget solo aparece en modo edicion, pero cuando aparece hay que poder
+       acertarle: el cuadrado dibujado sigue midiendo 26 px y la zona sensible crece fuera */
+    .menu-btn{position:relative}
+    .menu-btn::after{content:"";position:absolute;inset:-9px;border-radius:var(--r-md)}
+    .seg button{height:44px}
+    .seg{padding:4px}
+
+    /* El "+" de cada celda del mes no puede ocupar 44 px: la celda entera mide poco más.
+       En táctil no hay hover que lo revele, así que desaparece y el gesto queda claro —
+       tocar el día abre su agenda, que es donde se crea de verdad. */
+    .mas-ev{display:none}
+
+    /* La casilla de una tarea es lo que más se falla al tocar: la zona sube a 44 px hacia
+       fuera con un pseudo-elemento, sin tocar el cuadrado dibujado ni el ritmo de la lista. */
+    .ts-marca{position:relative}
+    .ts-marca::after{content:"";position:absolute;inset:-11px;border-radius:var(--r-lg)}
+  }
+
+
+  /* ═══════════════════════════════════════════════════════
+     13 · PUENTE CON SHADCN
+     ═══════════════════════════════════════════════════════
+     Los botones vienen de shadcn/ui y sacan su color de los tokens de la casa, así que
+     aquí solo viven los matices que su sistema de variantes no cubre. Nada de repintar
+     un botón entero: si hace falta eso, es que la variante elegida era la equivocada. */
+
+  /* Un filtro activo no es una acción: se marca con el contorno teñido, nunca con relleno
+     sólido, que está reservado a la única acción principal de cada pantalla. */
+  .filtro-on{
+    border-color:color-mix(in srgb,var(--accent-linea) 55%,transparent);
+    color:var(--accent-linea);
+  }
+  .filtro-on:hover{border-color:var(--accent-linea)}
+
+  /* el punto de color del filtro de prioridad */
+  .filtros .pt{width:7px;height:7px;border-radius:999px;flex:none;display:block}
+  .filtros .sep{flex:1}
+  .filtros{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+
+
+  /* ── el estado de una tarea, en su formulario ──
+     El mismo campo que alternan la casilla de la semana y la de la agenda, aquí con
+     nombre: marcarla en un sitio la marca en todos, porque no hay dos estados. */
+  .check-tarea{
+    display:inline-flex;align-items:center;gap:10px;align-self:flex-start;
+    padding:8px 14px 8px 9px;border-radius:var(--r-sm);cursor:pointer;
+    background:var(--panel);border:1px solid var(--hairline);color:var(--ink-muted);
+    font:inherit;font-size:13.5px;
+    transition:color 200ms,border-color 200ms,background 200ms
+  }
+  .check-tarea:hover{border-color:var(--hairline-lit);color:var(--ink)}
+  .check-caja{
+    width:22px;height:22px;border-radius:var(--r-xs);flex:none;display:grid;place-items:center;
+    border:1px solid var(--hairline-lit);color:transparent;
+    transition:background 220ms var(--ease-soft),border-color 220ms,color 220ms
+  }
+  .check-tarea.on{color:var(--ink);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+  .check-tarea.on .check-caja{background:var(--ok);border-color:var(--ok);color:var(--canvas-deep)}
+
+
+  /* ── prioridad en tres líneas ──
+     Trazos paralelos del mismo largo, encendidos de abajo arriba. Lo que dice el nivel
+     es cuántos están encendidos, no su longitud: por eso se lee igual sin color y a
+     tamaño diminuto. Los apagados siguen visibles, tenues, porque un hueco vacío no
+     informa de que existe un escalón por encima. */
+  .nivel{
+    display:inline-flex;flex-direction:column;justify-content:center;gap:3px;
+    width:var(--w,13px);flex:none
+  }
+  /* 1 px exacto, no 1.5: un grosor fraccionario lo redondea el navegador segun donde
+     caiga cada linea, asi que unas salian de 1 px y otras de 2 y el nivel naranja se
+     veia mas gordo que el rojo. Con un entero las tres son identicas siempre. */
+  .nivel i{
+    height:1px;border-radius:0;display:block;width:100%;
+    background:color-mix(in srgb,var(--ink-subtle) 40%,transparent);
+    transition:background 220ms,box-shadow 220ms
+  }
+  .nivel[data-p="baja"] i.on{background:var(--c-menta)}
+  .nivel[data-p="media"] i.on{background:var(--c-ambar)}
+  /* solo la alta se permite brillar: si brillaran las tres, ninguna destacaria */
+  .nivel[data-p="alta"] i.on{
+    background:var(--c-rojo);
+    box-shadow:0 0 6px -1px color-mix(in srgb,var(--c-rojo) 70%,transparent)
+  }
+  /* texto solo para quien escucha la página */
+  .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+    clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+  /* ── asignatura y progreso en la hoja ── */
+  .asig-fila{display:flex;align-items:center;gap:10px}
+  .asig-fila input{flex:1 1 auto;min-width:0}
+  .asig-muestra{
+    width:22px;height:22px;border-radius:999px;flex:none;background:var(--cc);
+    box-shadow:0 0 0 1px color-mix(in srgb,var(--cc) 55%,transparent),0 0 12px -2px var(--cc);
+    transition:background 300ms,box-shadow 300ms
+  }
+  .prog-btn{
+    display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:var(--r-sm);
+    background:var(--panel);border:1px solid var(--hairline);color:var(--ink-muted);
+    font:inherit;font-size:13px;cursor:pointer;
+    transition:color 200ms,border-color 200ms,background 200ms
+  }
+  .prog-btn:hover{color:var(--ink);border-color:var(--hairline-lit)}
+  .prog-btn.on{color:var(--ink);border-color:color-mix(in srgb,var(--accent-linea) 50%,transparent);
+    background:color-mix(in srgb,var(--accent) 28%,var(--panel))}
+  .prog-btn.on[data-g="hecha"]{border-color:color-mix(in srgb,var(--ok) 50%,transparent);
+    background:color-mix(in srgb,var(--ok) 20%,var(--panel))}
+  .aviso-retraso{
+    margin:9px 0 0;font-size:12.5px;line-height:1.45;color:var(--c-naranja);
+    padding:8px 11px;border-radius:var(--r-sm);
+    background:color-mix(in srgb,var(--c-naranja) 12%,transparent);
+    border:1px solid color-mix(in srgb,var(--c-naranja) 30%,transparent)
+  }
+  .aviso-retraso b{color:var(--ink);font-weight:600}
+
+
+  /* ── el progreso, visible en la tarea ──
+     Cada estado se distingue por algo más que el color: en curso lleva un filete lateral
+     vivo, hecha se atenúa y se tacha, y retrasada se tiñe de naranja. Retrasada no la
+     marca nadie: sale sola cuando la hora de fin ya pasó y la tarea sigue abierta. */
+  .tarea.prog-en-curso,.tarea-sem.prog-en-curso{
+    box-shadow:inset 3px 0 0 var(--tc,var(--accent-linea))
+  }
+  .tarea.prog-retrasada,.tarea-sem.prog-retrasada{
+    border-color:color-mix(in srgb,var(--c-naranja) 55%,transparent);
+    background:color-mix(in srgb,var(--c-naranja) 14%,transparent)
+  }
+  .tarea.prog-retrasada .ts-hora,.tarea-sem.prog-retrasada .ts-hora{color:var(--c-naranja)}
+  .tarea-sem.prog-hecha,.tarea.prog-hecha{opacity:.5}
+  .tarea-sem.prog-hecha .ts-tit{text-decoration:line-through;text-decoration-thickness:1px}
+
+
+  /* pasar de día desde el widget de tareas, sin salir del escritorio */
+  .dia-paso{display:inline-flex;align-items:center;gap:6px}
+  .dia-paso button{
+    width:24px;height:24px;border-radius:var(--r-xs);display:grid;place-items:center;
+    background:none;border:1px solid transparent;color:var(--ink-subtle);cursor:pointer;
+    transition:color 200ms,border-color 200ms,background 200ms
+  }
+  .dia-paso button:hover{color:var(--ink);border-color:var(--hairline);background:var(--panel)}
+  @container (max-width: 210px){ .dia-paso button{display:none} }
+
+
+  /* ═══════════════════════════════════════════════════════
+     14 · HORARIO DE CLASES
+     ═══════════════════════════════════════════════════════
+     Cinco columnas y una regla de horas a la izquierda. Las clases se posicionan por su
+     hora real, no por su orden en la lista, así que una clase que empiece y media cae
+     donde debe y los huecos entre clases se ven como lo que son: huecos. */
+  .hor-panel{
+    --suelo:max(var(--opa),.66);
+    flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;
+    border-radius:var(--r-xl);padding:14px 16px 18px;
+    background:rgba(var(--panel-rgb),var(--suelo));
+    border:1px solid var(--hairline);
+    backdrop-filter:blur(22px) saturate(145%);-webkit-backdrop-filter:blur(22px) saturate(145%)
+  }
+  .hor-rejilla{
+    display:grid;grid-template-columns:54px repeat(5,minmax(0,1fr));gap:10px;
+    min-width:660px
+  }
+  /* la regla de horas: alineada con las líneas de las pistas, no con el texto */
+  .hor-horas{position:relative;padding-top:34px}
+  .hor-hora{
+    position:absolute;right:8px;transform:translateY(-50%);
+    font-family:var(--data);font-size:12px;font-variant-numeric:tabular-nums;
+    color:var(--ink-subtle);letter-spacing:-.02em
+  }
+
+  .hor-dia{display:flex;flex-direction:column;min-width:0}
+  .hor-cab{
+    height:34px;display:flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-subtle);border-bottom:1px solid var(--hairline)
+  }
+  /* hoy recibe la misma luz que en el resto de la aplicación: coherencia por encima de novedad */
+  .hor-dia.es-hoy .hor-cab{color:var(--accent-linea);border-color:color-mix(in srgb,var(--accent-linea) 45%,transparent)}
+  .hor-dia.es-hoy .hor-pista{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+
+  .hor-pista{
+    position:relative;flex:1 1 auto;border-radius:var(--r-md);
+    height:calc(var(--horas) * var(--alto-hora) + 12px)
+  }
+  .hor-linea{
+    position:absolute;left:0;right:0;height:1px;
+    background:color-mix(in srgb,var(--hairline) 70%,transparent)
+  }
+
+  .hor-clase{
+    position:absolute;left:2px;right:2px;overflow:hidden;
+    display:flex;flex-direction:column;gap:2px;padding:8px 10px;
+    border-radius:var(--r-md);
+    background:color-mix(in srgb,var(--tc) 16%,transparent);
+    border:1px solid color-mix(in srgb,var(--tc) 38%,transparent);
+    /* el filete de color a la izquierda es lo que identifica la asignatura de un vistazo */
+    box-shadow:inset 3px 0 0 var(--tc);
+    transition:background 220ms,border-color 220ms,transform 220ms var(--ease-soft)
+  }
+  .hor-clase:hover{
+    background:color-mix(in srgb,var(--tc) 26%,transparent);
+    border-color:color-mix(in srgb,var(--tc) 60%,transparent);
+    transform:translateY(-1px)
+  }
+  /* la clase que está ocurriendo ahora: no hace falta buscar la hora en el reloj */
+  .hor-clase.ahora{
+    border-color:var(--tc);
+    box-shadow:inset 3px 0 0 var(--tc),0 0 0 1px color-mix(in srgb,var(--tc) 40%,transparent),
+               0 10px 26px -14px var(--tc)
+  }
+  .hor-rango{
+    font-family:var(--data);font-size:11px;font-variant-numeric:tabular-nums;
+    color:var(--tc);letter-spacing:-.01em
+  }
+  .hor-nombre{
+    font-size:13px;font-weight:500;line-height:1.25;color:var(--ink);
+    overflow:hidden;text-overflow:ellipsis
+  }
+  .hor-meta{
+    display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-subtle);
+    overflow:hidden;white-space:nowrap;text-overflow:ellipsis
+  }
+  .hor-cod{
+    font-family:var(--data);font-size:10.5px;padding:1px 5px;border-radius:var(--r-xs);
+    background:color-mix(in srgb,var(--tc) 22%,transparent);color:var(--ink-muted);flex:none
+  }
+  .hor-aula{
+    margin-top:auto;display:flex;align-items:center;gap:5px;
+    font-size:11px;color:var(--ink-subtle);
+    overflow:hidden;white-space:nowrap;text-overflow:ellipsis
+  }
+  .hor-aula.online{color:var(--tc)}
+
+  .hor-leyenda{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .hor-chip{
+    display:inline-flex;align-items:center;gap:7px;padding:5px 11px 5px 8px;
+    border-radius:var(--r-sm);font-size:12px;color:var(--ink-muted);
+    background:var(--panel);border:1px solid var(--hairline)
+  }
+  .hor-chip i{width:8px;height:8px;border-radius:999px;background:var(--tc);flex:none}
+  .hor-chip b{font-weight:500;color:var(--ink)}
+
+
+  /* el nivel de prioridad vive siempre en el extremo de su fila, nunca junto al texto:
+     pegado al título se lee como parte de él en vez de como un dato aparte */
+  .tarea > .nivel{margin-left:auto;flex:none;align-self:center}
+  .task > .nivel{justify-self:end}
+
+
+  /* ═══════════════════════════════════════════════════════
+     15 · CONTROLES DE SHADCN, CON EL CRITERIO DE LA CASA
+     ═══════════════════════════════════════════════════════
+     Los componentes vienen tematizados solos, porque sus tokens apuntan a los nuestros.
+     Aquí solo va lo que su sistema genérico no puede saber: que las horas son datos y
+     van en mono tabular, que un panel flotante sobre esta fotografía necesita cristal, y
+     cómo entra y sale cada cosa. Nada de repintar un componente entero — si hiciera
+     falta eso, la variante elegida sería la equivocada. */
+
+  /* ── el disparador de un desplegable ── */
+  .sel-hora{
+    flex:1 1 auto;min-width:0;height:40px;padding:0 11px;
+    border-radius:var(--r-sm);border:1px solid var(--hairline);
+    background:var(--panel);color:var(--ink);
+    font-family:var(--data);font-size:14px;font-variant-numeric:tabular-nums;
+    letter-spacing:-.02em;
+    transition:border-color 200ms,background 200ms
+  }
+  .sel-hora:hover{border-color:var(--hairline-lit);background:var(--panel-strong)}
+  .sel-hora[data-state="open"]{
+    border-color:color-mix(in srgb,var(--accent-linea) 55%,transparent);
+    background:var(--panel-strong)
+  }
+
+  /* ── la lista desplegada ──
+     Cristal de verdad, no un panel opaco: flota sobre la fotografía igual que todo lo
+     demás, y con `backdrop-filter` la escena sigue estando detrás en vez de taparse. */
+  .sel-hora-lista{
+    background:rgba(var(--panel-strong-rgb),.92);
+    backdrop-filter:blur(22px) saturate(150%);-webkit-backdrop-filter:blur(22px) saturate(150%);
+    border:1px solid var(--hairline);border-radius:var(--r-md);
+    box-shadow:0 22px 50px -22px rgba(0,0,0,.8);
+    max-height:min(320px,60vh)
+  }
+  .sel-hora-lista [data-slot="select-item"]{
+    font-family:var(--data);font-size:13.5px;font-variant-numeric:tabular-nums;
+    letter-spacing:-.02em;color:var(--ink-muted);border-radius:var(--r-xs);
+    padding-block:7px
+  }
+  /* la hora en punto ancla la lista: los cuartos se leen como variaciones suyas */
+  .sel-hora-lista .en-punto{color:var(--ink);font-weight:500}
+  .sel-hora-lista [data-slot="select-item"][data-state="checked"]{
+    background:color-mix(in srgb,var(--accent) 40%,transparent);color:var(--ink)
+  }
+
+  /* ── el selector de fecha ── */
+  .sel-fecha{
+    display:inline-flex;align-items:center;gap:9px;margin-top:9px;
+    height:40px;padding:0 14px 0 11px;border-radius:var(--r-sm);
+    border:1px solid var(--hairline);background:var(--panel);color:var(--ink-muted);
+    font:inherit;font-size:13.5px;cursor:pointer;
+    transition:color 200ms,border-color 200ms,background 200ms
+  }
+  .sel-fecha:hover{color:var(--ink);border-color:var(--hairline-lit);background:var(--panel-strong)}
+  .sel-fecha svg{color:var(--accent-linea);flex:none}
+  .sel-fecha-caja{
+    width:auto;padding:10px;
+    background:rgba(var(--panel-strong-rgb),.94);
+    backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%);
+    border:1px solid var(--hairline);border-radius:var(--r-lg);
+    box-shadow:0 26px 60px -24px rgba(0,0,0,.85)
+  }
+  /* los números del calendario emergente siguen la misma regla que los de los otros:
+     mono tabular, para que las columnas caigan a plomo */
+  .sel-fecha-caja [data-slot="calendar"] button,
+  .sel-fecha-caja [data-slot="calendar"] td{
+    font-family:var(--data);font-variant-numeric:tabular-nums;letter-spacing:-.02em
+  }
+
+  /* ── el deslizador ── */
+  .opa-slider{flex:1 1 auto;min-width:90px}
+  .opa-slider [data-slot="slider-track"]{
+    height:4px;background:color-mix(in srgb,var(--hairline) 140%,transparent);border-radius:999px
+  }
+  .opa-slider [data-slot="slider-range"]{background:var(--accent-linea)}
+  .opa-slider [data-slot="slider-thumb"]{
+    width:15px;height:15px;border:2px solid var(--panel-strong);background:var(--accent-linea);
+    box-shadow:0 2px 8px -2px rgba(0,0,0,.7);
+    transition:transform 180ms var(--ease-soft),box-shadow 180ms
+  }
+  .opa-slider [data-slot="slider-thumb"]:hover{transform:scale(1.15)}
+  /* el anillo de foco sale del token de la casa, no del gris de serie */
+  .opa-slider [data-slot="slider-thumb"]:focus-visible{
+    outline:2px solid var(--accent-linea);outline-offset:3px
+  }
+
+
+  /* "Sin empezar" partido en dos líneas hace el botón más alto que sus vecinos y la fila
+     deja de leerse como un grupo de tres opciones equivalentes. */
+  .prog-btn,.prio-btn{white-space:nowrap}
+  .prios{display:flex;gap:8px;flex-wrap:wrap}
+  .prios > *{flex:1 1 auto;justify-content:center}
+
+  /* el hueco de la hora cuando el evento es de todo el día: mantiene la fila estable */
+  .sel-hora.vacio{
+    display:inline-flex;align-items:center;justify-content:flex-start;
+    color:var(--ink-subtle);opacity:.55;pointer-events:none
+  }
+
+
+  /* ── el desplegable de asignatura ──
+     Cada opción lleva su punto de color, que es el mismo que tendrá la tarea en el
+     calendario y el mismo que usa esa asignatura en el horario. Elegirla aquí es ver
+     desde el primer momento de qué color va a salir. */
+  .sel-asig{
+    width:100%;height:46px;padding:0 12px;
+    border-radius:var(--r-sm);border:1px solid var(--hairline);
+    background:rgba(255,255,255,.045);color:var(--ink);
+    font:inherit;font-size:14.5px;
+    transition:border-color 200ms,background 200ms,box-shadow 200ms
+  }
+  .sel-asig:hover{background:rgba(255,255,255,.07);border-color:var(--hairline-lit)}
+  .sel-asig[data-state="open"]{
+    border-color:color-mix(in srgb,var(--accent-linea) 60%,transparent);
+    background:rgba(255,255,255,.08);
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--accent-linea) 16%,transparent)
+  }
+  .sel-asig-lista{
+    background:rgba(var(--panel-strong-rgb),.94);
+    backdrop-filter:blur(26px) saturate(165%);-webkit-backdrop-filter:blur(26px) saturate(165%);
+    border:1px solid var(--hairline);border-radius:var(--r-md);
+    box-shadow:0 24px 54px -22px rgba(0,0,0,.85)
+  }
+  .sel-asig-lista [data-slot="select-item"]{
+    font-size:14px;color:var(--ink-muted);border-radius:var(--r-xs);padding-block:9px
+  }
+  .sel-asig-lista [data-slot="select-item"][data-state="checked"]{color:var(--ink)}
+  /* el punto hereda el color de la asignatura; el de "sin asignatura" es un aro vacío */
+  .asig-pt{
+    width:9px;height:9px;border-radius:999px;flex:none;background:var(--tc,var(--ink-subtle));
+    box-shadow:0 0 10px -2px var(--tc,transparent)
+  }
+  .asig-pt.sin{background:none;border:1.5px dashed var(--ink-subtle);box-shadow:none}
+
+  /* ═══════════════════════════════════════════════════════
+     14 · LA PANTALLA DE ACCESO
+     ═══════════════════════════════════════════════════════
+     Un panel partido: la fotografía manda a la izquierda, el formulario a la derecha.
+     Es la única pantalla donde la imagen entra DENTRO de la interfaz en vez de quedarse
+     debajo — aquí todavía no hay escritorio al que sostener, así que pasa de ambiente a
+     protagonista. El panel entero lleva un solo desenfoque, el suyo, y las dos mitades se
+     separan con una línea de 1 px: nada de cristal dentro del cristal. */
+
+  .acceso{
+    min-height:100dvh;display:grid;place-items:center;
+    padding:clamp(16px,4vw,48px);
+  }
+  .acceso-panel{
+    position:relative;width:min(1020px,100%);
+    display:grid;grid-template-columns:1.05fr .95fr;
+    border-radius:26px;overflow:hidden;
+    background:var(--panel-strong);
+    border:1px solid var(--hairline);
+    backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);
+    box-shadow:0 44px 90px -50px rgba(0,0,0,.95),0 1px 0 rgba(255,255,255,.07) inset;
+    /* El único protagonista del movimiento de esta pantalla. */
+    animation:acceso-entra 900ms var(--ease-out) both;
+  }
+  @keyframes acceso-entra{
+    from{opacity:0;transform:translateY(22px) scale(.97);filter:blur(10px)}
+    to{opacity:1;transform:none;filter:blur(0)}
+  }
+
+  /* ── la mitad dibujada ──
+     Aquí había una fotografía, y era la misma que sostiene la aplicación por detrás.
+     Una encima de otra no se leía como composición sino como un error de recorte: la
+     casa dos veces, a dos escalas y con dos revelados. La sustituye la marca a tamaño de
+     cartel sobre papel milimetrado —donde vive una estudiante de arquitectura— y el
+     trazo se dibuja solo, como se dibuja un alzado de verdad. */
+  .acceso-obra{
+    position:relative;overflow:hidden;min-height:540px;
+    display:grid;place-items:center;
+    background:
+      radial-gradient(120% 86% at 50% 26%,#1B2C3E 0%,#111C26 46%,#0A1014 100%);
+  }
+
+  .plano{position:absolute;inset:0;display:grid;place-items:center}
+
+  /* papel milimetrado: dos retículas, la fina cada 14 px y la gruesa cada 70 */
+  .plano-rejilla{
+    position:absolute;inset:-10%;
+    background-image:
+      linear-gradient(to right,rgba(143,182,242,.13) 1px,transparent 1px),
+      linear-gradient(to bottom,rgba(143,182,242,.13) 1px,transparent 1px),
+      linear-gradient(to right,rgba(143,182,242,.055) 1px,transparent 1px),
+      linear-gradient(to bottom,rgba(143,182,242,.055) 1px,transparent 1px);
+    background-size:70px 70px,70px 70px,14px 14px,14px 14px;
+    /* se desvanece hacia los bordes para que la retícula no choque contra el marco */
+    mask-image:radial-gradient(120% 100% at 50% 44%,#000 30%,transparent 88%);
+    -webkit-mask-image:radial-gradient(120% 100% at 50% 44%,#000 30%,transparent 88%);
+    animation:plano-rejilla 1200ms var(--ease-out) 260ms backwards;
+  }
+  @keyframes plano-rejilla{from{opacity:0}to{opacity:1}}
+
+  /* el halo detrás del trazo: la única luz de este lado, y respira muy despacio */
+  .plano-luz{
+    position:absolute;width:74%;aspect-ratio:1;border-radius:999px;
+    background:radial-gradient(circle,rgba(110,158,232,.30) 0%,transparent 68%);
+    filter:blur(28px);
+    animation:plano-luz 1600ms var(--ease-out) 500ms backwards,plano-respira 13s ease-in-out infinite alternate 2100ms;
+  }
+  @keyframes plano-luz{from{opacity:0;transform:scale(.72)}to{opacity:1;transform:none}}
+  @keyframes plano-respira{from{opacity:.82;transform:scale(1)}to{opacity:1;transform:scale(1.07)}}
+
+  .plano-svg{position:relative;width:min(70%,320px);height:auto;overflow:visible}
+
+  /* El encaje a lápiz entra primero y se queda tenue: es lo que hace que el trazo firme
+     parezca trazo firme. */
+  .plano-cotas{color:rgba(163,194,242,.32)}
+  .plano-cotas path{
+    stroke-dasharray:240;stroke-dashoffset:240;
+    animation:plano-traza 1100ms var(--ease-out) 420ms forwards;
+  }
+  .plano-suelo{
+    color:rgba(163,194,242,.5);
+    stroke-dasharray:240;stroke-dashoffset:240;
+    animation:plano-traza 900ms var(--ease-out) 640ms forwards;
+  }
+
+  /* El trazo firme: el grande primero y el pequeño después, como se dibujaría. */
+  .plano-marca path{
+    stroke-dasharray:420;stroke-dashoffset:420;
+    filter:drop-shadow(0 6px 22px rgba(15,32,58,.85));
+    animation:plano-traza 1500ms var(--ease-out) 820ms forwards;
+  }
+  .plano-marca path:last-child{animation-duration:1200ms;animation-delay:1180ms}
+  @keyframes plano-traza{to{stroke-dashoffset:0}}
+
+  /* La frase se queda abajo y el dibujo sube lo justo para dejarle sitio: encima del
+     trazo no se leía ni ella ni él. Entra la última, cuando el alzado ya está cerrado. */
+  .plano{align-content:center;padding-bottom:74px}
+  .acceso-lema{
+    position:absolute;left:34px;right:34px;bottom:28px;margin:0;z-index:1;
+    font:300 19px/1.38 var(--ui);letter-spacing:-.018em;color:var(--ink);
+    text-shadow:0 1px 14px rgba(6,12,20,.9);
+    animation:acceso-lema 900ms var(--ease-out) 1900ms backwards;
+  }
+  @keyframes acceso-lema{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+  /* ── la mitad del formulario ── */
+  .acceso-caja{
+    display:flex;flex-direction:column;gap:0;
+    padding:clamp(28px,3.4vw,44px);
+    border-left:1px solid var(--hairline);
+    background:rgba(var(--panel-strong-rgb),.42);
+  }
+  .acceso-marca{
+    display:flex;align-items:center;gap:9px;margin-bottom:26px;
+    font:600 14px/1 var(--ui);letter-spacing:.005em;color:var(--ink-muted);
+  }
+  .acceso-cab h1{
+    margin:0 0 9px;font:700 clamp(25px,2.6vw,31px)/1.08 var(--ui);letter-spacing:-.035em;color:var(--ink);
+  }
+  .acceso-cab p{margin:0 0 24px;font:300 13.5px/1.55 var(--ui);color:var(--ink-subtle);max-width:44ch}
+
+  /* El aire entre campos va en margen propio y no en `gap` a propósito: con `gap`, una
+     fila que se colapsa sigue dejando su separación, y para taparla habría que animar un
+     margen negativo — animar una propiedad de maquetación provoca recálculo en cada
+     fotograma. Así solo se anima `grid-template-rows`, que no reflota la página. */
+  .acceso-form{display:flex;flex-direction:column;gap:0}
+  .acceso-form > *{margin-bottom:14px}
+  .acceso-form > *:last-child{margin-bottom:0}
+  .acceso-form label{
+    display:block;margin-bottom:7px;
+    font:500 11.5px/1 var(--ui);letter-spacing:.055em;text-transform:uppercase;color:var(--ink-subtle);
+  }
+  .acceso-fila-label{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .acceso-fila-label label{margin-bottom:7px}
+
+  .campo{
+    width:100%;height:44px;padding:0 14px;border-radius:12px;
+    font:400 14px/1 var(--ui);color:var(--ink);
+    background:rgba(255,255,255,.035);
+    border:1px solid var(--hairline);
+    transition:border-color 240ms,background 240ms,box-shadow 240ms;
+  }
+  /* Sin rebajar la opacidad: a .72 el texto de ejemplo caía a 3.3:1 sobre el panel y
+     dejaba de leerse, que es justo lo contrario de para lo que está. */
+  .campo::placeholder{color:var(--ink-subtle);opacity:1}
+  .campo:hover{border-color:var(--hairline-lit)}
+  .campo:focus-visible,.campo:focus{
+    outline:none;border-color:var(--accent-linea);
+    background:rgba(255,255,255,.055);
+    box-shadow:0 0 0 3px rgba(122,166,232,.16);
+  }
+  /* el relleno automático de Chrome pinta un amarillo que no es de esta casa */
+  .campo:-webkit-autofill,.campo:-webkit-autofill:focus{
+    -webkit-text-fill-color:var(--ink);
+    -webkit-box-shadow:0 0 0 1000px rgba(30,34,42,.98) inset;
+    caret-color:var(--ink);
+  }
+
+  .acceso-clave{position:relative}
+  .acceso-clave .campo{padding-right:44px}
+  .acceso-ojo{
+    position:absolute;right:5px;top:50%;transform:translateY(-50%);
+    width:34px;height:34px;display:grid;place-items:center;border-radius:9px;cursor:pointer;
+    color:var(--ink-subtle);transition:color 240ms,background 240ms;
+  }
+  .acceso-ojo:hover{color:var(--ink);background:rgba(255,255,255,.06)}
+
+  /* Sitio reservado siempre: si el mensaje apareciera de la nada, empujaría el botón
+     justo cuando se va a pulsar. */
+  /* ── el mensaje ──
+     Reserva una línea aunque esté vacío, para que un aviso corto no empuje el botón justo
+     cuando se va a pulsar. Lo que no hace ya es apretar ese hueco con un margen negativo:
+     bastaba un error de dos líneas para que se montara encima del botón. Ahora el hueco
+     crece con el texto y siempre quedan diecisiete píxeles por debajo. */
+  .acceso-msg{
+    display:flex;align-items:flex-start;gap:7px;
+    /* El margen inferior va escrito entero y no heredado de `.acceso-form > *`: al
+       declarar `margin` aquí se pisaba aquel valor, y el mensaje se quedaba a tres
+       píxeles del botón. */
+    margin:2px 0 18px;min-height:16px;
+    font:400 12.5px/1.34 var(--ui);color:transparent;
+    transition:color 240ms;
+  }
+  .acceso-msg svg{flex:none;margin-top:1px}
+  .acceso-msg.mal{color:var(--late)}
+  .acceso-msg.bien{color:var(--ok)}
+  /* entra subiendo tres píxeles: aparecer de golpe se lee como un parpadeo */
+  .acceso-msg.mal svg,.acceso-msg.mal span,.acceso-msg.bien span{
+    animation:acceso-msg-entra 320ms var(--ease-out) both;
+  }
+  @keyframes acceso-msg-entra{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+
+  /* ── la única pieza sólida de la pantalla ──
+     Un botón de acceso se pulsa una vez al día y es lo último que se toca antes de que la
+     aplicación aparezca: se merece los detalles que separan un botón de un rectángulo de
+     color. Son cinco y ninguno se ve por separado.
+
+       1 · Relleno con degradado corto, una línea de luz de 1 px arriba y una de sombra
+           abajo. En ambiente oscuro esto se nota muchísimo más que en uno claro: sin
+           ellas, la pieza parece recortada y pegada encima.
+       2 · Tres sombras: una de contacto muy corta, una difusa que la separa del panel y
+           una del color del acento que crece al acercarse. Todas con desplazamiento y
+           difuminado — un halo plano sin desplazamiento es decoración, no profundidad.
+           El halo va como sombra y no como capa detrás porque la pieza recorta su
+           interior para el barrido, y una capa detrás se recortaría con ella.
+       3 · Un barrido de luz cruza la superficie al pasar el ratón, una vez, de izquierda
+           a derecha. Es lo que hace el reflejo sobre una superficie pulida. A la salida
+           no vuelve: se queda fuera y espera, porque un reflejo que va y viene es un
+           efecto, y uno que solo pasa es un material.
+       4 · Al pulsar se hunde: baja al sitio y encoge medio punto porcentual.
+       5 · Los tres rótulos —Entrar, Entrando, Dentro— están apilados en la misma celda y
+           se turnan con la opacidad. Si se sustituyeran, el botón cambiaría de ancho a
+           mitad de la pulsación, que es el defecto más común de un botón con carga. */
+  .acceso-principal{
+    position:relative;overflow:hidden;
+    width:100%;height:48px;font-size:14px;font-weight:600;letter-spacing:.005em;
+    border:0;border-radius:13px;
+    background:linear-gradient(180deg,#3E69AE 0%,#2F5697 52%,var(--accent) 100%);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.20) inset,
+      0 -1px 0 rgba(0,0,0,.26) inset,
+      0 2px 4px -2px rgba(0,0,0,.5),
+      0 12px 26px -14px rgba(8,18,38,.95),
+      0 10px 30px -18px rgba(93,142,222,0);
+    transition:
+      transform 260ms var(--ease-soft),
+      box-shadow 340ms var(--ease-soft),
+      filter 260ms;
+  }
+  .acceso-principal::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(104deg,transparent 34%,rgba(255,255,255,.26) 50%,transparent 64%);
+    transform:translateX(-130%);
+  }
+  .acceso-principal:hover:not(:disabled){
+    transform:translateY(-2px);filter:brightness(1.07);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.26) inset,
+      0 -1px 0 rgba(0,0,0,.26) inset,
+      0 2px 4px -2px rgba(0,0,0,.5),
+      0 20px 34px -16px rgba(8,18,38,.98),
+      0 14px 34px -14px rgba(93,142,222,.62);
+  }
+  .acceso-principal:hover:not(:disabled)::after{
+    transform:translateX(130%);
+    transition:transform 820ms var(--ease-out);
+  }
+  .acceso-principal:active:not(:disabled){
+    transform:translateY(0) scale(.994);
+    box-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 4px 10px -8px rgba(8,18,38,.9);
+  }
+  .acceso-principal:focus-visible{
+    outline:none;
+    box-shadow:0 0 0 3px rgba(122,166,232,.42),0 12px 26px -14px rgba(8,18,38,.95);
+  }
+  .acceso-principal:disabled{opacity:.6;filter:saturate(.72)}
+  /* al acertar se pone verde un instante: el acierto se enseña antes de irse */
+  .acceso-principal.hecho{
+    background:linear-gradient(180deg,#5FBE93 0%,#3E9E75 100%);
+    filter:none;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.24) inset,
+      0 2px 4px -2px rgba(0,0,0,.5),
+      0 14px 32px -16px rgba(63,158,117,.6);
+  }
+
+  /* los tres rótulos, apilados en la misma celda */
+  .acceso-caras{position:relative;display:grid;place-items:center;width:100%;height:100%}
+  .acceso-cara{
+    grid-area:1/1;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;
+    opacity:0;transform:translateY(6px);
+    transition:opacity 220ms,transform 260ms var(--ease-out);
+  }
+  .acceso-cara.on{opacity:1;transform:none}
+  .acceso-visto{animation:acceso-visto 420ms var(--ease-out) both}
+  @keyframes acceso-visto{from{transform:scale(.55);opacity:0}to{transform:none;opacity:1}}
+
+  .acceso-google{
+    width:100%;height:46px;font-size:13.5px;gap:9px;border-radius:13px;
+    transition:transform 240ms var(--ease-soft),background 240ms,border-color 240ms,box-shadow 240ms;
+  }
+  .acceso-google:hover:not(:disabled){
+    transform:translateY(-2px);border-color:var(--hairline-lit);
+    box-shadow:0 12px 24px -18px rgba(0,0,0,.9);
+  }
+  .acceso-google:active:not(:disabled){transform:translateY(0)}
+  .acceso-google:disabled{opacity:.6}
+
+  /* ── Bloq Mayús ──
+     Crece en vez de aparecer, y con la rejilla en lugar de con la altura: animar una
+     propiedad de maquetación obliga a recalcular la página en cada fotograma. La
+     separación viaja dentro de la fila que se colapsa, así se va con ella. */
+  .acceso-mayus{
+    display:grid;grid-template-rows:0fr;margin:0;opacity:0;
+    transition:grid-template-rows 260ms var(--ease-out),opacity 200ms;
+  }
+  .acceso-mayus > span{overflow:hidden;min-height:0;display:block}
+  .acceso-mayus-in{
+    display:flex;align-items:center;gap:6px;margin-top:9px;
+    font:400 11.5px/1.2 var(--ui);color:var(--c-ambar);
+  }
+  .acceso-mayus.on{grid-template-rows:1fr;opacity:1}
+
+  /* Las dos líneas se apagan hacia el centro en vez de morir contra la letra: cortadas a
+     hueso parecían una tachadura. */
+  .acceso-o{
+    display:flex;align-items:center;gap:14px;margin:20px 0;
+    color:var(--ink-subtle);font:400 10.5px/1 var(--ui);letter-spacing:.14em;text-transform:uppercase;
+  }
+  .acceso-o::before,.acceso-o::after{content:"";flex:1;height:1px}
+  .acceso-o::before{background:linear-gradient(90deg,transparent,var(--hairline-lit))}
+  .acceso-o::after{background:linear-gradient(90deg,var(--hairline-lit),transparent)}
+
+  .acceso-enlace{
+    cursor:pointer;background:none;border:0;padding:0;
+    font:400 12px/1 var(--ui);color:var(--ink-subtle);
+    transition:color 240ms;
+  }
+  .acceso-enlace:hover{color:var(--accent-linea)}
+  .acceso-enlace.fuerte{font-weight:600;font-size:13px;color:var(--accent-linea)}
+  .acceso-enlace.fuerte:hover{color:var(--accent-soft)}
+  .acceso-enlace:disabled{opacity:.5;cursor:default}
+
+  .acceso-cambio{margin:22px 0 0;font:300 13px/1 var(--ui);color:var(--ink-subtle)}
+  .acceso-nota{
+    margin:14px 0 0;padding:11px 13px;border-radius:11px;
+    background:rgba(232,115,90,.10);border:1px solid rgba(232,115,90,.26);
+    font:400 12.5px/1.45 var(--ui);color:var(--ink-muted);
+  }
+
+  /* La salida. Es texto y no botón a propósito: seguir sin cuenta es una opción legítima,
+     no un descarte, pero tampoco compite con la acción de la pantalla. */
+  .acceso-sin{
+    display:inline-flex;align-items:center;gap:6px;margin-top:auto;padding-top:26px;
+    font:400 12.5px/1 var(--ui);color:var(--ink-subtle);
+    transition:color 240ms;
+  }
+  .acceso-sin svg{transition:transform 320ms var(--ease-out)}
+  .acceso-sin:hover{color:var(--ink)}
+  .acceso-sin:hover svg{transform:translateX(3px)}
+
+  .acceso-girando{animation:acceso-gira 760ms linear infinite}
+  @keyframes acceso-gira{to{transform:rotate(360deg)}}
+
+  /* En vertical la fotografía pasa a ser una franja: sigue estando, deja de mandar. */
+  @media (max-width:820px){
+    .acceso-panel{grid-template-columns:1fr}
+    /* En vertical el alzado se queda, pero pasa a franja: se escala a una altura fija
+       —en porcentaje del ancho se salía por arriba— y el lema recupera su sitio debajo
+       en vez de cruzarle el trazo por la mitad. */
+    .acceso-obra{min-height:242px}
+    .plano{padding-bottom:64px}
+    .plano-svg{width:auto;height:120px}
+    .plano-luz{width:auto;height:150%;aspect-ratio:1}
+    .acceso-lema{font-size:17px;left:22px;right:22px;bottom:18px}
+    .acceso-caja{border-left:0;border-top:1px solid var(--hairline)}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    .acceso-panel,.acceso-lema,.plano-rejilla,.plano-luz{animation:none}
+    .plano-cotas path,.plano-suelo,.plano-marca path{animation:none;stroke-dashoffset:0}
+    .acceso-mayus{transition:none}
+    .acceso-girando{animation-duration:2.4s}
+  }
+
+  /* ── el avatar y su menú ──
+     El punto de la esquina es el único indicador permanente de dónde se guardan las
+     cosas: apagado, este equipo; encendido, la nube. Es un dato que no cabe en palabras
+     en una cabecera y que cambia lo que significa cerrar el portátil. */
+  .avatar{position:relative;cursor:pointer;overflow:visible;transition:transform 240ms var(--ease-soft)}
+  .avatar:hover{transform:translateY(-2px)}
+  .avatar img{width:100%;height:100%;border-radius:999px;object-fit:cover}
+  .avatar-punto{
+    position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:999px;
+    background:var(--ink-subtle);border:2px solid var(--canvas);
+    transition:background 300ms;
+  }
+  .avatar-punto.nube{background:var(--ok)}
+
+  .cuenta-caja{
+    width:266px;padding:14px;border-radius:16px;
+    background:var(--panel-strong);border:1px solid var(--hairline);
+    backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%);
+    box-shadow:0 26px 54px -32px rgba(0,0,0,.92);
+  }
+  .cuenta-quien{display:flex;flex-direction:column;gap:3px;margin-bottom:11px}
+  .cuenta-quien b{font:600 14px/1.2 var(--ui);letter-spacing:-.012em;color:var(--ink)}
+  .cuenta-quien span{
+    font:400 11.5px/1.3 var(--data);color:var(--ink-subtle);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .cuenta-donde{
+    display:flex;align-items:flex-start;gap:8px;margin:0;
+    font:300 12px/1.45 var(--ui);color:var(--ink-muted);
+  }
+  .cuenta-pt{
+    width:6px;height:6px;margin-top:5px;flex:none;border-radius:999px;
+    background:var(--ink-subtle);
+  }
+  .cuenta-pt.nube{background:var(--ok);box-shadow:0 0 9px -1px var(--ok)}
+  .cuenta-caja hr{border:0;border-top:1px solid var(--hairline);margin:12px 0}
+
+  .cuenta-accion{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+    height:38px;padding:0 12px;border-radius:11px;cursor:pointer;
+    font:500 13px/1 var(--ui);color:var(--ink-muted);
+    background:rgba(255,255,255,.035);border:1px solid var(--hairline);
+    transition:color 240ms,background 240ms,border-color 240ms,transform 240ms var(--ease-soft);
+  }
+  .cuenta-accion svg{transition:transform 320ms var(--ease-out)}
+  .cuenta-accion:hover{color:var(--ink);background:rgba(255,255,255,.07);border-color:var(--hairline-lit)}
+  .cuenta-accion:hover svg{transform:translateX(3px)}
+  .cuenta-accion.destacada{
+    color:var(--accent-soft);
+    background:linear-gradient(180deg,rgba(122,166,232,.16),rgba(43,80,144,.20));
+    border-color:rgba(122,166,232,.34);
+  }
+  .cuenta-accion.destacada:hover{color:#EAF1FE;border-color:var(--accent-linea)}
+  .cuenta-pie{margin:10px 2px 0;font:300 11.5px/1.45 var(--ui);color:var(--ink-subtle)}
+
+  /* ── el papel de la cuenta ──
+     La insignia solo aparece en el admin. Un distintivo que lleva todo el mundo no
+     distingue nada, y «Cuenta personal» junto a tu propio nombre no informa de nada que
+     no supieras ya. */
+  .cuenta-quien b{display:flex;align-items:center;gap:8px}
+  .cuenta-rol{
+    flex:none;padding:2.5px 7px;border-radius:999px;
+    font:600 9.5px/1 var(--ui);letter-spacing:.07em;text-transform:uppercase;font-style:normal;
+    color:var(--accent-soft);
+    background:rgba(122,166,232,.15);border:1px solid rgba(122,166,232,.32);
+  }
+
+  /* ── el identificador, solo mientras falte configurar el administrador ── */
+  .cuenta-id{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+  .cuenta-id > span{
+    font:500 10px/1 var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-subtle);
+  }
+  .cuenta-id button{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
+    padding:8px 10px;border-radius:9px;cursor:pointer;text-align:left;
+    background:rgba(255,255,255,.04);border:1px solid var(--hairline);
+    color:var(--ink-subtle);
+    transition:color 240ms,background 240ms,border-color 240ms;
+  }
+  .cuenta-id button:hover{color:var(--ink);background:rgba(255,255,255,.07);border-color:var(--hairline-lit)}
+  .cuenta-id code{
+    font:400 10.5px/1.25 var(--data);color:var(--ink-muted);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .cuenta-id button svg{flex:none}
+  .cuenta-id small{font:300 10.5px/1.4 var(--ui);color:var(--ink-subtle)}
+
+  /* ═══════════════════════════════════════════════════════
+     15 · LA FIRMA DEL AUTOR
+     ═══════════════════════════════════════════════════════
+     Una placa pequeña, como la que se atornilla bajo un cuadro o junto a la puerta de un
+     edificio terminado. Archicel es un regalo, y un regalo lleva firma.
+
+     Vive fuera del panel, debajo, sobre el cielo. Compitiendo con el formulario sería un
+     anuncio; a esa distancia y a ese tamaño es una firma. Solo al acercarse enseña lo
+     que tiene. */
+  .firma{
+    --fx:50%;  /* las escribe el puntero, con freno de fotograma */
+    --fy:50%;
+    position:relative;overflow:hidden;
+    display:inline-flex;align-items:center;gap:13px;
+    margin-top:24px;padding:11px 18px 11px 13px;
+    border-radius:15px;
+    background:rgba(var(--panel-rgb),.5);
+    border:1px solid var(--hairline);
+    backdrop-filter:blur(15px) saturate(130%);-webkit-backdrop-filter:blur(15px) saturate(130%);
+    box-shadow:0 12px 28px -22px rgba(0,0,0,.92);
+    transition:
+      transform 520ms var(--ease-out),
+      border-color 520ms,
+      background 520ms,
+      box-shadow 520ms;
+    /* entra la última de la pantalla, cuando todo lo demás ya se ha posado */
+    animation:firma-entra 1000ms var(--ease-out) 2200ms backwards;
+  }
+  @keyframes firma-entra{
+    from{opacity:0;transform:translateY(14px) scale(.94);filter:blur(7px)}
+    to{opacity:1;transform:none;filter:blur(0)}
+  }
+  .firma:hover{
+    transform:translateY(-3px);
+    border-color:var(--hairline-lit);
+    background:rgba(var(--panel-strong-rgb),.64);
+    box-shadow:0 20px 38px -24px rgba(0,0,0,.96);
+  }
+
+  /* la luz que sigue al cursor, como el reflejo sobre el latón */
+  .firma-luz{
+    position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(90px circle at var(--fx) var(--fy),rgba(180,208,250,.20),transparent 72%);
+    opacity:0;transition:opacity 480ms;
+  }
+  .firma:hover .firma-luz{opacity:1}
+
+  /* el barrido: cruza una vez y al salir no vuelve */
+  .firma-brillo{
+    position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(100deg,transparent 36%,rgba(255,255,255,.14) 50%,transparent 64%);
+    transform:translateX(-145%);
+  }
+  .firma:hover .firma-brillo{
+    transform:translateX(145%);
+    transition:transform 1150ms var(--ease-out);
+  }
+
+  .firma-marca{
+    display:grid;place-items:center;flex:none;
+    width:28px;height:28px;border-radius:9px;
+    color:var(--ink-subtle);
+    background:rgba(255,255,255,.05);
+    border:1px solid var(--hairline);
+    transition:color 520ms,border-color 520ms,background 520ms,transform 620ms var(--ease-out);
+  }
+  .firma:hover .firma-marca{
+    color:var(--accent-soft);
+    border-color:rgba(122,166,232,.42);
+    background:rgba(122,166,232,.10);
+    transform:rotate(-7deg) scale(1.05);
+  }
+
+  /* el filete que separa el sello del nombre, como en una placa de verdad */
+  .firma-raya{
+    flex:none;width:1px;align-self:stretch;margin:1px 0;
+    background:linear-gradient(180deg,transparent,var(--hairline) 22%,var(--hairline) 78%,transparent);
+  }
+
+  .firma-txt{display:flex;flex-direction:column;gap:3px}
+  .firma-eti{
+    font:500 9px/1 var(--ui);letter-spacing:.2em;text-transform:uppercase;
+    color:var(--ink-subtle);
+    transition:color 520ms;
+  }
+  .firma:hover .firma-eti{color:var(--ink-muted)}
+
+  /* La serif en cursiva es la única de todo Archicel, y es lo que hace que esto se lea
+     como una firma y no como otra etiqueta del producto. */
+  .firma-nombre{
+    position:relative;display:inline-block;
+    font-size:19px;line-height:1.1;color:var(--ink);
+    letter-spacing:.005em;
+  }
+
+  /* ── el nombre se escribe letra a letra ──
+     Cada una sube desde abajo, girada y desenfocada, con cuarenta y cinco milisegundos
+     de diferencia. No es un adorno: es la diferencia entre un texto que aparece y un
+     nombre que alguien traza. */
+  .firma-letra{
+    display:inline-block;
+    color:var(--ink);
+    transition:transform 480ms var(--ease-out),color 520ms;
+    transition-delay:calc(var(--i,0) * 26ms);
+    animation:firma-letra 760ms var(--ease-out) backwards;
+    animation-delay:calc(2600ms + var(--i,0) * 45ms);
+  }
+  @keyframes firma-letra{
+    from{opacity:0;transform:translateY(15px) rotate(7deg);filter:blur(5px)}
+    to{opacity:1;transform:none;filter:blur(0)}
+  }
+  /* la onda al pasar el ratón: suben en cascada y bajan en el mismo orden */
+  .firma:hover .firma-letra{transform:translateY(-2.5px);color:#FFFFFF}
+
+  /* La línea se traza de izquierda a derecha cuando la última letra ya está puesta.
+     Su estado de reposo es la línea ENTERA, y la animación va de cero a entera con
+     relleno hacia atrás: así, al acabar, el control vuelve a la regla base en vez de
+     saltar a cero, que es lo que pasa cuando se anima hacia un estado que no es el
+     suyo. */
+  .firma-linea{
+    position:absolute;left:0;right:0;bottom:-3px;height:1px;
+    background:linear-gradient(90deg,var(--accent-linea),rgba(163,194,242,.25));
+    transform:scaleX(1);transform-origin:left;opacity:.5;
+    transition:opacity 520ms;
+    animation:firma-linea 820ms var(--ease-out) backwards;
+    animation-delay:calc(2600ms + var(--n,8) * 45ms + 300ms);
+  }
+  @keyframes firma-linea{
+    from{transform:scaleX(0);opacity:0}
+    to{transform:scaleX(1);opacity:.5}
+  }
+  .firma:hover .firma-linea{opacity:1}
+
+  @media (prefers-reduced-motion:reduce){
+    .firma,.firma-letra,.firma-linea{animation:none}
+    .firma:hover,.firma:hover .firma-marca,.firma:hover .firma-letra{transform:none}
+    .firma-brillo,.firma-luz{display:none}
+    .firma-linea{transform:scaleX(1)}
   }

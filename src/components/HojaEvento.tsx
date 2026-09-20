@@ -7,6 +7,12 @@
 
 import { useEffect, useState } from 'react';
 
+import { useDialogo } from '@/hooks/useDialogo';
+import { SelectorAsignatura } from '@/components/campos/SelectorAsignatura';
+import { SelectorFecha } from '@/components/campos/SelectorFecha';
+import { SelectorHora } from '@/components/campos/SelectorHora';
+import { Button } from '@/components/ui/button';
+
 import { Icono, TIPOS } from '@/lib/ui/catalogo';
 import { useUI } from '@/lib/ui/contexto';
 import { useArchicel } from '@/lib/firebase/sesion';
@@ -21,6 +27,8 @@ export interface PeticionEvento {
 
 export function HojaEvento({ peticion, cerrar }: { peticion: PeticionEvento | null; cerrar: () => void }) {
   const { almacen } = useArchicel();
+  /* el hook va antes de cualquier retorno: los hooks no pueden ir tras un `return` */
+  const caja = useDialogo<HTMLElement>(peticion !== null, cerrar);
   const { avisar } = useUI();
   const [borrador, setBorrador] = useState<Omit<Evento, 'id'> & { id?: string }>({
     tipo: 'entrega',
@@ -65,11 +73,13 @@ export function HojaEvento({ peticion, cerrar }: { peticion: PeticionEvento | nu
   return (
     <>
       <div className="telon on" onClick={cerrar} />
-      <aside className="hoja on" role="dialog" aria-modal="true" aria-label={esNuevo ? 'Nuevo evento' : 'Editar evento'}>
+      <aside ref={caja} tabIndex={-1} className="hoja on" role="dialog" aria-modal="true" aria-label={esNuevo ? 'Nuevo evento' : 'Editar evento'}>
         <span className="asa" />
         <h3>{esNuevo ? 'Nuevo evento' : 'Editar evento'}</h3>
 
-        <div className="campo">
+        {/* dos columnas cuando hay ancho; `ancho` marca lo que ocupa la fila entera */}
+        <div className="hoja-cuerpo">
+        <div className="campo ancho">
           <label>Tipo</label>
           <div className="tipos">
             {(Object.keys(TIPOS) as TipoEvento[]).map((k) => (
@@ -88,7 +98,7 @@ export function HojaEvento({ peticion, cerrar }: { peticion: PeticionEvento | nu
           </div>
         </div>
 
-        <div className="campo">
+        <div className="campo ancho">
           <label htmlFor="ev-titulo">Qué es</label>
           <input
             id="ev-titulo"
@@ -101,43 +111,37 @@ export function HojaEvento({ peticion, cerrar }: { peticion: PeticionEvento | nu
           />
         </div>
 
+        {/* el mismo desplegable que la tarea: un examen es de una asignatura del
+            horario, no de un nombre escrito a mano que puede no coincidir */}
         <div className="campo">
-          <label htmlFor="ev-materia">Asignatura</label>
-          <input
-            id="ev-materia"
-            type="text"
-            autoComplete="off"
-            placeholder="Proyectos IV"
-            value={borrador.materia ?? ''}
-            onChange={(e) => setBorrador((b) => ({ ...b, materia: e.target.value }))}
-          />
+          <label>Asignatura</label>
+          <SelectorAsignatura valor={borrador.materia} onCambio={(a) => setBorrador((b) => ({ ...b, materia: a }))} />
         </div>
 
+        {/* el mismo selector que la hoja de tarea: el de fecha nativo lo dibuja cada
+            navegador a su manera y aquí abría un calendario ajeno al resto */}
         <div className="campo">
-          <label htmlFor="ev-fecha">Día</label>
-          <input
-            id="ev-fecha"
-            type="date"
-            value={borrador.fecha}
-            onChange={(e) => setBorrador((b) => ({ ...b, fecha: e.target.value }))}
-          />
+          <label>Día</label>
+          <SelectorFecha valor={borrador.fecha} onCambio={(f) => setBorrador((b) => ({ ...b, fecha: f }))} />
         </div>
 
         <div className="campo">
           <label htmlFor="ev-hora">Hora</label>
           <div className="fila-hora">
-            <select
-              id="ev-hora"
-              disabled={borrador.hora === null}
-              value={borrador.hora ?? 540}
-              onChange={(e) => setBorrador((b) => ({ ...b, hora: Number(e.target.value) }))}
-            >
-              {horas.map((m) => (
-                <option key={m} value={m}>
-                  {hhmm(m)}
-                </option>
-              ))}
-            </select>
+            {borrador.hora !== null ? (
+              <SelectorHora
+                etiqueta="Hora del evento"
+                valor={borrador.hora}
+                horas={horas}
+                onCambio={(m) => setBorrador((b) => ({ ...b, hora: m }))}
+              />
+            ) : (
+              /* sin hora no hay nada que elegir: el hueco se mantiene para que la fila no
+                 salte al alternar entre "todo el día" y una hora concreta */
+              <span className="sel-hora vacio" aria-hidden="true">
+                --:--
+              </span>
+            )}
             <button
               type="button"
               className="todo-dia"
@@ -149,7 +153,7 @@ export function HojaEvento({ peticion, cerrar }: { peticion: PeticionEvento | nu
           </div>
         </div>
 
-        <div className="campo">
+        <div className="campo ancho">
           <label htmlFor="ev-nota">Qué hay que llevar</label>
           <textarea
             id="ev-nota"
@@ -159,24 +163,22 @@ export function HojaEvento({ peticion, cerrar }: { peticion: PeticionEvento | nu
           />
         </div>
 
+        </div>
+
         <div className="hoja-pie">
           {!esNuevo && (
-            <button className="borrar" type="button" onClick={borrar} aria-label="Eliminar evento">
+            <Button variant="destructive" size="icon" className="borrar" type="button" onClick={borrar} aria-label="Eliminar evento">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', margin: '0 auto' }}>
                 <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13h10l1-13" />
               </svg>
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            onClick={cerrar}
-            style={{ flex: '0 0 auto', padding: '0 18px', background: 'transparent', border: '1px solid var(--hairline)', color: 'var(--ink-muted)' }}
-          >
+          <Button variant="outline" type="button" onClick={cerrar}>
             Cancelar
-          </button>
-          <button className="guardar" type="button" onClick={guardar}>
+          </Button>
+          <Button className="guardar" type="button" onClick={guardar}>
             Guardar
-          </button>
+          </Button>
         </div>
       </aside>
     </>

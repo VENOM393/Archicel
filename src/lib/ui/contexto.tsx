@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * El estado de la interfaz que comparten todas las vistas: ambiente, modo edición,
+ * El estado de la interfaz que comparten todas las vistas: modo edición,
  * opacidad de los bloques, la onda del fondo y los avisos.
  *
  * Vive por encima del enrutador para que el shader no se reinicie al cambiar de vista:
@@ -11,10 +11,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import type { MandoFondo } from '@/components/Fondo';
+import { registrarAvisoDeFallo } from '@/lib/data';
 
 interface UI {
-  dia: boolean;
-  alternarAmbiente: () => void;
   editando: boolean;
   setEditando: (v: boolean) => void;
   opacidad: number;
@@ -29,7 +28,6 @@ const Ctx = createContext<UI | null>(null);
 const CLAVE_OPACIDAD = 'archicel.opacidad.v1';
 
 export function ProveedorUI({ children }: { children: ReactNode }) {
-  const [dia, setDia] = useState(false);
   const [editando, setEditando] = useState(false);
   const [opacidad, setOpacidadEstado] = useState(70);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -50,10 +48,6 @@ export function ProveedorUI({ children }: { children: ReactNode }) {
   }, [opacidad]);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', dia ? 'light' : 'dark');
-  }, [dia]);
-
-  useEffect(() => {
     document.body.classList.toggle('editing', editando);
   }, [editando]);
 
@@ -72,11 +66,29 @@ export function ProveedorUI({ children }: { children: ReactNode }) {
 
   const onda = useCallback((x: number, y: number) => mandoFondo.current?.onda(x, y), []);
 
+  /**
+   * Si la nube rechaza una escritura, se dice.
+   *
+   * Antes eso moría en un `catch` vacío y no pasaba nada visible: el trabajo seguía en
+   * pantalla, parecía guardado, y el desengaño llegaba al día siguiente al abrir en otro
+   * sitio. El mensaje es tranquilizador a propósito —no se ha perdido nada, está en este
+   * equipo— porque eso es exactamente lo que ocurre gracias al espejo local.
+   */
+  useEffect(() => {
+    let ultimoAviso = 0;
+    registrarAvisoDeFallo(() => {
+      /* Un fallo de red viene en ráfaga; el mensaje, una vez por minuto. */
+      const ahora = Date.now();
+      if (ahora - ultimoAviso < 60_000) return;
+      ultimoAviso = ahora;
+      avisar('Guardado en este equipo · la nube no responde');
+    });
+    return () => registrarAvisoDeFallo(null);
+  }, [avisar]);
+
   return (
     <Ctx.Provider
       value={{
-        dia,
-        alternarAmbiente: () => setDia((v) => !v),
         editando,
         setEditando,
         opacidad,

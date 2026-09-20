@@ -8,41 +8,31 @@ description: >
   respira, el suelo ondula, la luz de tungsteno late— y de ahí sale toda la paleta: el frío
   del crepúsculo es el aire, el ámbar de las ventanas es el único acento. Tipografía sans muy
   pesada con tracking negativo agresivo en los tamaños grandes. La atmósfera vive en el fondo,
-  nunca en los componentes. Dos ambientes reales: noche azul (por
-  defecto, es cuando ella trabaja) y porcelana de día. Los datos técnicos —escalas, cotas,
+  nunca en los componentes. Un solo ambiente: la noche azul, que es cuando ella trabaja.
+  Los datos técnicos —escalas, cotas,
   metros, horas— van en monoespaciada tabular porque en arquitectura los números son
   material, no adorno.
 
 colors:
-  # ——— noche (ambiente por defecto)
-  night-canvas-deep: "#0A1317"
-  night-canvas: "#101C21"
-  night-glass-fill: "rgba(190, 214, 222, 0.11)"
-  night-glass-fill-strong: "rgba(190, 214, 222, 0.18)"
-  night-glass-edge: "rgba(214, 234, 240, 0.24)"
-  night-glass-edge-lit: "rgba(236, 247, 250, 0.55)"
-  night-ink: "#EAF2F4"
-  night-ink-muted: "#B6C8CD"
-  night-ink-subtle: "#93A8AF"
-  night-accent: "#F0A85C"      # luz de ventana, muestreada de la foto
-  night-accent-soft: "#F8CB94"
-  night-cool: "#8FB7C4"       # el frío del crepúsculo, para datos y series
+  # Un solo ambiente: la noche. Todo el frío vive en el matiz 214-218 grados, muestreado
+  # del cielo de la propia fotografía (#2E528B). La paleta anterior estaba en 193, que es
+  # turquesa: por eso la interfaz y la imagen no parecían el mismo sitio.
+  canvas-deep: "#0B0B0D"
+  canvas: "#141417"
+  glass-fill: "rgba(14, 14, 17, 0.70)"
+  glass-fill-strong: "rgba(23, 23, 27, 0.80)"
+  glass-edge: "rgba(255, 255, 255, 0.12)"
+  glass-edge-lit: "rgba(255, 255, 255, 0.30)"
+  ink: "#F4F4F6"
+  ink-muted: "#C2C2C9"
+  ink-subtle: "#92929B"
+  accent: "#2B5090"        # relleno: azul oscuro, con texto blanco encima (7.9:1)
+  accent-linea: "#7AA6E8"  # detalle: el mismo acento, legible como texto (6.4:1)
+  accent-soft: "#A3C2F2"
+  cool: "#A5A5AF"          # neutro: en carbon un frio azul seria el unico resto de la otra paleta
+  on-accent: "#FFFFFF"
 
-  # ——— día (porcelana)
-  day-canvas-deep: "#AFC4CC"
-  day-canvas: "#C8D8DE"
-  day-glass-fill: "rgba(255, 255, 255, 0.56)"
-  day-glass-fill-strong: "rgba(255, 255, 255, 0.76)"
-  day-glass-edge: "rgba(255, 255, 255, 0.82)"
-  day-glass-edge-lit: "rgba(255, 255, 255, 0.96)"
-  day-ink: "#0D1B20"
-  day-ink-muted: "#3A5058"
-  day-ink-subtle: "#4E6970"
-  day-accent: "#9A5613"       # el mismo ámbar, oscurecido para leer sobre claro
-  day-accent-soft: "#C07A24"
-  day-cool: "#37606F"
-
-  # ——— semánticos (idénticos en ambos ambientes)
+  # ——— semánticos
   on-track: "#7FC8A9"
   overdue: "#E8735A"
 
@@ -93,10 +83,15 @@ spacing:
   row-gap: "12px"
 
 radius:
-  panel: "16px"
-  control: "12px"
-  chip: "10px"
-  pill: "999px"
+  # Cinco escalones y ni uno mas. La casa de la fotografia es ortogonal -losas, vidrio,
+  # cantos vivos- y la interfaz que va encima se comporta igual: esquinas suaves, nunca
+  # blandas. La capsula solo sobrevive donde algo es redondo de verdad.
+  xs: "4px"    # marcas, casillas, chips diminutos
+  sm: "7px"    # botones, campos, controles
+  md: "10px"   # celdas, filas, tarjetas internas
+  lg: "14px"   # widgets y paneles
+  xl: "20px"   # superficies grandes: agenda, rejillas, hojas
+  pill: "999px"  # SOLO circulos reales: avatar, puntos de color, pulgar del deslizador
 
 glass:
   blur: "24px"
@@ -131,21 +126,53 @@ este documento son propios: ninguna paleta ni tipografía de esas marcas se copi
 2. **El cristal es un efecto, no una decoración.** Solo lo llevan las superficies que flotan sobre
    el cielo. Nada de cristal sobre cristal: un panel dentro de otro panel se dibuja con una
    línea de 1px y un cambio de relleno, jamás con un segundo blur.
-3. **Un solo acento, y es cálido.** El ámbar de las ventanas marca el foco, el elemento activo,
-   la entrega y como mucho una acción. El azul frío del crepúsculo no es acento: es aire, y solo
-   se usa para series de datos secundarias. Los semánticos (al día, vencida) tampoco son acento
-   y nunca decoran.
-4. **La tipografía pesa.** En los tamaños grandes, 700 y tracking negativo hasta -0.04em. Lo que
+3. **El frío sale de la fotografía, no del gusto de nadie.** Todos los azules de la paleta viven
+   entre 214 y 218 grados de matiz, que es el del cielo de la imagen (#2E528B, muestreado del
+   propio archivo). Un token frío que se aleje de esa franja se nota al instante: la interfaz deja
+   de parecer parte de la escena y pasa a estar pegada encima. El tinte de ambiente del shader
+   traduce `--canvas-deep` a lineal; si se cambia la paleta, se cambia también ahí.
+4. **Los controles vienen de shadcn/ui y solo hay una acción sólida por pantalla.** Los botones son
+   el componente de shadcn, no CSS propio, y sacan su color de estos mismos tokens: en
+   `globals.css` los nombres de shadcn (`--primary`, `--border`, `--ring`…) **apuntan** a los de la
+   casa en lugar de tener valores propios. Si alguna vez un token de shadcn lleva un color literal,
+   hay dos sistemas conviviendo y eso es un error, no una excepción.
+
+   La jerarquía es la regla que más se nota: **una sola pieza sólida por pantalla**, la que crea
+   algo. Filtrar, navegar, cancelar o cambiar de vista son contorno o fantasma. Antes cinco botones
+   ámbar idénticos competían en la misma barra y ninguno guiaba; eso —más que ningún color— es lo
+   que hace que una interfaz parezca generada.
+5. **Un solo acento, y lo pone el ambiente — pero tiene dos papeles.** En azul el acento es el ámbar
+   de las ventanas; en carbón es un azul. Marca el foco, el elemento activo, la entrega y como mucho
+   una acción. Los semánticos (al día, vencida) no son acento y nunca decoran.
+
+   Lo que no se puede olvidar: el acento se usa de **relleno** —con texto encima— y de **detalle**,
+   donde el color es justo lo que se lee. El ámbar servía para los dos porque es luminoso. Un azul
+   oscuro no: de relleno es elegante (blanco encima a 7.9:1) y de texto sobre el panel daría 2.0:1,
+   ilegible. Por eso hay dos tokens, `--accent` y `--accent-linea`, y cada ambiente decide si
+   coinciden. Escribir `color: var(--accent)` es el error fácil aquí; para texto, filetes, anillos de
+   foco y marcas dibujadas va siempre `--accent-linea`.
+6. **La tipografía pesa.** En los tamaños grandes, 700 y tracking negativo hasta -0.04em. Lo que
    no es titular baja a 300 y se aparta. No hay pesos intermedios paseándose por la interfaz.
-5. **Los números son material.** Escalas (1:100), cotas, metros cuadrados, horas y cuentas atrás
+7. **Los números son material.** Escalas (1:100), cotas, metros cuadrados, horas y cuentas atrás
    van en monoespaciada tabular. Ahí la mono no es disfraz: es medición.
-6. **El movimiento tiene un solo protagonista por pantalla.** Una entrada orquestada al cargar y
+8. **El movimiento tiene un solo protagonista por pantalla.** Una entrada orquestada al cargar y
    una capa ambiente lentísima de fondo. Todo lo demás son respuestas al dedo: 240 ms y fuera.
-7. **La noche es el ambiente por defecto** porque es cuando se entrega. El día no es el modo noche
-   invertido: es su propia composición, con el cristal más opaco para que aguante la luz.
-8. **Las superficies del navegador también son diseño.** Selección de texto, cursor de escritura,
+9. **Un solo ambiente: carbón.** No hay modo claro y no lo habrá: la fotografía que sostiene la
+   aplicación está tomada a la hora azul y no existe una versión clara de ella, así que un tema
+   claro obligaba a inventar un segundo mundo visual que nunca casaba. El cristal es carbón neutro
+   y el shader lo acompaña: la escena pierde parte de su color para no leerse como dos capas
+   pegadas, pero nunca del todo — sigue siendo una fotografía, no una radiografía.
+   `color-scheme: dark` hace que el navegador pinte también en oscuro lo que no dibujamos.
+10. **Las superficies del navegador también son diseño.** Selección de texto, cursor de escritura,
    barra de scroll y anillo de foco se pintan desde estos tokens. Nada se queda en el gris del
    sistema.
+
+**La segunda excepción: la firma del autor.** La placa «Made by Cristian» que hay bajo el
+panel de acceso lleva **Instrument Serif en cursiva**, y es la única letra de todo Archicel que no
+es Outfit ni la monoespaciada. La razón es que una firma escrita con la misma letra que la interfaz
+no se lee como una firma: se lee como otra etiqueta del producto. El cambio de familia es justo lo
+que dice «esto no lo escribió la aplicación, lo escribió una persona». Se carga con `next/font`
+desde `src/lib/ui/fuentes.ts`, autoalojada, y no aparece en ninguna otra pantalla.
 
 ## Anti-patrones — prohibido en este proyecto
 
@@ -168,7 +195,17 @@ la misma foto se muestra como fondo CSS estático con un velo por encima: la pá
 sin fondo. Con `prefers-reduced-motion` el shader pinta un fotograma y se detiene.
 
 Al cambiar de fotografía hay que volver a muestrear la paleta de ella y actualizar este documento.
+
 Una foto nueva con otra temperatura de luz rompe el acento.
+
+**La única excepción: la pantalla de acceso.** Ahí la fotografía **no** aparece dentro de la
+interfaz. Estuvo, y se veía mal: la misma imagen que sostiene la aplicación por detrás, repetida
+dentro de un panel a otra escala y con otro revelado, no se lee como composición sino como un
+error de recorte. En su lugar va la marca —los dos triángulos del raíl— a tamaño de alzado sobre
+papel milimetrado, con sus cotas, dibujándose sola. Es la única pieza de Archicel que no sale de
+la fotografía, y es lo que hace que esa pantalla se distinga de todas las demás sin dejar de ser
+la misma casa. Si algún día entra una fotografía distinta ahí, esta regla decae; mientras solo
+haya una, no se repite.
 
 ## Sincronización
 

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Archicel">
+  <defs>
+    <radialGradient id="fondo" cx="50%" cy="18%" r="92%">
+      <stop offset="0%" stop-color="#1B2C3E" />
+      <stop offset="58%" stop-color="#101C27" />
+      <stop offset="100%" stop-color="#080D12" />
+    </radialGradient>
+    <!-- En coordenadas de usuario y no de caja: el travesano es una linea horizontal, su
+         caja tiene altura cero y un degradado relativo a ella no llega a dibujarse. -->
+    <linearGradient id="trazo" gradientUnits="userSpaceOnUse" x1="150" y1="146" x2="372" y2="376">
+      <stop offset="0%" stop-color="#CFE0FB" />
+      <stop offset="52%" stop-color="#8FB6F2" />
+      <stop offset="100%" stop-color="#4C82D8" />
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#fondo)" />
+
+  <!-- El arco es la A: dos jambas, un medio punto y el travesano. Arquitectura y letra
+       en el mismo trazo, que es exactamente lo que es la aplicacion. -->
+  <g transform="translate(256 256) scale(.62) translate(-256 -256)" fill="none" stroke="url(#trazo)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M160 362V262c0-53 43-96 96-96s96 43 96 96v100" />
+    <path d="M160 294h192" />
+  </g>
+
+  <!-- La linea de suelo: lo que convierte el arco en un alzado y no en un icono flotando. -->
+  <path transform="translate(256 256) scale(.62) translate(-256 -256)" d="M104 404h304" stroke="#8FB6F2" stroke-opacity=".38" stroke-width="10" stroke-linecap="round" />
+</svg>

@@ -1,16 +1,34 @@
 'use client';
 
 /**
- * La hoja de una tarea del día: qué, cuándo, color, icono y prioridad.
- * El icono se tiñe del color elegido, así se ve el resultado antes de guardar.
+ * La hoja de una tarea: qué, cuándo, de qué asignatura, con qué icono, cuánta prioridad
+ * y por dónde va.
+ *
+ * El color no se elige: lo pone la asignatura, y la muestra de su campo enseña cuál le
+ * toca antes de guardar.
  */
 
 import { useEffect, useState } from 'react';
 
-import { COLORES_TAREA, DIA_FIN, DIA_INICIO, ICONOS, Icono, PRIOS } from '@/lib/ui/catalogo';
+import { useDialogo } from '@/hooks/useDialogo';
+import { SelectorAsignatura } from '@/components/campos/SelectorAsignatura';
+import { SelectorFecha } from '@/components/campos/SelectorFecha';
+import { SelectorHora } from '@/components/campos/SelectorHora';
+import { Button } from '@/components/ui/button';
+
+import { DIA_FIN, DIA_INICIO, ICONOS, Icono, Nivel, PRIOS } from '@/lib/ui/catalogo';
 import { useUI } from '@/lib/ui/contexto';
 import { useArchicel } from '@/lib/firebase/sesion';
-import { hhmm, type Tarea } from '@/lib/data';
+import {
+  ASIGNATURAS,
+  CLAVES_ASIGNATURA,
+  NOMBRE_PROGRESO,
+  PROGRESOS,
+  colorDeAsignatura,
+  hhmm,
+  progresoDe,
+  type Tarea,
+} from '@/lib/data';
 
 export interface PeticionTarea {
   tarea: Tarea | null;
@@ -21,6 +39,8 @@ export interface PeticionTarea {
 
 export function HojaTarea({ peticion, cerrar }: { peticion: PeticionTarea | null; cerrar: () => void }) {
   const { almacen } = useArchicel();
+  /* el hook va antes de cualquier retorno: los hooks no pueden ir tras un `return` */
+  const caja = useDialogo<HTMLElement>(peticion !== null, cerrar);
   const { avisar } = useUI();
   const [b, setB] = useState<Omit<Tarea, 'id'> & { id?: string }>({
     fecha: '',
@@ -47,7 +67,16 @@ export function HojaTarea({ peticion, cerrar }: { peticion: PeticionTarea | null
 
   const guardar = async () => {
     const fin = b.fin <= b.ini ? b.ini + 30 : b.fin;
-    await almacen.tareas.guardar({ ...b, fin, titulo: b.titulo.trim() || 'Sin título' });
+    /* el color no se guarda por sí mismo: se recalcula desde la asignatura, así que no
+       puede quedarse desfasado si esta cambia */
+    await almacen.tareas.guardar({
+      ...b,
+      fin,
+      titulo: b.titulo.trim() || 'Sin título',
+      asignatura: b.asignatura?.trim() || undefined,
+      color: colorDeAsignatura(b.asignatura),
+      progreso: b.progreso ?? (b.hecha ? 'hecha' : 'sin-empezar'),
+    });
     avisar(esNueva ? 'Tarea añadida' : 'Tarea actualizada');
     cerrar();
   };
@@ -65,12 +94,14 @@ export function HojaTarea({ peticion, cerrar }: { peticion: PeticionTarea | null
   return (
     <>
       <div className="telon on" onClick={cerrar} />
-      <aside className="hoja on" role="dialog" aria-modal="true" aria-label={esNueva ? 'Nueva tarea' : 'Editar tarea'}
-        style={{ ['--sel-color' as string]: `var(--c-${b.color})` }}>
+      <aside ref={caja} tabIndex={-1} className="hoja on" role="dialog" aria-modal="true" aria-label={esNueva ? 'Nueva tarea' : 'Editar tarea'}
+        style={{ ['--sel-color' as string]: `var(--c-${colorDeAsignatura(b.asignatura)})` }}>
         <span className="asa" />
         <h3>{esNueva ? 'Nueva tarea' : 'Editar tarea'}</h3>
 
-        <div className="campo">
+        {/* dos columnas cuando hay ancho; `ancho` marca lo que ocupa la fila entera */}
+        <div className="hoja-cuerpo">
+        <div className="campo ancho">
           <label htmlFor="t-titulo">Qué</label>
           <input
             id="t-titulo"
@@ -86,42 +117,23 @@ export function HojaTarea({ peticion, cerrar }: { peticion: PeticionTarea | null
         <div className="campo">
           <label>Cuándo</label>
           <div className="horas-fila">
-            <select aria-label="Hora de inicio" value={b.ini} onChange={(e) => setB((v) => ({ ...v, ini: Number(e.target.value) }))}>
-              {horas.map((m) => (
-                <option key={m} value={m}>
-                  {hhmm(m)}
-                </option>
-              ))}
-            </select>
+            <SelectorHora etiqueta="Hora de inicio" valor={b.ini} horas={horas} onCambio={(m) => setB((v) => ({ ...v, ini: m }))} />
             <span className="flecha">→</span>
-            <select aria-label="Hora de fin" value={b.fin} onChange={(e) => setB((v) => ({ ...v, fin: Number(e.target.value) }))}>
-              {horas.map((m) => (
-                <option key={m} value={m}>
-                  {hhmm(m)}
-                </option>
-              ))}
-            </select>
+            <SelectorHora etiqueta="Hora de fin" valor={b.fin} horas={horas} onCambio={(m) => setB((v) => ({ ...v, fin: m }))} />
           </div>
+          {/* La fecha se puede cambiar aquí: antes era la del sitio desde donde se creaba
+              la tarea y para moverla de día había que borrarla y rehacerla. */}
+          <SelectorFecha valor={b.fecha} onCambio={(f) => setB((v) => ({ ...v, fecha: f }))} />
         </div>
 
+        {/* La asignatura sustituye al selector de color: el color de la tarea sale de
+            ella, así que elegirlo a mano sería poder contradecirla. */}
         <div className="campo">
-          <label>Color</label>
-          <div className="colores">
-            {COLORES_TAREA.map((c) => (
-              <button
-                key={c}
-                type="button"
-                className="color"
-                aria-label={`Color ${c}`}
-                aria-pressed={b.color === c}
-                style={{ ['--cc' as string]: `var(--c-${c})` }}
-                onClick={() => setB((v) => ({ ...v, color: c }))}
-              />
-            ))}
-          </div>
+          <label>Asignatura</label>
+          <SelectorAsignatura valor={b.asignatura} onCambio={(a) => setB((v) => ({ ...v, asignatura: a }))} />
         </div>
 
-        <div className="campo">
+        <div className="campo ancho">
           <label>Icono</label>
           <div className="iconos">
             {Object.keys(ICONOS).map((k) => (
@@ -139,6 +151,8 @@ export function HojaTarea({ peticion, cerrar }: { peticion: PeticionTarea | null
           </div>
         </div>
 
+        {/* La prioridad se dice con barras, no con un punto de color: tres escalones que
+            suben se leen de un vistazo y sin depender de saberse el código de colores. */}
         <div className="campo">
           <label>Prioridad</label>
           <div className="prios">
@@ -151,31 +165,55 @@ export function HojaTarea({ peticion, cerrar }: { peticion: PeticionTarea | null
                 aria-pressed={b.prio === p.id}
                 onClick={() => setB((v) => ({ ...v, prio: p.id }))}
               >
-                <i />
+                <Nivel prio={p.id} />
                 {p.n}
               </button>
             ))}
           </div>
         </div>
 
+        {/* Tres estados, no cuatro: "retrasada" no se elige porque se deduce del reloj, y
+            guardarla dejaría tareas marcadas como retrasadas con fecha futura. Cuando la
+            tarea lo está, se avisa aquí mismo. */}
+        <div className="campo">
+          <label>Progreso</label>
+          <div className="prios">
+            {PROGRESOS.map((g) => (
+              <button
+                key={g}
+                type="button"
+                className={`prog-btn${(b.progreso ?? (b.hecha ? 'hecha' : 'sin-empezar')) === g ? ' on' : ''}`}
+                data-g={g}
+                aria-pressed={(b.progreso ?? (b.hecha ? 'hecha' : 'sin-empezar')) === g}
+                onClick={() => setB((v) => ({ ...v, progreso: g, hecha: g === 'hecha' }))}
+              >
+                {NOMBRE_PROGRESO[g]}
+              </button>
+            ))}
+          </div>
+          {!esNueva && progresoDe(b as Tarea) === 'retrasada' && (
+            <p className="aviso-retraso" role="status">
+              Su hora de fin ya pasó y sigue sin terminar: aparece como <b>retrasada</b>.
+            </p>
+          )}
+        </div>
+
+        </div>
+
         <div className="hoja-pie">
           {!esNueva && (
-            <button className="borrar" type="button" onClick={borrar} aria-label="Eliminar tarea">
+            <Button variant="destructive" size="icon" className="borrar" type="button" onClick={borrar} aria-label="Eliminar tarea">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', margin: '0 auto' }}>
                 <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13h10l1-13" />
               </svg>
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            onClick={cerrar}
-            style={{ flex: '0 0 auto', padding: '0 18px', background: 'transparent', border: '1px solid var(--hairline)', color: 'var(--ink-muted)' }}
-          >
+          <Button variant="outline" type="button" onClick={cerrar}>
             Cancelar
-          </button>
-          <button className="guardar" type="button" onClick={guardar}>
+          </Button>
+          <Button className="guardar" type="button" onClick={guardar}>
             Guardar
-          </button>
+          </Button>
         </div>
       </aside>
     </>

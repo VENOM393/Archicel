@@ -29,13 +29,11 @@ export const IMAN = 5;
 
 export const WIDGETS: DefinicionWidget[] = [
   { id: 'bienvenida', titulo: 'Bienvenida', def: { x: 0, y: 0, w: 8, h: 4 }, min: { w: 2, h: 2 } },
-  { id: 'entrega', titulo: 'Próxima entrega', def: { x: 8, y: 0, w: 4, h: 3 }, min: { w: 2, h: 2 }, solido: true },
-  { id: 'horario', titulo: 'Clases', def: { x: 8, y: 3, w: 4, h: 4 }, min: { w: 2, h: 2 } },
-  { id: 'calendario', titulo: 'Calendario del mes', def: { x: 0, y: 4, w: 7, h: 8 }, min: { w: 3, h: 3 } },
-  { id: 'pendientes', titulo: 'Pendientes', def: { x: 7, y: 4, w: 5, h: 8 }, min: { w: 2, h: 2 } },
-  { id: 'cuatrimestre', titulo: 'Asignaturas', def: { x: 0, y: 12, w: 4, h: 4 }, min: { w: 2, h: 2 } },
-  { id: 'horas', titulo: 'Horas de taller', def: { x: 4, y: 12, w: 4, h: 4 }, min: { w: 2, h: 2 } },
-  { id: 'reloj', titulo: 'Hora', def: { x: 8, y: 12, w: 4, h: 4 }, min: { w: 2, h: 2 } },
+  { id: 'reloj', titulo: 'Hora', def: { x: 8, y: 0, w: 4, h: 4 }, min: { w: 2, h: 2 } },
+  /* la segunda fila corta por la misma columna que la primera: la vertical a dos tercios
+     recorre el escritorio entero y es lo que lo sostiene con tan pocos bloques */
+  { id: 'calendario', titulo: 'Calendario del mes', def: { x: 0, y: 4, w: 8, h: 10 }, min: { w: 3, h: 4 } },
+  { id: 'pendientes', titulo: 'Pendientes', def: { x: 8, y: 4, w: 4, h: 10 }, min: { w: 2, h: 2 } },
 ];
 
 export function desdeCeldas(d: DefinicionWidget['def']): Caja {
@@ -61,13 +59,23 @@ export function layoutPorDefecto(): Layout {
 
 /**
  * Mezcla lo guardado con el catálogo actual: lo que existe conserva su sitio, lo nuevo
- * entra en su posición de fábrica y lo retirado se ignora. Por eso publicar widgets
- * nuevos no descoloca el escritorio de nadie.
+ * entra en su posición de fábrica y lo retirado **se conserva sin tocar**. Por eso
+ * publicar widgets nuevos no descoloca el escritorio de nadie.
+ *
+ * Lo de conservar lo retirado importa más de lo que parece. Antes se descartaba, y como
+ * lo que se descarta también se guarda, quitar un widget del catálogo un rato borraba su
+ * posición para siempre: al devolverlo, aparecía en su sitio de fábrica y había que
+ * recolocarlo. Ahora su caja sigue ahí, invisible y sin estorbar —nadie la pinta, porque
+ * para pintarse hace falta estar en `WIDGETS`—, esperando a que el widget vuelva.
  */
 export function fusionarLayout(guardado: Layout | null): Layout {
   const base = layoutPorDefecto();
   if (!guardado) return base;
+  const conocidos = new Set(WIDGETS.map((w) => w.id));
   const salida: Layout = {};
+  Object.entries(guardado).forEach(([id, caja]) => {
+    if (!conocidos.has(id) && caja && typeof caja.fx === 'number') salida[id] = caja;
+  });
   WIDGETS.forEach((w) => {
     const g = guardado[w.id];
     salida[w.id] =
@@ -77,6 +85,7 @@ export function fusionarLayout(guardado: Layout | null): Layout {
             fw: Math.min(Math.max(g.fw, 0.08), 1),
             y: Math.max(0, g.y),
             h: Math.max(80, g.h),
+            desnudo: Boolean(g.desnudo),
           }
         : base[w.id];
   });

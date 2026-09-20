@@ -2,6 +2,12 @@ rules_version = '2';
 
 // Archicel — cada usuaria solo alcanza su propio árbol.
 // Pegar en Firebase → Firestore Database → Reglas → Publicar.
+//
+// Regla de oro de Firestore: los `match` NO se encadenan como filtros, se suman. Si
+// cualquiera de ellos permite la operación, la operación pasa. Por eso el comodín del
+// final excluye explícitamente las colecciones ya validadas arriba: sin esa exclusión
+// ofrecía una puerta sin comprobaciones a las mismas colecciones y todas las
+// validaciones de forma de este fichero eran decorativas.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -9,26 +15,80 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
+    // ── El administrador ──────────────────────────────────────────────────────
+    //
+    // Alcanza el árbol entero de cualquiera. Existe para poder arreglar algo sin
+    // pedirle a nadie que le deje el portátil, y es el único permiso de este
+    // fichero que cruza la frontera de "lo tuyo".
+    //
+    // Va por UID y no por correo, y no es una preferencia. `request.auth.token.email`
+    // se puede comprobar aquí, pero mientras una cuenta no exista cualquiera puede
+    // registrarse con ese correo y heredar el papel que le hayamos dejado escrito de
+    // antemano. El UID lo genera Firebase al crear la cuenta: nombrar un UID es
+    // nombrar a una persona que ya existe.
+    //
+    // La MISMA lista vive en src/lib/auth/roles.ts, para que la interfaz sepa qué
+    // enseñar. Esa no protege nada — corre en el navegador. Esta sí. Si solo se
+    // actualiza una de las dos, la aplicación dirá que alguien es admin y el
+    // servidor le dirá que no.
+    //
+    // Los UID sustituyen al marcador, entre comillas y separados por comas:
+    //   request.auth.uid in ['abc123…']            ← Cristian · cristianrosa05@gmail.com
+    //
+    // El marcador está ahí en vez de una lista vacía para que la regla siempre tenga una
+    // forma que se pueda publicar sin sorpresas, y porque 'sin-configurar' no es un UID
+    // que Firebase pueda emitir jamás: mientras siga ahí, nadie es administrador.
+    function esAdmin() {
+      return request.auth != null && request.auth.uid in ['sin-configurar'];
+    }
+
     function fechaValida(f) {
-      return f is string && f.matches('^\\d{4}-\\d{2}-\\d{2}$');
+      return f is string && f.matches('^\d{4}-\d{2}-\d{2}$');
     }
 
     function minutosValidos(m) {
       return m is int && m >= 0 && m <= 1440;
     }
 
+    function textoCorto(t, maximo) {
+      return t is string && t.size() <= maximo;
+    }
+
+    // las colecciones con forma fija; el comodín de abajo no debe tocarlas
+    function estaValidada(coleccion) {
+      return coleccion in ['eventos', 'tareas', 'ajustes', 'layout'];
+    }
+
+    // El paso franco del administrador.
+    //
+    // Va en un `match` aparte y no colgando un `|| esAdmin()` de cada regla de abajo,
+    // y aquí la regla de oro de Firestore juega a favor por una vez: los `match` se
+    // suman, así que basta con este para abrirlo todo sin tocar ni una de las
+    // validaciones de forma que protegen a todos los demás. Añadirlo regla por regla
+    // habría significado repetir la condición diez veces y olvidarla en la once.
+    match /users/{uid}/{documento=**} {
+      allow read, write: if esAdmin();
+    }
+
     match /users/{uid} {
-      allow read: if esPropietario(uid);
-      allow create, update: if esPropietario(uid)
+      // El comodín de arriba cubre las subcolecciones; que alcance además al propio
+      // documento del usuario depende de cómo se cuente un `**` de cero segmentos, y eso
+      // no es algo que convenga dejar a la interpretación. Aquí se dice explícitamente.
+      allow read: if esPropietario(uid) || esAdmin();
+      allow create, update: if (esPropietario(uid) || esAdmin())
         && request.resource.data.keys().hasOnly(['nombre', 'creado', 'actualizado']);
       allow delete: if false;                    // la cuenta no se borra desde el cliente
 
-      // ajustes y layout: documentos sueltos, sin forma fija
+      // preferencias del dispositivo: pocas claves y pequeñas
       match /ajustes/{doc} {
-        allow read, write: if esPropietario(uid);
+        allow read: if esPropietario(uid);
+        allow write: if esPropietario(uid) && request.resource.data.keys().size() <= 20;
       }
+
+      // posiciones de los widgets: una entrada por widget, no un vertedero
       match /layout/{superficie} {
-        allow read, write: if esPropietario(uid);
+        allow read: if esPropietario(uid);
+        allow write: if esPropietario(uid) && request.resource.data.keys().size() <= 100;
       }
 
       // eventos del curso: entregas, exámenes, presentaciones…
@@ -36,30 +96,39 @@ service cloud.firestore {
         allow read, delete: if esPropietario(uid);
         allow create, update: if esPropietario(uid)
           && request.resource.data.tipo is string
-          && request.resource.data.titulo is string
+          && textoCorto(request.resource.data.titulo, 200)
           && request.resource.data.titulo.size() > 0
-          && request.resource.data.titulo.size() <= 200
           && fechaValida(request.resource.data.fecha)
-          && (request.resource.data.hora == null || minutosValidos(request.resource.data.hora));
+          && (request.resource.data.hora == null || minutosValidos(request.resource.data.hora))
+          && (!('materia' in request.resource.data) || textoCorto(request.resource.data.materia, 120))
+          && (!('nota' in request.resource.data) || textoCorto(request.resource.data.nota, 2000));
       }
 
       // tareas por franja horaria
       match /tareas/{tareaId} {
         allow read, delete: if esPropietario(uid);
         allow create, update: if esPropietario(uid)
-          && request.resource.data.titulo is string
-          && request.resource.data.titulo.size() <= 200
+          && textoCorto(request.resource.data.titulo, 200)
           && fechaValida(request.resource.data.fecha)
           && minutosValidos(request.resource.data.ini)
           && minutosValidos(request.resource.data.fin)
           && request.resource.data.fin > request.resource.data.ini
-          && request.resource.data.hecha is bool;
+          && request.resource.data.hecha is bool
+          // `retrasada` se calcula al mostrar y nunca se guarda: aceptarla aquí dejaría
+          // entrar un estado que la aplicación no sabe producir
+          && (!('progreso' in request.resource.data)
+              || request.resource.data.progreso in ['sin-empezar', 'en-curso', 'hecha'])
+          && (!('asignatura' in request.resource.data)
+              || textoCorto(request.resource.data.asignatura, 120));
       }
 
-      // lo que venga después (asignaturas, proyectos, referencias…):
-      // mismo dueño, sin validación de forma hasta que el modelo se fije.
+      // lo que venga después (asignaturas, proyectos, referencias…): mismo dueño y
+      // tamaño acotado, pero SIN pisar las colecciones validadas de arriba.
       match /{coleccion}/{docId} {
-        allow read, write: if esPropietario(uid);
+        allow read: if esPropietario(uid) && !estaValidada(coleccion);
+        allow write: if esPropietario(uid)
+          && !estaValidada(coleccion)
+          && request.resource.data.keys().size() <= 50;
       }
     }
 
