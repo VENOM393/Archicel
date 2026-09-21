@@ -314,6 +314,30 @@ Cinco cosas que no se deducen del código:
 Todo el detalle —endpoints, paginación, cuota, caché y qué está comprobado y qué no— en
 [docs/integraciones/CANVAS.md](docs/integraciones/CANVAS.md).
 
+## Apuntes: Google Drive
+
+Cada asignatura va a tener su página, y en ella los apuntes de Celeste —fotos, PDFs, `.docx`—.
+Los bytes van a **Google Drive**; Firestore guarda solo la ficha. El planteamiento entero, con los
+pasos de la consola, está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
+
+**Estado hoy: planteado, nada implementado.** Falta el ID de cliente de OAuth.
+
+Cuatro cosas que no se deducen y que cuestan una tarde cada una:
+
+- **No existe un scope de Google «solo esta carpeta».** Se usa `drive.file`, que es más fuerte: la
+  app solo ve **lo que ella misma creó**. El resto del Drive no está prohibido, es que no existe
+  para ella. La carpeta `Archicel` es una comodidad para el humano, no la frontera de seguridad.
+- **Una cuenta de servicio no sirve.** No tienen cuota propia y no pueden poseer ficheros en un Drive
+  personal; la subida falla. La salida oficial es una unidad compartida, que es Workspace de pago.
+- **El navegador sube directo a Google, no por `/api`.** Vercel corta el cuerpo de una petición en
+  4,5 MB y un PDF escaneado se pasa de ahí sin esfuerzo. El token en el cliente es aceptable
+  **precisamente** porque con `drive.file` no abre nada más.
+- **El ID de cliente es público** y lleva `NEXT_PUBLIC_`; lo que lo protege es la lista de orígenes
+  autorizados. **El secreto de cliente no hace falta**: el flujo de tokens del navegador no lo usa.
+
+Y lo de siempre, que aquí entra contenido de fuera por primera vez: **el nombre de un fichero lo
+escribe quien sea**, así que se pinta como texto y nunca como HTML.
+
 ## El repositorio
 
 **https://github.com/VENOM393/Archicel** — el repositorio de todo el proyecto: la
@@ -346,6 +370,7 @@ docs/frontend/      SKILLS.md — uso de las skills
 docs/arquitectura/  ARQUITECTURA.md — capas, extensión y rendimiento medido
 docs/data/          FIRESTORE.md — modelo · SEGURIDAD.md — revisión · CUENTAS.md — acceso
 docs/integraciones/  CANVAS.md — API del campus de la UCAM y el motor que la consume
+                    DRIVE.md — dónde viven los apuntes de cada asignatura
 docs/design/        DESIGN.md — contrato visual
 docs/tooling/       GRAFT.md — referencia de la capa de contexto
                     DESPLIEGUE.md — publicar en Vercel
