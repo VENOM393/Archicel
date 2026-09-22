@@ -15,7 +15,7 @@
  *
  * ```
  * Archicel/
- *   Apuntes/
+ *   Asignaturas/
  *     Geometría Descriptiva I/
  * ```
  *
@@ -101,12 +101,8 @@ async function llamar(url: string, opciones: RequestInit = {}, interactivo = tru
   return r;
 }
 
-/** Busca una carpeta por nombre dentro de otra, y si no existe la crea. */
-async function carpetaPara(nombre: string, padre?: string): Promise<string> {
-  const clave = `${padre ?? 'raiz'}/${nombre}`;
-  const recordada = carpetas.get(clave);
-  if (recordada) return recordada;
-
+/** Busca una carpeta por nombre dentro de otra. `null` si no está. */
+async function buscarCarpeta(nombre: string, padre?: string): Promise<string | null> {
   /* Las comillas simples del nombre romperían la consulta: Drive las escapa con barra. */
   const seguro = nombre.replace(/'/g, "\\'");
   const q = [
@@ -118,8 +114,16 @@ async function carpetaPara(nombre: string, padre?: string): Promise<string> {
 
   const busca = await llamar(`${API}/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`);
   const { files } = (await busca.json()) as { files: Array<{ id: string }> };
+  return files?.[0]?.id ?? null;
+}
 
-  let id = files?.[0]?.id;
+/** Busca una carpeta por nombre dentro de otra, y si no existe la crea. */
+async function carpetaPara(nombre: string, padre?: string): Promise<string> {
+  const clave = `${padre ?? 'raiz'}/${nombre}`;
+  const recordada = carpetas.get(clave);
+  if (recordada) return recordada;
+
+  let id = await buscarCarpeta(nombre, padre);
   if (!id) {
     const crea = await llamar(`${API}/files?fields=id`, {
       method: 'POST',
@@ -133,11 +137,46 @@ async function carpetaPara(nombre: string, padre?: string): Promise<string> {
   return id;
 }
 
+/** Cómo se llamó esta carpeta antes, para no dejar huérfano lo ya subido. */
+const NOMBRE_VIEJO = 'Apuntes';
+const NOMBRE = 'Asignaturas';
+
+/**
+ * La carpeta de las asignaturas, renombrando la vieja si existe.
+ *
+ * Crear la nueva sin más habría dejado dos carpetas en el Drive: una `Apuntes` con todo lo
+ * de antes y una `Asignaturas` vacía. Los ficheros viejos seguirían abriéndose —la ficha
+ * guarda su identificador, no su ruta— pero quien entrara en Drive vería el trabajo
+ * repartido en dos sitios sin saber por qué.
+ *
+ * Renombrarla se puede porque la creó esta misma aplicación, que es exactamente lo que
+ * `drive.file` permite. Y ocurre **una sola vez**: a la siguiente ya no hay nada que
+ * renombrar.
+ */
+async function carpetaDeAsignaturas(raiz: string): Promise<string> {
+  const clave = `${raiz}/${NOMBRE}`;
+  const recordada = carpetas.get(clave);
+  if (recordada) return recordada;
+
+  const vieja = await buscarCarpeta(NOMBRE_VIEJO, raiz);
+  if (vieja) {
+    await llamar(`${API}/files/${vieja}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: NOMBRE }),
+    });
+    carpetas.set(clave, vieja);
+    return vieja;
+  }
+
+  return carpetaPara(NOMBRE, raiz);
+}
+
 async function carpetaDeAsignatura(clave: string): Promise<string> {
   const raiz = await carpetaPara('Archicel');
-  const apuntes = await carpetaPara('Apuntes', raiz);
+  const asignaturas = await carpetaDeAsignaturas(raiz);
   const nombre = ASIGNATURAS[clave as keyof typeof ASIGNATURAS]?.nombre ?? clave;
-  return carpetaPara(nombre, apuntes);
+  return carpetaPara(nombre, asignaturas);
 }
 
 /**
@@ -240,7 +279,10 @@ export function crearArchivadorDrive(): Archivador {
        */
       await conseguirToken(true);
 
-      const padre = await carpetaDeAsignatura(destino.asignatura);
+      /* La carpeta que eligió la usuaria, y si no hay ninguna, la de la asignatura. */
+      const padre = destino.padre?.proveedor === 'drive'
+        ? destino.padre.id
+        : await carpetaDeAsignatura(destino.asignatura);
       const meta = {
         name: fichero.name,
         parents: [padre],
@@ -286,6 +328,49 @@ export function crearArchivadorDrive(): Archivador {
         desde = hasta;
         if (desde >= fichero.size) throw new FalloDeArchivo('desconocida', 'La subida terminó sin confirmación.');
       }
+    },
+
+    async crearCarpeta(nombre, destino: Destino) {
+      await conseguirToken(true);
+      const padre = destino.padre?.proveedor === 'drive'
+        ? destino.padre.id
+        : await carpetaDeAsignatura(destino.asignatura);
+      const r = await llamar(`${API}/files?fields=id`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nombre, mimeType: CARPETA, parents: [padre] }),
+      });
+      return { proveedor: 'drive' as const, id: ((await r.json()) as { id: string }).id };
+    },
+
+    async renombrar(remoto: Remoto, nombre: string) {
+      if (remoto.proveedor !== 'drive') return;
+      await llamar(`${API}/files/${encodeURIComponent(remoto.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nombre }),
+      });
+    },
+
+    async mover(remoto: Remoto, desde: Remoto | null, hasta: Remoto | null, destino: Destino) {
+      if (remoto.proveedor !== 'drive') return;
+      /*
+       * Drive no tiene «mover»: tiene **padres**, y mover es quitar uno y poner otro en la
+       * misma llamada. Si se hiciera en dos, un fallo entre medias dejaría el fichero en
+       * los dos sitios o en ninguno.
+       *
+       * La raíz de la asignatura es un destino como otro cualquiera, solo que hay que
+       * preguntársela a Drive en vez de recibirla.
+       */
+      const raiz = await carpetaDeAsignatura(destino.asignatura);
+      const nuevo = hasta?.proveedor === 'drive' ? hasta.id : raiz;
+      const viejo = desde?.proveedor === 'drive' ? desde.id : raiz;
+      if (nuevo === viejo) return;
+
+      await llamar(
+        `${API}/files/${encodeURIComponent(remoto.id)}?addParents=${nuevo}&removeParents=${viejo}&fields=id`,
+        { method: 'PATCH' },
+      );
     },
 
     async borrar(remoto: Remoto) {

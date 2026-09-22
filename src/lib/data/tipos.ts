@@ -151,6 +151,27 @@ export const NOMBRE_PROGRESO: Record<ProgresoVisible, string> = {
 };
 
 /**
+ * Una carpeta dentro de una asignatura.
+ *
+ * Existe como documento propio y no como un trozo de la ruta de cada apunte, y esa
+ * decisión tiene una consecuencia concreta: **una carpeta vacía sigue existiendo**. Si la
+ * carpeta fuera solo texto dentro de un apunte, crear «Tema 3» antes de tener nada que
+ * meter dentro no guardaría nada, y al recargar habría desaparecido. Organizarse es
+ * justamente preparar el sitio **antes** de llenarlo.
+ */
+export interface Carpeta {
+  id: ID;
+  asignatura: string;
+  /** Dentro de qué otra carpeta está. Vacío significa la raíz de la asignatura. */
+  madre?: ID;
+  /** Lo escribe quien sea: se pinta como texto, nunca como HTML. */
+  nombre: string;
+  remoto: { proveedor: 'local' | 'drive'; id: string };
+  creado?: number;
+  actualizado?: number;
+}
+
+/**
  * Un apunte: el material de estudio de una asignatura.
  *
  * Esto es una **ficha, no un fichero**. Los bytes viven en el archivador —Drive mañana, el
@@ -178,6 +199,8 @@ export interface Apunte {
   tam: number;
   /** Dónde están los bytes. El proveedor va dentro porque un día habrá dos a la vez. */
   remoto: { proveedor: 'local' | 'drive'; id: string };
+  /** En qué carpeta está. Vacío significa la raíz de la asignatura. */
+  carpeta?: ID;
   /** Para ordenar a mano dentro de la asignatura. Sin él manda `creado`. */
   orden?: number;
   creado?: number;

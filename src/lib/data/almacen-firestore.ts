@@ -5,6 +5,7 @@
  *   users/{uid}/eventos/{id}
  *   users/{uid}/tareas/{id}
  *   users/{uid}/apuntes/{id}
+ *   users/{uid}/carpetas/{id}
  *   users/{uid}/ajustes/app
  *   users/{uid}/layout/{superficie}
  *
@@ -19,7 +20,7 @@ import {
 
 import { getDb } from '@/lib/firebase/config';
 import { nuevoId, type Almacen, type Coleccion, type Desuscribir, type Documento } from './almacen';
-import type { Ajustes, Apunte, Evento, ID, Layout, Rango, Tarea } from './tipos';
+import type { Ajustes, Apunte, Carpeta, Evento, ID, Layout, Rango, Tarea } from './tipos';
 
 /**
  * Por qué el campo de orden es un parámetro y no siempre `fecha`.
@@ -101,6 +102,8 @@ export function crearAlmacenFirestore(uid: string): Almacen | null {
     tareas: crearColeccion<Tarea>(db, `${raiz}/tareas`),
     /* por `creado`: un apunte no tiene fecha de calendario, tiene momento de subida */
     apuntes: crearColeccion<Apunte>(db, `${raiz}/apuntes`, 'creado'),
+    /* por `nombre`: una carpeta no tiene fecha que importe, tiene sitio en una lista */
+    carpetas: crearColeccion<Carpeta>(db, `${raiz}/carpetas`, 'nombre'),
     ajustes: crearDocumento<Ajustes>(db, `${raiz}/ajustes/app`),
     layout: (superficie: string) => crearDocumento<Layout>(db, `${raiz}/layout/${superficie}`),
   };

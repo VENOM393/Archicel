@@ -36,6 +36,14 @@ export type Remoto = Apunte['remoto'];
 export interface Destino {
   /** La clave de la asignatura en el catálogo del curso. */
   asignatura: string;
+  /**
+   * La carpeta de dentro, si la hay.
+   *
+   * Va el `Remoto` y no el identificador de la ficha porque quien tiene que entenderlo es
+   * el proveedor: al archivador no le importa cómo llame Archicel a esa carpeta, le importa
+   * cuál es en Drive.
+   */
+  padre?: Remoto;
 }
 
 /**
@@ -88,6 +96,27 @@ export interface Archivador {
    * informar del progreso, y una barra que no se mueve es peor que no tener barra.
    */
   subir(fichero: File, destino: Destino, alAvanzar?: (tanto: number) => void): Promise<Remoto>;
+
+  /**
+   * Crea una carpeta y devuelve dónde ha quedado.
+   *
+   * Existe en el contrato —y no solo en el de Drive— porque la usuaria tiene que poder
+   * organizarse **también sin haber conectado nada**. Una carpeta que solo funciona con
+   * Drive puesto convierte una decisión de orden en una decisión de infraestructura.
+   */
+  crearCarpeta(nombre: string, destino: Destino): Promise<Remoto>;
+
+  /** Le cambia el nombre. Vale para un fichero y para una carpeta. */
+  renombrar(remoto: Remoto, nombre: string): Promise<void>;
+
+  /**
+   * Lo mueve a otra carpeta. `null` significa la raíz de la asignatura.
+   *
+   * `desde` hace falta porque Drive no mueve: **quita un padre y pone otro**, y para
+   * quitarlo hay que saber cuál era. Pedirlo aquí evita una llamada de más solo para
+   * averiguar algo que quien llama ya sabe.
+   */
+  mover(remoto: Remoto, desde: Remoto | null, hasta: Remoto | null, destino: Destino): Promise<void>;
 
   /** Lo quita. Qué signifique «quitar» lo decide el proveedor: puede ser una papelera. */
   borrar(remoto: Remoto): Promise<void>;

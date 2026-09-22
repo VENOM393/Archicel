@@ -113,6 +113,23 @@ export function crearArchivadorLocal(): Archivador {
       return { proveedor: 'local', id };
     },
 
+    /*
+     * Aquí una carpeta no es nada: es una ficha en el almacén y ya está.
+     *
+     * Los bytes van a IndexedDB con una clave plana, así que el árbol lo dibuja la
+     * aplicación y no el almacenamiento. Devolver un identificador propio mantiene el
+     * contrato —la ficha siempre sabe a quién preguntar— sin inventarse una jerarquía que
+     * por debajo no existe.
+     */
+    async crearCarpeta(_nombre, destino: Destino) {
+      return { proveedor: 'local' as const, id: `${destino.asignatura}/c-${idNuevo()}` };
+    },
+
+    /* El nombre y el sitio viven en la ficha del almacén, no en el byte: aquí no hay nada
+       que cambiar, y decir que sí es más honesto que fingir un trabajo. */
+    async renombrar() {},
+    async mover() {},
+
     async borrar(remoto: Remoto) {
       if (remoto.proveedor !== 'local') {
         throw new FalloDeArchivo('no-esta', 'Ese apunte no está guardado en este equipo.');

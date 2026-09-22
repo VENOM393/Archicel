@@ -1485,8 +1485,26 @@
   }
   .asig-apuntes.encima{border-color:var(--accent-linea)}
 
-  .asig-cab{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
-  .asig-cab h2{margin:0;font-size:17px;font-weight:600;letter-spacing:-.018em}
+  .asig-cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+
+  /* ── las migas de pan ──
+     Hacen de título y de mapa a la vez, así que el sitio donde estás va en el peso del
+     texto y no en un color: el acento ya está gastado en el botón de subir. */
+  .asig-camino{display:flex;align-items:center;gap:2px;min-width:0;flex-wrap:wrap}
+  .asig-miga-par{display:flex;align-items:center;gap:2px;min-width:0}
+  .asig-miga-par > svg{flex:none;color:var(--ink-subtle);opacity:.65}
+  .asig-miga{
+    border:0;background:none;cursor:pointer;font:inherit;
+    padding:4px 7px;border-radius:var(--r-xs);max-width:22ch;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    font-size:16px;font-weight:500;letter-spacing:-.014em;color:var(--ink-subtle);
+    transition:color 200ms,background 200ms,box-shadow 200ms
+  }
+  .asig-miga:hover{color:var(--ink-muted);background:rgba(255,255,255,.05)}
+  .asig-miga.aqui{color:var(--ink);font-weight:600;font-size:17px;letter-spacing:-.018em}
+  /* Cuando se arrastra algo encima: un anillo, no un relleno. Lo que hay debajo sigue
+     leyéndose, que es lo que dice «va a caer AQUÍ» y no «esto ha cambiado». */
+  .asig-miga.diana{color:var(--ink);box-shadow:inset 0 0 0 1px var(--accent-linea)}
   .asig-donde{
     font-size:11.5px;color:var(--ink-subtle);margin-right:auto;
     /* No es una etiqueta decorativa: dice dónde acaban los ficheros, que es información
@@ -1503,6 +1521,31 @@
     border-bottom:1px solid color-mix(in srgb,var(--hairline) 55%,transparent)
   }
   .asig-fila:last-child{border-bottom:0}
+  /* Arrastrar una fila es la forma natural de moverla, así que el cursor lo dice antes de
+     que nadie lo intente. */
+  .asig-fila[draggable='true']{cursor:grab}
+  .asig-fila[draggable='true']:active{cursor:grabbing}
+  /* La carpeta que va a recibir lo que sueltas: anillo y un punto de relleno, sin tapar
+     su nombre — hay que poder comprobar que es la que se quería. */
+  .asig-fila.carp.diana{
+    background:color-mix(in srgb,var(--accent) 16%,transparent);
+    box-shadow:inset 0 0 0 1px var(--accent-linea);
+    border-radius:var(--r-sm)
+  }
+  .asig-fila.nueva,.asig-fila.carp .asig-abrir{align-items:center}
+  /* Una carpeta se lee antes que un fichero: por eso su icono lleva el color del acento y
+     el de un fichero no. Es la única diferencia y basta. */
+  .asig-ico.carp{color:var(--accent-linea);border-color:color-mix(in srgb,var(--accent-linea) 30%,transparent)}
+
+  /* El campo de escribir un nombre, con la misma caja que la fila que sustituye para que
+     la lista no dé un salto al entrar y salir de él. */
+  .asig-bautizo{
+    flex:1 1 auto;min-width:0;margin:6px 8px 6px 0;padding:7px 10px;
+    border-radius:var(--r-sm);font:inherit;font-size:13.5px;color:var(--ink);
+    background:rgba(255,255,255,.06);
+    border:1px solid var(--accent-linea);outline:none
+  }
+  .asig-bautizo::placeholder{color:var(--ink-subtle)}
   .asig-abrir{
     flex:1 1 auto;min-width:0;display:grid;
     grid-template-columns:30px minmax(0,1fr) auto;align-items:center;gap:12px;
@@ -1528,17 +1571,22 @@
     font-family:var(--data);font-size:11px;color:var(--ink-subtle);flex:none;
     font-variant-numeric:tabular-nums
   }
-  .asig-quitar,.asig-endrive{
+  /* Renombrar no destruye nada, así que no se pone rojo al pasar por encima. Compartían
+     clase con el de borrar y el lápiz se encendía en el color de eliminar — el gesto más
+     inofensivo de la fila avisando como el más grave. */
+  .asig-quitar,.asig-endrive,.asig-accion{
     flex:none;width:32px;height:32px;border-radius:var(--r-sm);display:grid;place-items:center;
     border:0;background:none;color:var(--ink-subtle);cursor:pointer;text-decoration:none;
     opacity:0;transition:opacity 200ms,color 200ms,background 200ms
   }
   .asig-fila:hover .asig-quitar,.asig-quitar:focus-visible,
+  .asig-fila:hover .asig-accion,.asig-accion:focus-visible,
   .asig-fila:hover .asig-endrive,.asig-endrive:focus-visible{opacity:1}
+  .asig-accion:hover{color:var(--ink);background:rgba(255,255,255,.07)}
   .asig-endrive:hover{color:var(--accent-linea);background:rgba(255,255,255,.055)}
   .asig-quitar:hover{color:var(--late);background:color-mix(in srgb,var(--late) 12%,transparent)}
   /* En táctil no hay `hover`: el botón se queda puesto o no hay forma de borrar nada. */
-  @media (hover:none){ .asig-quitar,.asig-endrive{opacity:1} }
+  @media (hover:none){ .asig-quitar,.asig-endrive,.asig-accion{opacity:1} }
 
   /* ── el vacío ──
      Dice qué meter aquí, no «no hay nada». Un estado vacío que solo constata el vacío

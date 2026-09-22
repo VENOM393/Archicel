@@ -54,7 +54,7 @@ service cloud.firestore {
 
     // las colecciones con forma fija; el comodín de abajo no debe tocarlas
     function estaValidada(coleccion) {
-      return coleccion in ['eventos', 'tareas', 'apuntes', 'ajustes', 'layout'];
+      return coleccion in ['eventos', 'tareas', 'apuntes', 'carpetas', 'ajustes', 'layout'];
     }
 
     // El paso franco del administrador.
@@ -141,7 +141,26 @@ service cloud.firestore {
           && request.resource.data.remoto is map
           && request.resource.data.remoto.proveedor in ['local', 'drive']
           && textoCorto(request.resource.data.remoto.id, 300)
+          && (!('carpeta' in request.resource.data) || textoCorto(request.resource.data.carpeta, 200))
           && (!('orden' in request.resource.data) || request.resource.data.orden is number);
+      }
+
+      // carpetas: el esqueleto con el que la usuaria se organiza dentro de una asignatura.
+      //
+      // `madre` apunta a otra carpeta y aquí no se puede comprobar que exista: Firestore
+      // no sigue referencias al validar. Lo que sí se acota es la forma y el tamaño, y el
+      // cliente se defiende de un ciclo al dibujar el camino.
+      match /carpetas/{carpetaId} {
+        allow read, delete: if esPropietario(uid);
+        allow create, update: if esPropietario(uid)
+          && textoCorto(request.resource.data.asignatura, 120)
+          && request.resource.data.asignatura.size() > 0
+          && textoCorto(request.resource.data.nombre, 200)
+          && request.resource.data.nombre.size() > 0
+          && (!('madre' in request.resource.data) || textoCorto(request.resource.data.madre, 200))
+          && request.resource.data.remoto is map
+          && request.resource.data.remoto.proveedor in ['local', 'drive']
+          && textoCorto(request.resource.data.remoto.id, 300);
       }
 
       // lo que venga después (asignaturas, proyectos, referencias…): mismo dueño y

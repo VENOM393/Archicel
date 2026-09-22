@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useArchicel } from '@/lib/firebase/sesion';
-import { aFecha, deFecha, hoy, type Apunte, type Evento, type Rango, type Tarea } from '@/lib/data';
+import { aFecha, deFecha, hoy, type Apunte, type Carpeta, type Evento, type Rango, type Tarea } from '@/lib/data';
 
 /** Ordena por fecha, luego por hora y por último por `id`, que nunca empata. */
 function ordenarEventos(l: Evento[]): Evento[] {
@@ -111,6 +111,19 @@ export function useApuntes(asignatura: string): Apunte[] {
   );
   const todos = useLista(escuchar, ordenarApuntes, `${almacen.uid ?? ''}|apuntes`);
   return useMemo(() => todos.filter((a) => a.asignatura === asignatura), [todos, asignatura]);
+}
+
+/** Alfabético y sin distinguir mayúsculas, que es como espera verlo cualquiera. */
+function ordenarCarpetas(l: Carpeta[]): Carpeta[] {
+  return [...l].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }) || a.id.localeCompare(b.id));
+}
+
+/** Las carpetas de una asignatura, todas: el árbol lo arma la pantalla. */
+export function useCarpetas(asignatura: string): Carpeta[] {
+  const { almacen } = useArchicel();
+  const escuchar = useCallback((cb: (l: Carpeta[]) => void) => almacen.carpetas.escuchar(cb), [almacen]);
+  const todas = useLista(escuchar, ordenarCarpetas, `${almacen.uid ?? ''}|carpetas`);
+  return useMemo(() => todas.filter((c) => c.asignatura === asignatura), [todas, asignatura]);
 }
 
 /** La entrega que viene: de ella cuelgan la cuenta atrás y el mensaje de bienvenida. */

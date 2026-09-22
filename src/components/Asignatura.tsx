@@ -31,7 +31,7 @@ import { AnimatePresence } from 'motion/react';
 import { APARECER, ORQUESTA, PIEZA, VELO, MUELLE, CURVA, TIEMPO } from '@/lib/ui/movimiento';
 import { Icono, TIPOS } from '@/lib/ui/catalogo';
 import { Button } from '@/components/ui/button';
-import { useAhora, useApuntes, useEventos } from '@/hooks/useDatos';
+import { useAhora, useApuntes, useCarpetas, useEventos } from '@/hooks/useDatos';
 import { useUI } from '@/lib/ui/contexto';
 import { useArchicel } from '@/lib/firebase/sesion';
 import {
@@ -55,6 +55,7 @@ import {
   deFecha,
   hhmm,
   type Apunte,
+  type Carpeta,
   type ClaveAsignatura,
 } from '@/lib/data';
 
@@ -205,30 +206,45 @@ function LoQueViene({ clave, ahora }: { clave: ClaveAsignatura; ahora: Date | nu
 
 /* ───────────────────────── los apuntes ───────────────────────── */
 
+/**
+ * El sitio de trabajo: carpetas y apuntes de una asignatura.
+ *
+ * Aquí manda una idea: **organizarse no puede depender de la infraestructura.** Se pueden
+ * crear carpetas, renombrar y mover con Drive conectado y sin conectarlo, porque decidir
+ * dónde va cada cosa es del estudiante y no del proveedor de almacenamiento.
+ *
+ * El árbol lo arma esta pantalla a partir de una lista plana de carpetas, cada una con su
+ * `madre`. No se guarda ninguna ruta de texto, y eso es lo que hace que renombrar una
+ * carpeta no obligue a reescribir nada de lo que hay dentro.
+ */
+
 interface Subiendo {
   nombre: string;
   tanto: number;
 }
 
+/** Lo que se está arrastrando dentro de la aplicación, para no confundirlo con el disco. */
+const TIPO_ARRASTRE = 'application/x-archicel';
+
+/** Tope de profundidad al dibujar el camino: un ciclo no puede colgar la pantalla. */
+const HONDO = 24;
+
 function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[] }) {
   const { almacen } = useArchicel();
   const { avisar } = useUI();
   const archivador = elArchivador();
+  const carpetas = useCarpetas(clave);
   const entrada = useRef<HTMLInputElement>(null);
+
+  const [aqui, setAqui] = useState<string | null>(null);
   const [encima, setEncima] = useState(false);
   const [subiendo, setSubiendo] = useState<Subiendo[]>([]);
   const [abierto, setAbierto] = useState<Apunte | null>(null);
+  const [creando, setCreando] = useState(false);
+  const [renombrando, setRenombrando] = useState<string | null>(null);
+  /** Sobre qué carpeta se está soltando algo, para marcarla. */
+  const [sobre, setSobre] = useState<string | null>(null);
 
-  /**
-   * Si Drive está conectado en esta pestaña.
-   *
-   * Vive en estado y no se lee del módulo en cada render porque conectar no provoca un
-   * render por sí solo: es una promesa que se resuelve fuera de React.
-   *
-   * Y arranca en `false` a propósito, incluso si ya hubiera permiso: el servidor
-   * prerrenderiza esta página y allí no hay ni ventana ni token. Decidirlo durante el
-   * render daría dos árboles distintos y React se quejaría al hidratar.
-   */
   const [enDrive, setEnDrive] = useState(false);
   const [correo, setCorreo] = useState<string | null>(null);
   const [conectando, setConectando] = useState(false);
@@ -249,35 +265,56 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
       void deQuienEsElDrive().then(setCorreo);
       avisar('Drive conectado');
     } catch (e) {
-      /* El motivo concreto vale mucho más que un «no se pudo»: cerrar la ventana,
-         bloquearla el navegador y no tener permiso se arreglan de formas distintas, y
-         quien lo lee necesita saber cuál de las tres le ha pasado. */
       avisar(e instanceof Error && e.message ? e.message : 'No se pudo conectar con Drive');
     } finally {
       setConectando(false);
     }
   }, [archivador, avisar]);
 
-  /**
-   * El contador de arrastre, y por qué no basta un booleano.
-   *
-   * `dragenter` y `dragleave` se disparan también al cruzar de un hijo a otro dentro de la
-   * misma zona. Con una bandera, el resalte parpadea cada vez que el puntero pasa por
-   * encima de una fila. Contando entradas y salidas, el resalte solo se apaga cuando se
-   * sale de verdad.
-   */
-  const cuenta = useRef(0);
+  /* ── el árbol ── */
+
+  const porId = useMemo(() => new Map(carpetas.map((c) => [c.id, c])), [carpetas]);
 
   /**
-   * Lo que no ha podido subir, con su motivo y el fichero todavía en la mano.
+   * El camino desde la raíz hasta donde se está.
    *
-   * Un aviso que se va en tres segundos es el peor sitio donde poner un fallo: cuentas
-   * cinco ficheros arrastrados, ves «no se pudo subir» de reojo y no sabes cuál de los
-   * cinco fue, ni por qué, ni tienes forma de repetirlo sin volver a buscarlo en el disco.
-   *
-   * Guardando el `File` —que sigue siendo válido mientras la página viva— el reintento es
-   * un botón, no una expedición.
+   * Sube por `madre` y **cuenta los pasos**: si alguien acabara siendo su propia abuela
+   * —un dato corrupto, una escritura a medias desde otro dispositivo— esto giraría para
+   * siempre y se llevaría la pestaña por delante. Un tope convierte un dato malo en una
+   * miga de pan rara, que es un problema infinitamente menor.
    */
+  const camino = useMemo(() => {
+    const trozos: Carpeta[] = [];
+    const vistas = new Set<string>();
+    let id = aqui;
+    for (let i = 0; id && i < HONDO; i++) {
+      if (vistas.has(id)) break;
+      vistas.add(id);
+      const c = porId.get(id);
+      if (!c) break;
+      trozos.unshift(c);
+      id = c.madre ?? null;
+    }
+    return trozos;
+  }, [aqui, porId]);
+
+  /* Si la carpeta en la que estaba desaparece —la borró otro dispositivo— se vuelve a la
+     raíz en vez de quedarse enseñando el vacío de un sitio que ya no existe. */
+  useEffect(() => {
+    if (aqui && carpetas.length > 0 && !porId.has(aqui)) setAqui(null);
+  }, [aqui, porId, carpetas.length]);
+
+  const hijas = useMemo(() => carpetas.filter((c) => (c.madre ?? null) === aqui), [carpetas, aqui]);
+  const suyos = useMemo(() => apuntes.filter((a) => (a.carpeta ?? null) === aqui), [apuntes, aqui]);
+  const carpetaActual = aqui ? porId.get(aqui) : undefined;
+  const destino = useMemo(
+    () => ({ asignatura: clave, padre: carpetaActual?.remoto }),
+    [clave, carpetaActual],
+  );
+
+  /* ── subir ── */
+
+  const cuenta = useRef(0);
   const [fallidos, setFallidos] = useState<Array<{ f: File; motivo: string; caducada: boolean }>>([]);
 
   const subir = useCallback(
@@ -293,56 +330,31 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
 
       for (const fichero of lista) {
         try {
-          const remoto = await archivador.subir(fichero, { asignatura: clave }, (tanto) =>
+          const remoto = await archivador.subir(fichero, destino, (tanto) =>
             setSubiendo((s) => s.map((x) => (x.nombre === fichero.name ? { ...x, tanto } : x))),
           );
 
-          /*
-           * Se guardó, pero no donde tocaba.
-           *
-           * Pasa cuando la sesión de Drive ha caducado y ni renovándola se pudo: el
-           * fichero se queda en el equipo, que es mejor que perderlo, **pero hay que
-           * decirlo**. Un apunte que crees en la nube y está en el portátil es justo el
-           * que no vas a tener el día que abras esto en otro sitio.
-           */
           if (remoto.proveedor === 'local' && driveEsLoNormal()) {
             malos.push({ f: fichero, motivo: 'Guardado en este equipo: la sesión de Drive caducó.', caducada: true });
             setEnDrive(false);
           } else if (remoto.proveedor === 'drive' && !enDrive) {
-            /*
-             * Se renovó sola por el camino.
-             *
-             * La cabecera se calcula al montar la página, así que tras una renovación a
-             * mitad de subida decía «Guardados en este equipo» mientras las filas ya
-             * llevaban su flecha a Drive. Dos sitios de la misma pantalla contando cosas
-             * distintas sobre lo mismo, que es peor que cualquiera de las dos por
-             * separado.
-             */
             setEnDrive(true);
             void deQuienEsElDrive().then(setCorreo);
           }
+
           await almacen.apuntes.guardar({
             asignatura: clave,
             nombre: fichero.name,
             tipo: fichero.type,
             tam: fichero.size,
             remoto,
+            ...(aqui ? { carpeta: aqui } : {}),
             creado: Date.now(),
           });
           bien++;
         } catch (e) {
-          /*
-           * El motivo concreto, no un «no se pudo».
-           *
-           * Las causas tienen nombre precisamente para esto, y tragárselas dejaba el mismo
-           * mensaje para «no queda sitio», «se cayó la red» y «Drive dice que ese padre no
-           * existe» — tres cosas que se arreglan de tres formas distintas. Un mensaje que
-           * no distingue no es prudencia: es perder la única pista que había.
-           */
           const f = e instanceof FalloDeArchivo ? e : null;
           const bloqueada = e instanceof Error && /bloque|ventana/i.test(e.message);
-          /* «Caducada» es el caso que hay que tratar aparte: no es una avería, es que la
-             hora pasó y hay que volver a dar permiso. Su arreglo es un botón distinto. */
           const caducada = f?.causa === 'sin-permiso' || bloqueada || (!f && e instanceof Error);
           const motivo =
             f?.causa === 'sin-sitio'
@@ -354,34 +366,20 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
                   : caducada
                     ? 'La sesión de Drive ha caducado.'
                     : (f?.message ?? (e instanceof Error ? e.message : 'Fallo desconocido.'));
-
           malos.push({ f: fichero, motivo, caducada });
-          /* Y en la consola, entero: el aviso cabe en una línea y esto no siempre. */
           console.error('[archicel] subida fallida', fichero.name, e);
         }
       }
 
-      /* Una subida de 40 ms enseña y esconde la barra en el mismo parpadeo, y eso se lee
-         como un fallo y no como algo que ha ido rápido. */
       const falta = MINIMO_VISIBLE - (Date.now() - arranque);
       if (falta > 0) await new Promise((r) => setTimeout(r, falta));
       setSubiendo([]);
       setFallidos(malos);
-
-      /* El aviso solo cuenta lo que salió bien. Lo que salió mal se queda en pantalla con
-         su motivo y su botón, que es donde se puede hacer algo al respecto. */
       if (bien > 0) avisar(bien === 1 ? 'Apunte guardado' : `${bien} apuntes guardados`);
     },
-    [archivador, almacen, clave, avisar, enDrive],
+    [archivador, almacen, clave, avisar, destino, aqui, enDrive],
   );
 
-  /**
-   * Reintentar.
-   *
-   * Si lo que falló fue la sesión, **primero se reconecta y después se sube**, y en ese
-   * orden: reconectar abre la ventana de Google, y eso solo se puede hacer mientras dure
-   * el permiso que deja este clic. Meter una subida por delante se lo gasta.
-   */
   const reintentar = useCallback(async () => {
     const pendientes = fallidos.map((x) => x.f);
     if (pendientes.length === 0) return;
@@ -401,6 +399,100 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
     await subir(pendientes);
   }, [fallidos, archivador, avisar, subir]);
 
+  /* ── organizar ── */
+
+  const crearCarpeta = useCallback(
+    async (nombre: string) => {
+      const limpio = nombre.trim();
+      setCreando(false);
+      if (!limpio) return;
+      try {
+        const remoto = await archivador.crearCarpeta(limpio, destino);
+        await almacen.carpetas.guardar({
+          asignatura: clave,
+          nombre: limpio,
+          remoto,
+          ...(aqui ? { madre: aqui } : {}),
+          creado: Date.now(),
+        });
+        avisar('Carpeta creada');
+      } catch (e) {
+        avisar(e instanceof Error && e.message ? e.message : 'No se pudo crear la carpeta');
+      }
+    },
+    [archivador, almacen, clave, destino, aqui, avisar],
+  );
+
+  const renombrar = useCallback(
+    async (que: Apunte | Carpeta, nombre: string) => {
+      const limpio = nombre.trim();
+      setRenombrando(null);
+      if (!limpio || limpio === que.nombre) return;
+      try {
+        /* Primero el proveedor y después la ficha: al revés, un fallo dejaría la pantalla
+           diciendo un nombre que en Drive es otro, que es la peor de las dos mentiras. */
+        await archivador.renombrar(que.remoto, limpio);
+        const esCarpeta = !('tipo' in que);
+        if (esCarpeta) await almacen.carpetas.guardar({ ...(que as Carpeta), nombre: limpio });
+        else await almacen.apuntes.guardar({ ...(que as Apunte), nombre: limpio });
+      } catch (e) {
+        avisar(e instanceof Error && e.message ? e.message : 'No se pudo renombrar');
+      }
+    },
+    [archivador, almacen, avisar],
+  );
+
+  /**
+   * Mueve un apunte o una carpeta a otra carpeta. `hasta` en `null` es la raíz.
+   *
+   * Lo único delicado es mover una carpeta dentro de sí misma o de una hija suya, que
+   * dejaría un trozo del árbol flotando sin camino a la raíz: invisible y sin forma de
+   * recuperarlo. Se comprueba antes y se dice que no.
+   */
+  const mover = useCallback(
+    async (id: string, esCarpeta: boolean, hasta: string | null) => {
+      if (esCarpeta && id === hasta) return;
+
+      if (esCarpeta && hasta) {
+        for (let p: string | null = hasta, i = 0; p && i < HONDO; i++) {
+          if (p === id) {
+            avisar('Una carpeta no puede ir dentro de sí misma');
+            return;
+          }
+          p = porId.get(p)?.madre ?? null;
+        }
+      }
+
+      const que = esCarpeta ? porId.get(id) : apuntes.find((a) => a.id === id);
+      if (!que) return;
+      const dondeEsta = esCarpeta ? ((que as Carpeta).madre ?? null) : ((que as Apunte).carpeta ?? null);
+      if (dondeEsta === hasta) return;
+
+      try {
+        await archivador.mover(
+          que.remoto,
+          dondeEsta ? (porId.get(dondeEsta)?.remoto ?? null) : null,
+          hasta ? (porId.get(hasta)?.remoto ?? null) : null,
+          { asignatura: clave },
+        );
+        if (esCarpeta) {
+          const c = { ...(que as Carpeta) };
+          if (hasta) c.madre = hasta;
+          else delete c.madre;
+          await almacen.carpetas.guardar(c);
+        } else {
+          const a = { ...(que as Apunte) };
+          if (hasta) a.carpeta = hasta;
+          else delete a.carpeta;
+          await almacen.apuntes.guardar(a);
+        }
+      } catch (e) {
+        avisar(e instanceof Error && e.message ? e.message : 'No se pudo mover');
+      }
+    },
+    [archivador, almacen, apuntes, porId, clave, avisar],
+  );
+
   const borrar = useCallback(
     async (a: Apunte) => {
       try {
@@ -415,21 +507,58 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
     [archivador, almacen, avisar],
   );
 
+  /**
+   * Borrar una carpeta se lleva lo de dentro, y por eso pregunta.
+   *
+   * Es la única acción de esta pantalla que puede destruir algo que no se está mirando:
+   * una carpeta cerrada con veinte apuntes se ve igual que una vacía. Preguntar con la
+   * cuenta delante —«y 20 apuntes»— es lo que convierte un clic en una decisión.
+   */
+  const borrarCarpeta = useCallback(
+    async (c: Carpeta) => {
+      const dentroC = carpetas.filter((x) => x.madre === c.id);
+      const dentroA = apuntes.filter((a) => a.carpeta === c.id);
+      const cuantos = dentroC.length + dentroA.length;
+      if (cuantos > 0 && !window.confirm(`«${c.nombre}» tiene ${cuantos} cosa${cuantos === 1 ? '' : 's'} dentro. ¿Eliminarla con todo?`)) {
+        return;
+      }
+      /* De dentro hacia fuera, para no dejar huérfano nada por el camino. */
+      for (const a of dentroA) await borrar(a);
+      for (const x of dentroC) await borrarCarpeta(x);
+      try {
+        await archivador.borrar(c.remoto as Remoto);
+      } catch {
+        /* en Drive la carpeta ya podría no estar; la ficha se va igual */
+      }
+      await almacen.carpetas.borrar(c.id);
+      avisar('Carpeta eliminada');
+    },
+    [carpetas, apuntes, borrar, archivador, almacen, avisar],
+  );
+
+  const vacio = hijas.length === 0 && suyos.length === 0 && subiendo.length === 0 && fallidos.length === 0 && !creando;
+
   return (
     <mo.div
       className={`asig-apuntes${encima ? ' encima' : ''}`}
       variants={PIEZA}
       onDragEnter={(e) => {
+        /* Solo el disco resalta el panel entero: un arrastre de dentro se suelta sobre una
+           carpeta concreta, y marcar las dos cosas a la vez no dice dónde va a caer. */
+        if (!e.dataTransfer.types.includes('Files')) return;
         e.preventDefault();
         cuenta.current++;
         setEncima(true);
       }}
-      onDragOver={(e) => e.preventDefault()}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+      }}
       onDragLeave={() => {
         cuenta.current = Math.max(0, cuenta.current - 1);
         if (cuenta.current === 0) setEncima(false);
       }}
       onDrop={(e) => {
+        if (!e.dataTransfer.types.includes('Files')) return;
         e.preventDefault();
         cuenta.current = 0;
         setEncima(false);
@@ -437,21 +566,31 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
       }}
     >
       <div className="asig-cab">
-        <h2>Apuntes</h2>
-        {/* La cuenta, cuando se sabe. Llega una fracción de segundo después del estado
-            y por eso hay dos textos y no uno: enseñar «En el Drive de …» con el hueco
-            vacío mientras llega se lee peor que decir «En tu Drive» y precisarlo luego. */}
+        <Camino
+          camino={camino}
+          alIr={setAqui}
+          alSoltar={(id, esCarpeta, hasta) => void mover(id, esCarpeta, hasta)}
+          sobre={sobre}
+          setSobre={setSobre}
+        />
         <span className="asig-donde" title={correo ?? undefined}>
           {enDrive ? (correo ? `En el Drive de ${correo}` : 'En tu Drive') : 'Guardados en este equipo'}
         </span>
 
-        {/* Una oferta, no un muro: la página funciona sin esto y por eso el botón es
-            fantasma. La única pieza sólida de la pantalla sigue siendo la que crea algo. */}
         {!enDrive && sePuedeUsarDrive() && (
           <Button type="button" variant="ghost" onClick={() => void conectar()} disabled={conectando}>
             {conectando ? 'Conectando…' : 'Conectar Drive'}
           </Button>
         )}
+
+        <Button type="button" variant="outline" onClick={() => setCreando(true)}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h3l2 2.5h6A2.5 2.5 0 0 1 20 10v7a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17Z" />
+            <path d="M12 11.5v5M9.5 14h5" />
+          </svg>
+          Carpeta
+        </Button>
+
         <Button type="button" onClick={() => entrada.current?.click()}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 20V7" />
@@ -467,7 +606,6 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
           hidden
           onChange={(e) => {
             if (e.target.files) void subir(e.target.files);
-            /* sin esto, subir dos veces el mismo fichero no dispara `change` */
             e.target.value = '';
           }}
         />
@@ -488,8 +626,6 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
         )}
       </AnimatePresence>
 
-      {/* Lo que no subió, con su motivo y un botón. Va **encima** de la lista y no en un
-          aviso: es lo único de esta pantalla que le pide algo a quien la mira. */}
       <AnimatePresence>
         {fallidos.length > 0 && (
           <mo.div
@@ -513,11 +649,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
                   : `${fallidos.length} apuntes no llegaron a ${driveEsLoNormal() ? 'Drive' : 'guardarse'}`}
               </span>
               <Button type="button" variant="outline" size="sm" onClick={() => void reintentar()} disabled={conectando}>
-                {conectando
-                  ? 'Reconectando…'
-                  : fallidos.some((x) => x.caducada)
-                    ? 'Reconectar y reintentar'
-                    : 'Reintentar'}
+                {conectando ? 'Reconectando…' : fallidos.some((x) => x.caducada) ? 'Reconectar y reintentar' : 'Reintentar'}
               </Button>
               <button type="button" className="asig-fallos-x" onClick={() => setFallidos([])} aria-label="Descartar">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
@@ -537,27 +669,65 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
         )}
       </AnimatePresence>
 
-      {apuntes.length === 0 && subiendo.length === 0 && fallidos.length === 0 ? (
+      {vacio ? (
         <div className="asig-vacio">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h3l2 2.5h6A2.5 2.5 0 0 1 20 10v7a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17Z" />
           </svg>
-          <p>Arrastra aquí tus fotos de pizarra, los PDF de teoría o lo que te manden.</p>
+          <p>
+            {aqui
+              ? 'Esta carpeta está vacía. Arrastra aquí lo que vaya dentro.'
+              : 'Arrastra aquí tus fotos de pizarra, los PDF de teoría o lo que te manden.'}
+          </p>
         </div>
       ) : (
         <ul className="asig-lista">
-          {apuntes.map((a) => (
-            <Fila key={a.id} apunte={a} alAbrir={() => setAbierto(a)} alBorrar={() => void borrar(a)} />
-          ))}
+          <AnimatePresence initial={false}>
+            {creando && (
+              <mo.li className="asig-fila nueva" key="nueva" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}>
+                <span className="asig-ico carp" aria-hidden="true">
+                  <IconoCarpeta />
+                </span>
+                <Bautizo inicial="" alTerminar={(n) => void crearCarpeta(n)} alCancelar={() => setCreando(false)} />
+              </mo.li>
+            )}
+
+            {hijas.map((c) => (
+              <FilaCarpeta
+                key={c.id}
+                carpeta={c}
+                editando={renombrando === c.id}
+                marcada={sobre === c.id}
+                alEntrar={() => setAqui(c.id)}
+                alRenombrar={() => setRenombrando(c.id)}
+                alBautizar={(n) => void renombrar(c, n)}
+                alCancelar={() => setRenombrando(null)}
+                alBorrar={() => void borrarCarpeta(c)}
+                alSoltar={(id, esC) => void mover(id, esC, c.id)}
+                setSobre={setSobre}
+              />
+            ))}
+
+            {suyos.map((a) => (
+              <Fila
+                key={a.id}
+                apunte={a}
+                editando={renombrando === a.id}
+                alAbrir={() => setAbierto(a)}
+                alRenombrar={() => setRenombrando(a.id)}
+                alBautizar={(n) => void renombrar(a, n)}
+                alCancelar={() => setRenombrando(null)}
+                alBorrar={() => void borrar(a)}
+              />
+            ))}
+          </AnimatePresence>
         </ul>
       )}
 
-      {/* El velo del arrastre va dentro del panel y no es un segundo cristal: es un
-          relleno y un filete, que es como el contrato visual pide separar superficies. */}
       <AnimatePresence>
         {encima && (
           <mo.span className="asig-suelta" key="suelta" variants={VELO} initial="fuera" animate="dentro" exit="saliendo" aria-hidden="true">
-            Suéltalo aquí
+            {carpetaActual ? `Suéltalo en «${carpetaActual.nombre}»` : 'Suéltalo aquí'}
           </mo.span>
         )}
       </AnimatePresence>
@@ -567,50 +737,288 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
   );
 }
 
-function Fila({ apunte, alAbrir, alBorrar }: { apunte: Apunte; alAbrir: () => void; alBorrar: () => void }) {
-  const clase = seVeDentro(apunte.tipo, apunte.nombre);
-  /*
-   * A dónde fue a parar de verdad.
-   *
-   * Hacía falta y no estaba: la cabecera dice «En tu Drive» pero eso describe dónde irá lo
-   * **próximo**, no dónde está cada cosa — y con dos archivadores conviviendo, una lista
-   * donde todo se ve igual no permite distinguir lo que está a salvo en la nube de lo que
-   * solo está en este equipo. El enlace resuelve las dos cosas a la vez: lo dice y lleva.
-   */
-  const enDrive = apunte.remoto.proveedor === 'drive';
+/* ───────────────────────── el camino ───────────────────────── */
+
+/**
+ * Las migas de pan, y además una diana.
+ *
+ * Cada trozo acepta que le suelten algo encima, que es la única forma cómoda de sacar una
+ * cosa de donde está: arrastrarla **hacia arriba**. Sin eso habría que entrar en la
+ * carpeta destino y no habría manera de mover nada hacia fuera.
+ */
+function Camino({
+  camino,
+  alIr,
+  alSoltar,
+  sobre,
+  setSobre,
+}: {
+  camino: Carpeta[];
+  alIr: (id: string | null) => void;
+  alSoltar: (id: string, esCarpeta: boolean, hasta: string | null) => void;
+  sobre: string | null;
+  setSobre: (id: string | null) => void;
+}) {
+  const diana = (hasta: string | null) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes(TIPO_ARRASTRE)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setSobre(hasta ?? 'raiz');
+    },
+    onDragLeave: () => setSobre(null),
+    onDrop: (e: React.DragEvent) => {
+      const crudo = e.dataTransfer.getData(TIPO_ARRASTRE);
+      if (!crudo) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setSobre(null);
+      const [tipo, id] = crudo.split(':');
+      alSoltar(id, tipo === 'c', hasta);
+    },
+  });
+
   return (
-    <li className="asig-fila">
-      <button type="button" className="asig-abrir" onClick={alAbrir} title={apunte.nombre}>
-        <span className={`asig-ico tipo-${clase}`} aria-hidden="true">
-          <IconoDeTipo clase={clase} />
-        </span>
-        <span className="asig-nombre">{apunte.nombre}</span>
-        <span className="asig-meta">
-          {nombreDeTipo(apunte.tipo, apunte.nombre)} · {pesoLegible(apunte.tam)}
-        </span>
+    <nav className="asig-camino" aria-label="Dónde estás">
+      <button
+        type="button"
+        className={`asig-miga${camino.length === 0 ? ' aqui' : ''}${sobre === 'raiz' ? ' diana' : ''}`}
+        onClick={() => alIr(null)}
+        {...diana(null)}
+      >
+        Apuntes
       </button>
-      {enDrive && (
-        <a
-          className="asig-endrive"
-          href={`https://drive.google.com/file/d/${apunte.remoto.id}/view`}
-          target="_blank"
-          rel="noreferrer"
-          title="Verlo en tu Drive"
-          aria-label={`Ver ${apunte.nombre} en tu Drive`}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 4h6v6" />
-            <path d="M20 4 11 13" />
-            <path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10" />
+      {camino.map((c, i) => (
+        <span className="asig-miga-par" key={c.id}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m10 6 6 6-6 6" />
           </svg>
-        </a>
-      )}
-      <button type="button" className="asig-quitar" onClick={alBorrar} aria-label={`Eliminar ${apunte.nombre}`}>
+          <button
+            type="button"
+            className={`asig-miga${i === camino.length - 1 ? ' aqui' : ''}${sobre === c.id ? ' diana' : ''}`}
+            onClick={() => alIr(c.id)}
+            {...diana(c.id)}
+          >
+            {c.nombre}
+          </button>
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+/* ───────────────────────── las filas ───────────────────────── */
+
+/**
+ * Escribir un nombre, para crear y para renombrar.
+ *
+ * Se selecciona el texto al aparecer: renombrar casi siempre es escribir otra cosa, no
+ * añadir al final. `Enter` confirma y `Escape` cancela, que es lo que hace cualquiera sin
+ * que nadie se lo diga; y salir del campo también confirma, porque perder lo escrito por
+ * haber pulsado fuera es de las cosas que más enfadan.
+ */
+function Bautizo({
+  inicial,
+  alTerminar,
+  alCancelar,
+}: {
+  inicial: string;
+  alTerminar: (nombre: string) => void;
+  alCancelar: () => void;
+}) {
+  const campo = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    campo.current?.focus();
+    campo.current?.select();
+  }, []);
+  return (
+    <input
+      ref={campo}
+      className="asig-bautizo"
+      defaultValue={inicial}
+      maxLength={200}
+      placeholder="Nombre de la carpeta"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') alTerminar(e.currentTarget.value);
+        if (e.key === 'Escape') alCancelar();
+      }}
+      onBlur={(e) => alTerminar(e.currentTarget.value)}
+    />
+  );
+}
+
+function IconoCarpeta() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h3l2 2.5h6A2.5 2.5 0 0 1 20 10v7a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17Z" />
+    </svg>
+  );
+}
+
+function BotonesDeFila({ alRenombrar, alBorrar, que }: { alRenombrar: () => void; alBorrar: () => void; que: string }) {
+  return (
+    <>
+      <button type="button" className="asig-accion" onClick={(e) => { e.stopPropagation(); alRenombrar(); }} aria-label={`Renombrar ${que}`}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 20h8" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </svg>
+      </button>
+      <button type="button" className="asig-quitar" onClick={(e) => { e.stopPropagation(); alBorrar(); }} aria-label={`Eliminar ${que}`}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
           <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13h10l1-13" />
         </svg>
       </button>
-    </li>
+    </>
+  );
+}
+
+function FilaCarpeta({
+  carpeta,
+  editando,
+  marcada,
+  alEntrar,
+  alRenombrar,
+  alBautizar,
+  alCancelar,
+  alBorrar,
+  alSoltar,
+  setSobre,
+}: {
+  carpeta: Carpeta;
+  editando: boolean;
+  marcada: boolean;
+  alEntrar: () => void;
+  alRenombrar: () => void;
+  alBautizar: (n: string) => void;
+  alCancelar: () => void;
+  alBorrar: () => void;
+  alSoltar: (id: string, esCarpeta: boolean) => void;
+  setSobre: (id: string | null) => void;
+}) {
+  return (
+    <mo.li
+      className={`asig-fila carp${marcada ? ' diana' : ''}`}
+      layout
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}
+      draggable={!editando}
+      /* `Capture` porque Motion declara su propio `onDragStart` —el de su gesto de
+         arrastre— y tapa el del DOM, que es el que lleva `dataTransfer`. En el elemento
+         que origina el arrastre las dos fases son la misma cosa. */
+      onDragStartCapture={(e) => e.dataTransfer.setData(TIPO_ARRASTRE, `c:${carpeta.id}`)}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(TIPO_ARRASTRE)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setSobre(carpeta.id);
+      }}
+      onDragLeave={() => setSobre(null)}
+      onDrop={(e) => {
+        const crudo = e.dataTransfer.getData(TIPO_ARRASTRE);
+        if (!crudo) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setSobre(null);
+        const [tipo, id] = crudo.split(':');
+        alSoltar(id, tipo === 'c');
+      }}
+    >
+      {editando ? (
+        <>
+          <span className="asig-ico carp" aria-hidden="true">
+            <IconoCarpeta />
+          </span>
+          <Bautizo inicial={carpeta.nombre} alTerminar={alBautizar} alCancelar={alCancelar} />
+        </>
+      ) : (
+        <>
+          <button type="button" className="asig-abrir" onClick={alEntrar} title={carpeta.nombre}>
+            <span className="asig-ico carp" aria-hidden="true">
+              <IconoCarpeta />
+            </span>
+            <span className="asig-nombre">{carpeta.nombre}</span>
+            <span className="asig-meta">Carpeta</span>
+          </button>
+          <BotonesDeFila alRenombrar={alRenombrar} alBorrar={alBorrar} que={carpeta.nombre} />
+        </>
+      )}
+    </mo.li>
+  );
+}
+
+function Fila({
+  apunte,
+  editando,
+  alAbrir,
+  alRenombrar,
+  alBautizar,
+  alCancelar,
+  alBorrar,
+}: {
+  apunte: Apunte;
+  editando: boolean;
+  alAbrir: () => void;
+  alRenombrar: () => void;
+  alBautizar: (n: string) => void;
+  alCancelar: () => void;
+  alBorrar: () => void;
+}) {
+  const clase = seVeDentro(apunte.tipo, apunte.nombre);
+  const enDrive = apunte.remoto.proveedor === 'drive';
+  return (
+    <mo.li
+      className="asig-fila"
+      layout
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}
+      draggable={!editando}
+      onDragStartCapture={(e) => e.dataTransfer.setData(TIPO_ARRASTRE, `a:${apunte.id}`)}
+    >
+      {editando ? (
+        <>
+          <span className={`asig-ico tipo-${clase}`} aria-hidden="true">
+            <IconoDeTipo clase={clase} />
+          </span>
+          <Bautizo inicial={apunte.nombre} alTerminar={alBautizar} alCancelar={alCancelar} />
+        </>
+      ) : (
+        <>
+          <button type="button" className="asig-abrir" onClick={alAbrir} title={apunte.nombre}>
+            <span className={`asig-ico tipo-${clase}`} aria-hidden="true">
+              <IconoDeTipo clase={clase} />
+            </span>
+            <span className="asig-nombre">{apunte.nombre}</span>
+            <span className="asig-meta">
+              {nombreDeTipo(apunte.tipo, apunte.nombre)} · {pesoLegible(apunte.tam)}
+            </span>
+          </button>
+          {enDrive && (
+            <a
+              className="asig-endrive"
+              href={`https://drive.google.com/file/d/${apunte.remoto.id}/view`}
+              target="_blank"
+              rel="noreferrer"
+              title="Verlo en tu Drive"
+              aria-label={`Ver ${apunte.nombre} en tu Drive`}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 4h6v6" />
+                <path d="M20 4 11 13" />
+                <path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10" />
+              </svg>
+            </a>
+          )}
+          <BotonesDeFila alRenombrar={alRenombrar} alBorrar={alBorrar} que={apunte.nombre} />
+        </>
+      )}
+    </mo.li>
   );
 }
 

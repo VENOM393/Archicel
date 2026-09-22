@@ -115,6 +115,28 @@ export function elArchivador(): Archivador & { conectarDrive(): Promise<void> } 
       return elLocal().subir(fichero, destino, alAvanzar);
     },
 
+    /* Una carpeta se crea donde vayan a ir sus ficheros: por el preferido. */
+    async crearCarpeta(nombre, destino) {
+      if (driveConectado()) return elDrive().crearCarpeta(nombre, destino);
+      if (hayClienteConfigurado() && seHaUsadoDrive()) {
+        try {
+          await conseguirToken(true);
+          return await elDrive().crearCarpeta(nombre, destino);
+        } catch {
+          /* al disco, como con los ficheros */
+        }
+      }
+      return elLocal().crearCarpeta(nombre, destino);
+    },
+
+    renombrar(remoto, nombre) {
+      return paraRemoto(remoto).renombrar(remoto, nombre);
+    },
+
+    mover(remoto, desde, hasta, destino) {
+      return paraRemoto(remoto).mover(remoto, desde, hasta, destino);
+    },
+
     borrar(remoto) {
       return paraRemoto(remoto).borrar(remoto);
     },

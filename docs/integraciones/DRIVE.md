@@ -171,7 +171,7 @@ Dos implementaciones desde el primer día, por la misma razón que hay dos almac
 
 ```
 Archicel/
-  Apuntes/
+  Asignaturas/
     Geometría Descriptiva I/
     Física Aplicada I/
     Dibujo Arquitectónico I/

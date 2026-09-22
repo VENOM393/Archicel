@@ -321,7 +321,12 @@ Cada asignatura va a tener su página, y en ella los apuntes de Celeste —fotos
 Los bytes van a **Google Drive**; Firestore guarda solo la ficha. El planteamiento entero, con los
 pasos de la consola, está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
 
-**Estado: funcionando.** Subida, visor y borrado contra Drive real, con el permiso concedido.
+**Estado: funcionando.** Subida, visor, borrado, **carpetas, renombrar y mover** contra Drive real.
+
+La ruta en Drive es `Archicel/Asignaturas/<nombre de la asignatura>`, y dentro el árbol que la
+usuaria haya montado. Se llamó `Apuntes` y **la aplicación renombra la vieja** la primera vez que
+la encuentra: crear la nueva sin más habría dejado el trabajo repartido en dos carpetas sin que
+nada explicara por qué.
 
 **`NEXT_PUBLIC_GOOGLE_CLIENT_ID` va también en las variables de Vercel**, o en producción la
 aplicación ni siquiera ofrece conectar: sin ID no tiene con qué pedirlo, y todo lo que suba Celeste
@@ -420,6 +425,31 @@ Y tres trampas de las que costó salir:
 
 Y lo de siempre, que aquí entra contenido de fuera por primera vez: **el nombre de un fichero lo
 escribe quien sea**, así que se pinta como texto y nunca como HTML.
+
+### Organizarse: carpetas, renombrar y mover
+
+La usuaria decide el árbol, con Drive conectado y sin conectarlo. **Organizarse no puede depender
+de la infraestructura**: una carpeta que solo funciona con Drive puesto convierte una decisión de
+orden en una decisión de configuración.
+
+Cuatro cosas que no se deducen:
+
+- **Una carpeta es un documento propio, no un trozo de ruta dentro de cada apunte.** Si fuera texto,
+  crear «Tema 3» antes de tener nada que meter dentro no guardaría nada y desaparecería al recargar
+  — y organizarse es precisamente preparar el sitio **antes** de llenarlo. Además, así renombrar una
+  carpeta no obliga a reescribir nada de lo que hay dentro.
+- **Drive no mueve: quita un padre y pone otro**, en la misma llamada. Por eso `mover` recibe de
+  dónde sale además de a dónde va; hacerlo en dos llamadas dejaría el fichero en los dos sitios o en
+  ninguno si algo falla entre medias.
+- **Mover una carpeta dentro de sí misma o de una hija suya** dejaría ese trozo del árbol sin camino
+  a la raíz: invisible y sin forma de recuperarlo. Se comprueba antes de mover, y el dibujo del
+  camino lleva tope de profundidad por si un dato corrupto llegara desde otro dispositivo.
+- **El arrastre de dentro y el del disco son dos cosas.** Un arrastre interno lleva el tipo
+  `application/x-archicel`; uno del sistema lleva `Files`. Sin distinguirlos, el panel entero se
+  resaltaba a la vez que la carpeta concreta y no había forma de saber dónde iba a caer.
+
+Y una de interfaz: **`onDragStartCapture` y no `onDragStart`**. Motion declara el suyo —el de su
+gesto de arrastre— y tapa el del DOM, que es el que lleva `dataTransfer`.
 
 ## La página de una asignatura
 
