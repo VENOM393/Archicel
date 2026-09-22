@@ -284,14 +284,28 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
           });
           bien++;
         } catch (e) {
+          /*
+           * El motivo concreto, no un «no se pudo».
+           *
+           * Las causas tienen nombre precisamente para esto, y tragárselas dejaba el mismo
+           * mensaje para «no queda sitio», «se cayó la red» y «Drive dice que ese padre no
+           * existe» — tres cosas que se arreglan de tres formas distintas. Un mensaje que
+           * no distingue no es prudencia: es perder la única pista que había.
+           */
           const f = e instanceof FalloDeArchivo ? e : null;
-          avisar(
+          const porque =
             f?.causa === 'sin-sitio'
-              ? 'No queda sitio en este equipo'
+              ? f.message
               : f?.causa === 'demasiado-grande'
-                ? `«${fichero.name}» es demasiado grande`
-                : `No se pudo subir «${fichero.name}»`,
-          );
+                ? 'es demasiado grande'
+                : f?.causa === 'sin-permiso'
+                  ? f.message
+                  : f?.causa === 'red'
+                    ? 'se cortó la conexión'
+                    : (f?.message ?? (e instanceof Error ? e.message : ''));
+          avisar(`No se pudo subir «${fichero.name}»${porque ? ` — ${porque}` : ''}`);
+          /* Y en la consola, entero: el aviso cabe en una línea y esto no siempre. */
+          console.error('[archicel] subida fallida', fichero.name, e);
         }
       }
 
@@ -421,6 +435,15 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
 
 function Fila({ apunte, alAbrir, alBorrar }: { apunte: Apunte; alAbrir: () => void; alBorrar: () => void }) {
   const clase = seVeDentro(apunte.tipo, apunte.nombre);
+  /*
+   * A dónde fue a parar de verdad.
+   *
+   * Hacía falta y no estaba: la cabecera dice «En tu Drive» pero eso describe dónde irá lo
+   * **próximo**, no dónde está cada cosa — y con dos archivadores conviviendo, una lista
+   * donde todo se ve igual no permite distinguir lo que está a salvo en la nube de lo que
+   * solo está en este equipo. El enlace resuelve las dos cosas a la vez: lo dice y lleva.
+   */
+  const enDrive = apunte.remoto.proveedor === 'drive';
   return (
     <li className="asig-fila">
       <button type="button" className="asig-abrir" onClick={alAbrir} title={apunte.nombre}>
@@ -432,6 +455,22 @@ function Fila({ apunte, alAbrir, alBorrar }: { apunte: Apunte; alAbrir: () => vo
           {nombreDeTipo(apunte.tipo, apunte.nombre)} · {pesoLegible(apunte.tam)}
         </span>
       </button>
+      {enDrive && (
+        <a
+          className="asig-endrive"
+          href={`https://drive.google.com/file/d/${apunte.remoto.id}/view`}
+          target="_blank"
+          rel="noreferrer"
+          title="Verlo en tu Drive"
+          aria-label={`Ver ${apunte.nombre} en tu Drive`}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 4h6v6" />
+            <path d="M20 4 11 13" />
+            <path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10" />
+          </svg>
+        </a>
+      )}
       <button type="button" className="asig-quitar" onClick={alBorrar} aria-label={`Eliminar ${apunte.nombre}`}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
           <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13h10l1-13" />

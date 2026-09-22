@@ -1528,15 +1528,17 @@
     font-family:var(--data);font-size:11px;color:var(--ink-subtle);flex:none;
     font-variant-numeric:tabular-nums
   }
-  .asig-quitar{
+  .asig-quitar,.asig-endrive{
     flex:none;width:32px;height:32px;border-radius:var(--r-sm);display:grid;place-items:center;
-    border:0;background:none;color:var(--ink-subtle);cursor:pointer;
+    border:0;background:none;color:var(--ink-subtle);cursor:pointer;text-decoration:none;
     opacity:0;transition:opacity 200ms,color 200ms,background 200ms
   }
-  .asig-fila:hover .asig-quitar,.asig-quitar:focus-visible{opacity:1}
+  .asig-fila:hover .asig-quitar,.asig-quitar:focus-visible,
+  .asig-fila:hover .asig-endrive,.asig-endrive:focus-visible{opacity:1}
+  .asig-endrive:hover{color:var(--accent-linea);background:rgba(255,255,255,.055)}
   .asig-quitar:hover{color:var(--late);background:color-mix(in srgb,var(--late) 12%,transparent)}
   /* En táctil no hay `hover`: el botón se queda puesto o no hay forma de borrar nada. */
-  @media (hover:none){ .asig-quitar{opacity:1} }
+  @media (hover:none){ .asig-quitar,.asig-endrive{opacity:1} }
 
   /* ── el vacío ──
      Dice qué meter aquí, no «no hay nada». Un estado vacío que solo constata el vacío

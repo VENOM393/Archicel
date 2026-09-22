@@ -46,17 +46,36 @@ const TROZO = 8 * 1024 * 1024;
 /** Los identificadores de carpeta, recordados por pestaña. */
 const carpetas = new Map<string, string>();
 
+/**
+ * Lo que dice Drive cuando algo va mal, sacado de su propio JSON.
+ *
+ * Drive contesta `{"error":{"message":"..."}}` y ese texto es lo único que distingue
+ * «falta un permiso» de «ese padre no existe» de «el fichero es demasiado grande». Tirarlo
+ * y quedarse con el número deja a quien depura mirando un 403 sin saber cuál de las cinco
+ * cosas que devuelven 403 le ha pasado.
+ */
+function loQueDijo(cuerpo?: string): string {
+  if (!cuerpo) return '';
+  try {
+    const j = JSON.parse(cuerpo) as { error?: { message?: string } };
+    return j.error?.message ?? '';
+  } catch {
+    return cuerpo.slice(0, 120);
+  }
+}
+
 function traducir(estado: number, cuerpo?: string): FalloDeArchivo {
+  const dijo = loQueDijo(cuerpo);
   if (estado === 401 || estado === 403) {
     /* 403 lo usa Drive tanto para «sin permiso» como para «no cabe», y distinguirlos
        importa porque la salida es distinta: volver a conectar, o hacer sitio. */
-    if (cuerpo && /quota|storageQuota/i.test(cuerpo)) {
+    if (/quota|storageQuota/i.test(cuerpo ?? '')) {
       return new FalloDeArchivo('sin-sitio', 'No queda espacio en tu Drive.');
     }
-    return new FalloDeArchivo('sin-permiso', 'Archicel ya no tiene permiso sobre tu Drive.');
+    return new FalloDeArchivo('sin-permiso', `Drive no lo permite${dijo ? `: ${dijo}` : '.'}`);
   }
   if (estado === 404) return new FalloDeArchivo('no-esta', 'Ese apunte ya no está en tu Drive.');
-  return new FalloDeArchivo('desconocida', `Drive respondió ${estado}.`);
+  return new FalloDeArchivo('desconocida', `Drive respondió ${estado}${dijo ? `: ${dijo}` : '.'}`);
 }
 
 async function llamar(url: string, opciones: RequestInit = {}, interactivo = false): Promise<Response> {
@@ -189,8 +208,19 @@ export function crearArchivadorDrive(): Archivador {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(meta),
       });
+      /*
+       * Una respuesta de otro origen **solo deja leer siete cabeceras** salvo que el
+       * servidor exponga más, y `Location` no está entre esas siete. Google la expone,
+       * pero si algún día deja de hacerlo esto devuelve `null` y la subida se cae sin
+       * pista — de ahí que el mensaje diga qué cabecera falta y no «no se pudo».
+       */
       const url = sesion.headers.get('Location');
-      if (!url) throw new FalloDeArchivo('desconocida', 'Drive no abrió la subida.');
+      if (!url) {
+        throw new FalloDeArchivo(
+          'desconocida',
+          'Drive no devolvió la dirección de subida (cabecera Location no legible).',
+        );
+      }
 
       let desde = 0;
       for (;;) {
