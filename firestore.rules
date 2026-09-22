@@ -54,7 +54,7 @@ service cloud.firestore {
 
     // las colecciones con forma fija; el comodín de abajo no debe tocarlas
     function estaValidada(coleccion) {
-      return coleccion in ['eventos', 'tareas', 'ajustes', 'layout'];
+      return coleccion in ['eventos', 'tareas', 'apuntes', 'ajustes', 'layout'];
     }
 
     // El paso franco del administrador.
@@ -118,6 +118,30 @@ service cloud.firestore {
               || request.resource.data.progreso in ['sin-empezar', 'en-curso', 'hecha'])
           && (!('asignatura' in request.resource.data)
               || textoCorto(request.resource.data.asignatura, 120));
+      }
+
+      // apuntes: la FICHA de un fichero, nunca el fichero.
+      //
+      // Los bytes viven en el archivador (Drive, o el navegador mientras no lo haya) y
+      // aquí solo está lo que hace falta para pintar la pantalla. De ahí el tope de
+      // tamaño: si alguna vez alguien intentara meter el contenido en base64 dentro de
+      // `nombre`, no cabría.
+      match /apuntes/{apunteId} {
+        allow read, delete: if esPropietario(uid);
+        allow create, update: if esPropietario(uid)
+          && textoCorto(request.resource.data.asignatura, 120)
+          && request.resource.data.asignatura.size() > 0
+          && textoCorto(request.resource.data.nombre, 300)
+          && request.resource.data.nombre.size() > 0
+          && textoCorto(request.resource.data.tipo, 120)
+          && request.resource.data.tam is int
+          && request.resource.data.tam >= 0
+          // 2 GB: por encima de eso no es un apunte, es otra cosa
+          && request.resource.data.tam <= 2147483647
+          && request.resource.data.remoto is map
+          && request.resource.data.remoto.proveedor in ['local', 'drive']
+          && textoCorto(request.resource.data.remoto.id, 300)
+          && (!('orden' in request.resource.data) || request.resource.data.orden is number);
       }
 
       // lo que venga después (asignaturas, proyectos, referencias…): mismo dueño y

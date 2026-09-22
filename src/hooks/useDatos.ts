@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useArchicel } from '@/lib/firebase/sesion';
-import { aFecha, deFecha, hoy, type Evento, type Rango, type Tarea } from '@/lib/data';
+import { aFecha, deFecha, hoy, type Apunte, type Evento, type Rango, type Tarea } from '@/lib/data';
 
 /** Ordena por fecha, luego por hora y por último por `id`, que nunca empata. */
 function ordenarEventos(l: Evento[]): Evento[] {
@@ -86,6 +86,31 @@ export function useTareas(rango?: Rango): Tarea[] {
     [almacen],
   );
   return useLista(escuchar, ordenarTareas, `${almacen.uid ?? ''}|${rango?.desde ?? ''}|${rango?.hasta ?? ''}`, rango);
+}
+
+/** Ordena por el orden puesto a mano y, a falta de él, por cuándo se subió. */
+function ordenarApuntes(l: Apunte[]): Apunte[] {
+  return [...l].sort(
+    (a, b) => (a.orden ?? Infinity) - (b.orden ?? Infinity) || (a.creado ?? 0) - (b.creado ?? 0) || a.id.localeCompare(b.id),
+  );
+}
+
+/**
+ * Los apuntes de una asignatura.
+ *
+ * Se escucha la colección entera y se filtra aquí, en vez de pedirle a Firestore solo los
+ * de una asignatura. Con seis asignaturas y unos cientos de apuntes es menos trabajo para
+ * todos: una sola suscripción en vez de seis, ningún índice compuesto que mantener, y
+ * cambiar de asignatura no vuelve a la red. El día que esto sean miles, se filtra arriba.
+ */
+export function useApuntes(asignatura: string): Apunte[] {
+  const { almacen } = useArchicel();
+  const escuchar = useCallback(
+    (cb: (l: Apunte[]) => void) => almacen.apuntes.escuchar(cb),
+    [almacen],
+  );
+  const todos = useLista(escuchar, ordenarApuntes, `${almacen.uid ?? ''}|apuntes`);
+  return useMemo(() => todos.filter((a) => a.asignatura === asignatura), [todos, asignatura]);
 }
 
 /** La entrega que viene: de ella cuelgan la cuenta atrás y el mensaje de bienvenida. */

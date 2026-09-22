@@ -39,6 +39,7 @@ export interface Almacen {
   readonly uid: string;
   readonly eventos: Coleccion<import('./tipos').Evento>;
   readonly tareas: Coleccion<import('./tipos').Tarea>;
+  readonly apuntes: Coleccion<import('./tipos').Apunte>;
   readonly ajustes: Documento<Ajustes>;
   /** Una disposición por superficie: `layout('escritorio')`. */
   layout(superficie: string): Documento<Layout>;

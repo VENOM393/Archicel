@@ -371,7 +371,7 @@ Cuando lo tengas, ponlo en `.env.local` tú y dime «puesto». Igual que con los
 
 | Fase | Qué entra | Sirve para |
 |---|---|---|
-| **1** | `Archivador` + `archivador-local` + la página de asignatura entera | Todo el diseño y toda la animación funcionando **sin tocar Google**. Se ve, se prueba y se decide si gusta antes de pedirle a nadie un permiso |
+| **1** ✅ | `Archivador` + `archivador-local` + la página de asignatura entera | **Hecha.** Todo el diseño y toda la animación funcionando **sin tocar Google** |
 | **2** | `archivador-drive`, conectar, subir reanudable, borrar, visor | Lo de verdad. Necesita el paso 7 hecho |
 | **3** | Selector de Google, miniaturas, orden a mano, búsqueda | Adjuntar lo que ya esté en su Drive, y que la pantalla aguante doscientos apuntes |
 

@@ -54,6 +54,9 @@ const SECCIONES = [
   {
     href: '/horario',
     titulo: 'Horario de clases',
+    /* Una asignatura es una vista de detalle del horario: mientras se está en ella el
+       dock sigue señalando aquí, en vez de quedarse sin nada marcado. */
+    tambien: ['/asignatura'],
     /* un reloj: el horario responde a "a qué hora", no a "qué día" — esa es la del
        calendario, y con dos rejillas seguidas en el raíl no se distinguirían */
     icono: (

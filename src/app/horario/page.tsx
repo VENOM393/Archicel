@@ -12,6 +12,7 @@
  * calendario, para que una mancha naranja signifique Geometría en toda la aplicación.
  */
 
+import Link from 'next/link';
 import { useMemo } from 'react';
 import * as mo from 'motion/react-m';
 
@@ -90,8 +91,14 @@ export default function Horario() {
                     const a = ASIGNATURAS[c.asignatura];
                     const enCurso = esHoy && minutosAhora >= c.ini && minutosAhora < c.fin;
                     return (
-                      <article
+                      /* Cada clase es la puerta de su asignatura. Es un `Link` y no un
+                         botón con `router.push`: así se precarga sola, se puede abrir en
+                         otra pestaña y el teclado la alcanza sin que nadie lo programe. */
+                      <Link
                         key={`${c.asignatura}-${c.ini}`}
+                        href={`/asignatura/${c.asignatura}`}
+                        prefetch
+                        aria-label={`Apuntes de ${a.nombre}`}
                         className={`hor-clase${enCurso ? ' ahora' : ''}`}
                         style={{
                           ['--tc' as string]: `var(--c-${a.color})`,
@@ -116,7 +123,7 @@ export default function Horario() {
                           )}
                           {c.aula}
                         </span>
-                      </article>
+                      </Link>
                     );
                   })}
                 </div>
@@ -135,10 +142,10 @@ export default function Horario() {
             // sin el código: aquí solo se busca qué color es cada asignatura, y el número
             // compite con el nombre sin ayudar a esa pregunta. Sigue en cada clase de la
             // rejilla, que es donde hace falta identificarla.
-            <span className="hor-chip" key={k} style={{ ['--tc' as string]: `var(--c-${a.color})` }}>
+            <Link className="hor-chip" key={k} href={`/asignatura/${k}`} prefetch style={{ ['--tc' as string]: `var(--c-${a.color})` }}>
               <i />
               <b>{a.corto}</b>
-            </span>
+            </Link>
           );
         })}
       </mo.div>

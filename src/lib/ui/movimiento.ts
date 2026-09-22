@@ -172,7 +172,13 @@ const ORDEN = ['/', '/calendario', '/horario'] as const;
  * `/dia` no está en el dock porque no es un destino: se llega pulsando un día dentro de
  * la semana. Es una capa más adentro, y eso no se cruza de lado — se entra y se sale.
  */
-const DENTRO_DE: Record<string, string> = { '/dia': '/calendario' };
+const DENTRO_DE: Record<string, string> = {
+  '/dia': '/calendario',
+  /* Una asignatura cuelga del horario: se llega pulsando una clase. La clave va en la
+     ruta (`/asignatura/geometria`), así que aquí está la raíz y `seccionDe` resuelve por
+     prefijo — si no, cada asignatura nueva habría que añadirla a mano a esta lista. */
+  '/asignatura': '/horario',
+};
 
 /**
  * Cómo se va de una pantalla a otra.
@@ -190,7 +196,16 @@ export const SIN_VIAJE: Viaje = { eje: 'quieto' };
 
 /** En qué sección del dock cae una ruta. Un detalle cuenta como la suya. */
 function seccionDe(ruta: string): string {
-  return DENTRO_DE[ruta] ?? ruta;
+  if (DENTRO_DE[ruta]) return DENTRO_DE[ruta];
+  /* Por prefijo, para las rutas con parámetro: `/asignatura/geometria` cae en la misma
+     sección que `/asignatura`. */
+  const raiz = `/${ruta.split('/')[1] ?? ''}`;
+  return DENTRO_DE[raiz] ?? ruta;
+}
+
+/** Si una ruta es el detalle de otra, en vez de una sección por derecho propio. */
+function esDetalle(ruta: string): boolean {
+  return seccionDe(ruta) !== ruta;
 }
 
 export function viajeEntre(desde: string | null, hasta: string): Viaje {
@@ -209,8 +224,14 @@ export function viajeEntre(desde: string | null, hasta: string): Viaje {
   const aqui = seccionDe(desde);
   const alla = seccionDe(hasta);
 
-  /* misma sección del dock: se entra en su detalle o se sale de él */
-  if (aqui === alla) return { eje: 'profundidad', sentido: DENTRO_DE[hasta] ? 1 : -1 };
+  if (aqui === alla) {
+    /* Dos detalles de la misma sección —de una asignatura a otra— no es entrar ni salir:
+       no se baja ni se sube ninguna capa, y el agua del dock tampoco se mueve. Fingir una
+       dirección aquí sería inventarse una jerarquía que no existe. */
+    if (esDetalle(desde) && esDetalle(hasta)) return SIN_VIAJE;
+    /* misma sección del dock: se entra en su detalle o se sale de él */
+    return { eje: 'profundidad', sentido: esDetalle(hasta) ? 1 : -1 };
+  }
 
   const a = ORDEN.indexOf(aqui as (typeof ORDEN)[number]);
   const b = ORDEN.indexOf(alla as (typeof ORDEN)[number]);

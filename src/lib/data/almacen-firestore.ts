@@ -4,6 +4,7 @@
  * Estructura (la misma que documenta docs/data/FIRESTORE.md):
  *   users/{uid}/eventos/{id}
  *   users/{uid}/tareas/{id}
+ *   users/{uid}/apuntes/{id}
  *   users/{uid}/ajustes/app
  *   users/{uid}/layout/{superficie}
  *
@@ -18,22 +19,31 @@ import {
 
 import { getDb } from '@/lib/firebase/config';
 import { nuevoId, type Almacen, type Coleccion, type Desuscribir, type Documento } from './almacen';
-import type { Ajustes, Evento, ID, Layout, Rango, Tarea } from './tipos';
+import type { Ajustes, Apunte, Evento, ID, Layout, Rango, Tarea } from './tipos';
 
-function restricciones(rango?: Rango): QueryConstraint[] {
+/**
+ * Por qué el campo de orden es un parámetro y no siempre `fecha`.
+ *
+ * Firestore **excluye de una consulta los documentos que no tienen el campo por el que se
+ * ordena**. No da error, no avisa: devuelve una lista vacía. Una colección sin `fecha`
+ * —los apuntes, que se ordenan por cuándo se subieron— pedida con `orderBy('fecha')` se
+ * ve exactamente igual que una colección vacía, y esa es la clase de fallo que se busca
+ * durante una tarde en el sitio equivocado.
+ */
+function restricciones(rango: Rango | undefined, orden: string): QueryConstraint[] {
   const cs: QueryConstraint[] = [];
   if (rango?.desde) cs.push(where('fecha', '>=', rango.desde));
   if (rango?.hasta) cs.push(where('fecha', '<=', rango.hasta));
-  cs.push(orderBy('fecha'));
+  cs.push(orderBy(orden));
   return cs;
 }
 
-function crearColeccion<T extends { id: ID }>(db: Firestore, ruta: string): Coleccion<T> {
+function crearColeccion<T extends { id: ID }>(db: Firestore, ruta: string, orden = 'fecha'): Coleccion<T> {
   const ref = collection(db, ruta) as CollectionReference<Omit<T, 'id'>>;
 
   return {
     async listar(rango) {
-      const inst = await getDocs(query(ref, ...restricciones(rango)));
+      const inst = await getDocs(query(ref, ...restricciones(rango, orden)));
       return inst.docs.map((d) => ({ ...(d.data() as object), id: d.id }) as T);
     },
 
@@ -58,7 +68,7 @@ function crearColeccion<T extends { id: ID }>(db: Firestore, ruta: string): Cole
     },
 
     escuchar(cb, rango): Desuscribir {
-      return onSnapshot(query(ref, ...restricciones(rango)), (inst) => {
+      return onSnapshot(query(ref, ...restricciones(rango, orden)), (inst) => {
         cb(inst.docs.map((d) => ({ ...(d.data() as object), id: d.id }) as T));
       });
     },
@@ -89,6 +99,8 @@ export function crearAlmacenFirestore(uid: string): Almacen | null {
     uid,
     eventos: crearColeccion<Evento>(db, `${raiz}/eventos`),
     tareas: crearColeccion<Tarea>(db, `${raiz}/tareas`),
+    /* por `creado`: un apunte no tiene fecha de calendario, tiene momento de subida */
+    apuntes: crearColeccion<Apunte>(db, `${raiz}/apuntes`, 'creado'),
     ajustes: crearDocumento<Ajustes>(db, `${raiz}/ajustes/app`),
     layout: (superficie: string) => crearDocumento<Layout>(db, `${raiz}/layout/${superficie}`),
   };

@@ -151,6 +151,40 @@ export const NOMBRE_PROGRESO: Record<ProgresoVisible, string> = {
 };
 
 /**
+ * Un apunte: el material de estudio de una asignatura.
+ *
+ * Esto es una **ficha, no un fichero**. Los bytes viven en el archivador —Drive mañana, el
+ * navegador hoy— y aquí solo está lo que hace falta para pintar la pantalla sin pedirle
+ * nada al proveedor: cómo se llama, de qué tipo es, cuánto ocupa y dónde encontrarlo.
+ *
+ * Esa separación es lo que hace que la página de una asignatura se dibuje entera sin una
+ * sola llamada de red al almacenamiento. Al archivador solo se va al subir, al abrir y al
+ * borrar.
+ */
+export interface Apunte {
+  id: ID;
+  /** La clave de la asignatura en el catálogo del curso. */
+  asignatura: string;
+  /**
+   * El nombre tal cual lo trae el fichero.
+   *
+   * Lo escribe quien sea y entra de fuera: se pinta **siempre como texto**, nunca como
+   * HTML. Es la primera regla de la revisión de seguridad y aquí es donde más aplica.
+   */
+  nombre: string;
+  /** El tipo MIME: `application/pdf`, `image/jpeg`… Vacío si el sistema no lo supo decir. */
+  tipo: string;
+  /** Bytes. Para poder decir «2,4 MB» sin preguntarle al proveedor. */
+  tam: number;
+  /** Dónde están los bytes. El proveedor va dentro porque un día habrá dos a la vez. */
+  remoto: { proveedor: 'local' | 'drive'; id: string };
+  /** Para ordenar a mano dentro de la asignatura. Sin él manda `creado`. */
+  orden?: number;
+  creado?: number;
+  actualizado?: number;
+}
+
+/**
  * El color de una tarea sale de su asignatura, no de un selector.
  *
  * La lista de asignaturas vive en `curso.ts` y es la única fuente: el mismo color que

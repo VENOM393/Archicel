@@ -54,7 +54,10 @@ export interface Seccion {
 }
 
 function estaActiva(s: Seccion, ruta: string): boolean {
-  return ruta === s.href || (s.tambien?.includes(ruta) ?? false);
+  if (ruta === s.href) return true;
+  /* Por prefijo, para que `/asignatura/geometria` marque Horario igual que `/asignatura`.
+     La barra final importa: sin ella `/dia` casaría con `/diario` el día que exista. */
+  return s.tambien?.some((t) => ruta === t || ruta.startsWith(`${t}/`)) ?? false;
 }
 
 /* ── Los números del dock ──

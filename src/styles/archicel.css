@@ -1066,7 +1066,11 @@
 
   /* aviso flotante */
   .toast{
-    position:fixed;left:50%;bottom:22px;z-index:60;padding:10px 18px;border-radius:var(--r-sm);
+    /* Por encima del dock, no detrás. Los dos están centrados abajo, así que compartir
+       el `bottom` significaba que cada aviso salía tapado por el plato — y un aviso que
+       no se lee es peor que no avisar, porque ya se ha gastado el momento de decirlo.
+       Los 116 px son el alto del plato más su separación del borde más un respiro. */
+    position:fixed;left:50%;bottom:116px;z-index:60;padding:10px 18px;border-radius:var(--r-sm);
     background:var(--panel-strong);border:1px solid var(--hairline);color:var(--ink);font-size:13px;
     backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
     /* Sin `transform` aquí. Motion escribe el suyo en línea y pisaría el centrado, así que
@@ -1324,6 +1328,306 @@
   .rise{opacity:.35;transform:translateY(14px);filter:blur(5px);animation:rise 760ms var(--ease-out) forwards}
   @keyframes rise{to{opacity:1;transform:none;filter:blur(0)}}
   .foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--ink-subtle);padding-inline:4px}
+
+
+  /* ═══════════════════════════════════════════════════════
+     LA PÁGINA DE UNA ASIGNATURA
+     ═══════════════════════════════════════════════════════
+
+     Una página compuesta, no un tablero. El contrato visual prohíbe la rejilla de
+     tarjetas idénticas como estructura, y aquí la tentación era justo esa porque el
+     contenido son ficheros. Así que hay un protagonista —la portada, a tamaño de
+     alzado— y dos acompañantes que no compiten con él.
+
+     El color de la asignatura entra por `--tc` y se usa como **detalle**: un filete, un
+     punto, una marca de horario. Nunca como relleno de una superficie grande, que sería
+     un segundo color saturado peleándose con el acento. */
+
+  /* `.vista.asig` y no `.asig` a secas: la regla de arriba es `.vista.on{display:block}`,
+     que con dos clases gana a una sola. Escrito como `.asig` el `flex` no llegaba a
+     aplicarse nunca — ni el `gap` ni el reparto de alto— y costaba verlo porque la
+     página seguía maquetando, solo que en bloque y con los márgenes de cada pieza. */
+  .vista.asig{display:flex;flex-direction:column;gap:20px;min-width:0;width:100%;max-width:1120px}
+
+  /* ── el alto de la pantalla ──
+     La misma mecánica que la agenda del día: el límite se pone en `.app`, que es quien
+     contiene el dock, y de ahí hacia abajo cada capa reparte lo que le sobra. Así el
+     panel de apuntes se queda con el hueco restante y desplaza por dentro, en vez de
+     dejar medio viewport vacío debajo cuando hay tres apuntes.
+
+     Hace falta `height:100%` y no `auto` en `.body`: con `auto` la columna crece hasta su
+     contenido, `.app` la recorta y lo de abajo queda fuera y sin forma de llegar. Es
+     exactamente el fallo que ya costó 436 píxeles en la agenda del día. */
+  .app:has(.asig){height:100dvh;overflow:hidden}
+  .app:has(.asig) > .body{min-height:0;height:100%}
+  .body:has(.asig){display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .body:has(.asig) > :not(.pagina){flex:none}
+  .body:has(.asig) > .pagina{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+  .vista.asig{flex:1 1 auto;min-height:0}
+  /* La portada mide lo que mide; quien se queda con el resto es el panel de trabajo. */
+  .asig-portada,.asig-viene{flex:none}
+
+  /* ── la portada ── */
+  /* Sin cristal: la portada es tipografía sobre la fotografía, igual que el titular del
+     calendario. Meterla en un panel la convertiría en una tarjeta más y perdería
+     exactamente lo que la hace la pieza que manda. */
+  .asig-portada{position:relative;padding-top:2px;min-width:0}
+
+  .asig-volver{
+    display:inline-flex;align-items:center;gap:5px;margin-bottom:14px;
+    font-size:12.5px;color:var(--ink-subtle);text-decoration:none;
+    transition:color 220ms var(--ease-soft)
+  }
+  .asig-volver svg{transition:transform 260ms var(--ease-out)}
+  .asig-volver:hover{color:var(--ink)}
+  .asig-volver:hover svg{transform:translateX(-2px)}
+
+  .asig-titulo{
+    display:flex;flex-direction:column;gap:12px;
+    /* El filete del color de la asignatura, a la izquierda y a la altura del titular.
+       Es la única pieza de color grande de la pantalla y mide 3 px: el color aquí
+       identifica, no decora. */
+    border-left:3px solid var(--tc);padding-left:18px
+  }
+  .asig-titulo h1{
+    margin:0;font-size:clamp(36px,5.4vw,62px);font-weight:700;letter-spacing:-.042em;
+    line-height:.95;text-wrap:balance
+  }
+
+  /* Los datos van en mono porque son medición: un código, unas horas, una cuenta. */
+  .asig-datos{
+    margin:0;display:flex;align-items:center;gap:11px;flex-wrap:wrap;
+    font-family:var(--data);font-size:12.5px;color:var(--ink-subtle);
+    font-variant-numeric:tabular-nums
+  }
+  .asig-datos b{font-weight:500;color:var(--ink-muted)}
+  .asig-datos i{width:3px;height:3px;border-radius:999px;background:var(--hairline-lit);flex:none}
+  .asig-codigo{color:var(--tc)}
+
+  /* ── la semana, dibujada como una sección ──
+     Cinco pistas verticales, y en cada una el bloque de clase a la altura que le toca
+     dentro de la franja de esta asignatura. Dice de un vistazo dos cosas que una lista
+     de horas no dice: cuántos días toca y si son mañanas o tardes. */
+  .asig-semana{
+    display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;
+    margin:24px 0 0;max-width:246px
+  }
+  .asig-dia{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
+  /* Una columna con cuerpo, no un fondo al 3,5 %.
+     Con un relleno casi transparente sobre una fotografía las pistas desaparecían y los
+     bloques de clase se leían como barras sueltas flotando: la semana no se veía por
+     ninguna parte. Un relleno y un filete de verdad la convierten en lo que es, cinco
+     columnas de las que dos están vacías — y esos dos huecos son información. */
+  .asig-pista{
+    position:relative;width:100%;height:76px;border-radius:var(--r-xs);
+    background:rgba(255,255,255,.055);
+    border:1px solid var(--hairline)
+  }
+  .asig-dia.tiene .asig-pista{background:rgba(255,255,255,.085)}
+  .asig-bloque{
+    position:absolute;left:3px;right:3px;border-radius:2px;background:var(--tc);
+    min-height:5px;
+    box-shadow:0 2px 10px -4px var(--tc)
+  }
+  .asig-letra{
+    font-size:11.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-subtle)
+  }
+  .asig-hora{
+    font-family:var(--data);font-size:10.5px;color:var(--ink-subtle);
+    font-variant-numeric:tabular-nums;
+    /* El hueco se reserva siempre: si no, los días con clase son más altos que los
+       libres y la fila baila. */
+    min-height:13px
+  }
+  .asig-dia.tiene .asig-letra{color:var(--ink-muted)}
+  .asig-dia.hoy .asig-letra{color:var(--accent-linea)}
+  .asig-dia.hoy .asig-pista{border-color:var(--accent-linea)}
+
+  /* ── lo que viene ──
+     Una fila de piezas pequeñas, sin cristal: van sobre la foto como la portada. Si
+     llevaran panel serían tres tarjetas compitiendo con el bloque de apuntes. */
+  .asig-viene{display:flex;gap:10px;flex-wrap:wrap;min-width:0}
+  .asig-ev{
+    display:flex;align-items:center;gap:10px;min-width:0;
+    padding:9px 14px 9px 10px;border-radius:var(--r-md);
+    background:var(--panel);border:1px solid var(--hairline);
+    transition:border-color 240ms,background 240ms
+  }
+  .asig-ev:hover{border-color:var(--hairline-lit);background:var(--panel-strong)}
+  .asig-ev-ico{
+    width:26px;height:26px;flex:none;border-radius:var(--r-xs);display:grid;place-items:center;
+    color:var(--tc);background:color-mix(in srgb,var(--tc) 14%,transparent)
+  }
+  .asig-ev-txt{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .asig-ev-txt b{
+    font-size:13px;font-weight:500;color:var(--ink);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+  }
+  .asig-ev-txt small{font-size:11px;color:var(--ink-subtle)}
+  .asig-ev-cuando{
+    font-family:var(--data);font-size:11.5px;color:var(--accent-linea);flex:none;
+    font-variant-numeric:tabular-nums;margin-left:4px
+  }
+
+  /* ── los apuntes ──
+     El sitio de trabajo, y la única superficie de cristal de la pantalla. Las filas de
+     dentro se separan con una línea de 1 px y un cambio de relleno, nunca con un segundo
+     blur: cristal sobre cristal está prohibido y además se ve sucio. */
+  .asig-apuntes{
+    position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;
+    border-radius:var(--r-xl);padding:16px 18px 14px;
+    background:color-mix(in srgb,var(--panel-strong) 88%,var(--canvas));
+    border:1px solid var(--hairline);
+    backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);
+    box-shadow:0 18px 42px -26px rgba(0,0,0,.8);
+    transition:border-color 240ms var(--ease-soft)
+  }
+  .asig-apuntes.encima{border-color:var(--accent-linea)}
+
+  .asig-cab{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .asig-cab h2{margin:0;font-size:17px;font-weight:600;letter-spacing:-.018em}
+  .asig-donde{
+    font-size:11.5px;color:var(--ink-subtle);margin-right:auto;
+    /* No es una etiqueta decorativa: dice dónde acaban los ficheros, que es información
+       que cambia el día que se conecte Drive. */
+  }
+
+  /* ── la lista ── */
+  .asig-lista{
+    list-style:none;margin:0;padding:0;display:flex;flex-direction:column;
+    min-height:0;overflow-y:auto;overscroll-behavior:contain
+  }
+  .asig-fila{
+    display:flex;align-items:center;gap:6px;min-width:0;
+    border-bottom:1px solid color-mix(in srgb,var(--hairline) 55%,transparent)
+  }
+  .asig-fila:last-child{border-bottom:0}
+  .asig-abrir{
+    flex:1 1 auto;min-width:0;display:grid;
+    grid-template-columns:30px minmax(0,1fr) auto;align-items:center;gap:12px;
+    padding:11px 8px;margin:0;border:0;background:none;cursor:pointer;
+    font:inherit;text-align:left;border-radius:var(--r-sm);
+    transition:background 200ms
+  }
+  .asig-abrir:hover{background:rgba(255,255,255,.045)}
+  .asig-ico{
+    width:30px;height:30px;border-radius:var(--r-xs);display:grid;place-items:center;
+    color:var(--ink-subtle);background:rgba(255,255,255,.05);
+    border:1px solid var(--hairline);
+    transition:color 220ms,border-color 220ms
+  }
+  .asig-abrir:hover .asig-ico{color:var(--ink-muted);border-color:var(--hairline-lit)}
+  /* Una imagen y un PDF se distinguen por el dibujo, no por el color: un color por tipo
+     de fichero serían siete acentos nuevos peleándose entre ellos. */
+  .asig-nombre{
+    font-size:13.5px;color:var(--ink);min-width:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+  }
+  .asig-meta{
+    font-family:var(--data);font-size:11px;color:var(--ink-subtle);flex:none;
+    font-variant-numeric:tabular-nums
+  }
+  .asig-quitar{
+    flex:none;width:32px;height:32px;border-radius:var(--r-sm);display:grid;place-items:center;
+    border:0;background:none;color:var(--ink-subtle);cursor:pointer;
+    opacity:0;transition:opacity 200ms,color 200ms,background 200ms
+  }
+  .asig-fila:hover .asig-quitar,.asig-quitar:focus-visible{opacity:1}
+  .asig-quitar:hover{color:var(--late);background:color-mix(in srgb,var(--late) 12%,transparent)}
+  /* En táctil no hay `hover`: el botón se queda puesto o no hay forma de borrar nada. */
+  @media (hover:none){ .asig-quitar{opacity:1} }
+
+  /* ── el vacío ──
+     Dice qué meter aquí, no «no hay nada». Un estado vacío que solo constata el vacío
+     deja a quien lo lee igual que estaba. */
+  .asig-vacio{
+    flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:12px;padding:38px 20px;text-align:center;color:var(--ink-subtle)
+  }
+  .asig-vacio p{margin:0;font-size:13px;max-width:34ch;line-height:1.5}
+
+  /* ── la subida ── */
+  .asig-subiendo{overflow:hidden;display:flex;flex-direction:column;gap:9px}
+  .asig-barra{display:flex;flex-direction:column;gap:5px;padding-bottom:4px}
+  .asig-barra-txt{
+    font-size:12px;color:var(--ink-muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+  }
+  .asig-barra-via{
+    height:2px;border-radius:999px;background:var(--hairline);overflow:hidden;display:block
+  }
+  .asig-barra-via i{
+    display:block;height:100%;background:var(--accent-linea);
+    /* Se escala en X desde el borde izquierdo en vez de animar el ancho: un `transform`
+       no obliga a recalcular la maquetación en cada fotograma. */
+    transform-origin:left center;width:100%
+  }
+
+  /* ── «suéltalo aquí» ──
+     Relleno y filete, no un segundo cristal. Ocupa el panel entero porque lo que hay
+     debajo deja de poder pulsarse mientras se arrastra. */
+  .asig-suelta{
+    position:absolute;inset:0;border-radius:inherit;display:grid;place-items:center;
+    pointer-events:none;z-index:2;
+    background:color-mix(in srgb,var(--accent) 22%,rgba(var(--panel-rgb),.86));
+    border:1px dashed var(--accent-linea);
+    font-size:13.5px;font-weight:500;color:var(--ink);letter-spacing:-.01em
+  }
+
+  /* ── el visor ──
+     A pantalla casi completa: lo que se abre es una lámina o un PDF, y verlo pequeño
+     dentro de un panel no sirve para estudiar. */
+  .visor{
+    position:fixed;z-index:60;inset:3vh 3vw;display:flex;flex-direction:column;
+    border-radius:var(--r-xl);overflow:hidden;
+    background:color-mix(in srgb,var(--panel-strong) 94%,var(--canvas));
+    border:1px solid var(--hairline-lit);
+    box-shadow:0 40px 90px -40px rgba(0,0,0,.95)
+  }
+  .visor-cab{
+    display:flex;align-items:center;gap:12px;flex:none;
+    padding:12px 12px 12px 18px;border-bottom:1px solid var(--hairline)
+  }
+  .visor-nombre{
+    font-size:13.5px;color:var(--ink);min-width:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+  }
+  .visor-meta{
+    font-family:var(--data);font-size:11.5px;color:var(--ink-subtle);flex:none;
+    margin-right:auto;font-variant-numeric:tabular-nums
+  }
+  .visor-fuera,.visor-cerrar{
+    flex:none;width:32px;height:32px;border-radius:var(--r-sm);display:grid;place-items:center;
+    border:1px solid var(--hairline);background:none;color:var(--ink-muted);cursor:pointer;
+    text-decoration:none;transition:color 200ms,border-color 200ms,background 200ms
+  }
+  .visor-fuera:hover,.visor-cerrar:hover{color:var(--ink);border-color:var(--hairline-lit);background:rgba(255,255,255,.06)}
+
+  .visor-cuerpo{
+    flex:1 1 auto;min-height:0;display:grid;place-items:center;overflow:auto;
+    background:rgba(0,0,0,.35)
+  }
+  .visor-cuerpo img{max-width:100%;max-height:100%;display:block;object-fit:contain}
+  .visor-cuerpo iframe{width:100%;height:100%;border:0;display:block}
+  .visor-aviso{margin:0;font-size:13px;color:var(--ink-subtle)}
+  .visor-nada{display:flex;flex-direction:column;align-items:center;gap:14px;padding:28px}
+  .visor-nada p{margin:0;font-size:13px;color:var(--ink-subtle)}
+  .visor-descargar{
+    padding:8px 16px;border-radius:var(--r-sm);font-size:13px;text-decoration:none;
+    color:var(--ink);border:1px solid var(--hairline-lit);
+    transition:background 200ms
+  }
+  .visor-descargar:hover{background:rgba(255,255,255,.07)}
+
+  /* ── pantallas estrechas ── */
+  @media (max-width:700px){
+    .asig-titulo{border-left-width:2px;padding-left:13px}
+    .asig-semana{max-width:none}
+    .asig-apuntes{padding:14px 13px 12px;border-radius:var(--r-lg)}
+    .asig-meta{display:none}
+    .visor{inset:0;border-radius:0;border:0}
+  }
 
   /* ═══════════════════════════════════════════════════════
      7 · PANTALLAS ESTRECHAS — una columna, sin edición

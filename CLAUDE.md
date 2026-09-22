@@ -12,8 +12,9 @@ App web personal. Hay un prototipo visual completo publicado como artifact; el p
   constante (`USUARIA`), nunca escrito a mano por la interfaz.
 - **Qué tiene que conseguir:** que le apetezca abrirlo. El diseño y la animación no son el envoltorio,
   son el producto: es lo que ella más valora.
-- **Dispositivo principal:** _por confirmar_ — el prototipo se construye y se verifica en escritorio
-  y en móvil.
+- **Dispositivo principal: escritorio.** Lo confirmó Cristian. Se diseña y se **verifica en
+  escritorio**; el móvil no se comprueba ni condiciona una decisión de composición. Las reglas
+  responsive que ya hay se quedan —no estorban— pero nada nuevo se frena por ellas.
 - **Contenido dominante:** proyectos de taller, entregas con fecha, referencias visuales y datos de
   arquitectura (escalas, superficies, horas).
 - **Prototipo visual aprobado como dirección:** escritorio a pantalla completa sobre una fotografía de
@@ -337,6 +338,29 @@ Cuatro cosas que no se deducen y que cuestan una tarde cada una:
 
 Y lo de siempre, que aquí entra contenido de fuera por primera vez: **el nombre de un fichero lo
 escribe quien sea**, así que se pinta como texto y nunca como HTML.
+
+## La página de una asignatura
+
+`/asignatura/[clave]`, una por cada entrada de `ASIGNATURAS`. Se llega pulsando una clase en el
+horario o su chip en la leyenda, y es **una página compuesta, no un tablero de widgets**: la portada
+manda, y los apuntes son la superficie de trabajo.
+
+**Estado: fase 1 terminada.** Los bytes se guardan en este equipo (IndexedDB) mientras no haya Drive;
+el planteamiento completo está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
+
+Lo que no se deduce leyendo el código:
+
+- **La interfaz no habla con el almacenamiento.** Habla con `Archivador`, cuatro verbos, en
+  `src/lib/archivo/`. Enchufar Drive es escribir `archivador-drive` y cambiar **una línea** en
+  `archivo/index.ts`. Es el mismo patrón que el almacén y por el mismo motivo.
+- **El almacén guarda la ficha, el archivador los bytes.** `Apunte` lleva nombre, tipo, tamaño y un
+  `remoto`; por eso la pantalla se pinta entera sin una sola llamada al almacenamiento.
+- **Firestore excluye de una consulta los documentos que no tienen el campo por el que se ordena**, y
+  no avisa: devuelve una lista vacía. Los apuntes no tienen `fecha`, así que `crearColeccion` lleva
+  ahora el campo de orden como parámetro y ellos se ordenan por `creado`.
+- **`.vista.on` tiene dos clases.** Una regla nueva escrita como `.asig` pierde contra ella y no se
+  aplica — sin error y sin que se note, porque la página sigue maquetando en bloque. Va
+  `.vista.asig`.
 
 ## El repositorio
 
