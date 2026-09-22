@@ -323,8 +323,18 @@ pasos de la consola, está en [docs/integraciones/DRIVE.md](docs/integraciones/D
 
 **Estado: funcionando.** Subida, visor y borrado contra Drive real, con el permiso concedido.
 
-**Falta añadir `NEXT_PUBLIC_GOOGLE_CLIENT_ID` en las variables de Vercel**, o en producción no
-habrá Drive. Es la única variable que falta; las otras nueve ya están.
+**`NEXT_PUBLIC_GOOGLE_CLIENT_ID` va también en las variables de Vercel**, o en producción la
+aplicación ni siquiera ofrece conectar: sin ID no tiene con qué pedirlo, y todo lo que suba Celeste
+se queda en su portátil sin que nada lo advierta.
+
+Vercel marca esa variable como si fuera una credencial por llevar el prefijo `NEXT_PUBLIC_`. Se
+resuelve con **«Change to Config»**, que es su etiqueta para «configuración pública»: un ID de
+cliente de OAuth viaja en cada petición a Google y lo puede leer cualquiera: lo que lo protege es la
+lista de orígenes autorizados de la consola, no el secreto. **Quitarle el prefijo lo rompe**, porque
+es el navegador quien habla con Google.
+
+Y hace falta **volver a desplegar** después de tocarla: las `NEXT_PUBLIC_` se hornean al construir,
+no se leen al arrancar.
 
 ### Cada persona conecta su propio Drive
 

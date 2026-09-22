@@ -15,6 +15,16 @@ La ventaja de importar el repositorio en vez de usar la CLI es que **cada `git p
 `master` publica solo**. No hay un segundo paso que se pueda olvidar, y no hay forma de que
 lo publicado y lo versionado dejen de coincidir.
 
+## La variable de Google
+
+`NEXT_PUBLIC_GOOGLE_CLIENT_ID` tiene que estar en los tres entornos, o en producción no hay Drive.
+
+Vercel la marca en rojo por el prefijo `NEXT_PUBLIC_`: se responde **«Change to Config»**. Un ID de
+cliente de OAuth es público por diseño y lo que lo protege son los orígenes autorizados de la
+consola de Google. Quitarle el prefijo la rompe.
+
+Al cambiarla hay que **redesplegar**: se hornea al construir.
+
 ## Las variables de entorno — el paso que rompe todo si se salta
 
 En *Settings → Environment Variables* del proyecto, las mismas que hay en `.env.local`:
