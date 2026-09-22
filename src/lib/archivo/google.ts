@@ -44,6 +44,10 @@ export const PERMISO = 'https://www.googleapis.com/auth/drive.file';
 
 const GUION = 'https://accounts.google.com/gsi/client';
 const GUARDADO = 'archicel.drive.token.v1';
+/* Una marca que sobrevive a la caducidad del token: dice que esta persona **quiere** Drive,
+   aunque ahora mismo no tenga con qué entrar. Es lo que permite renovar en vez de caer al
+   disco en silencio. No guarda ninguna credencial. */
+const USADO = 'archicel.drive.usado.v1';
 
 /* Se renueva antes de caducar de verdad: un token que expira a mitad de una subida de
    80 MB la tira entera. */
@@ -135,6 +139,7 @@ function guardar(nuevo: string, dura: number): string {
   caducaEn = Date.now() + dura * 1000;
   try {
     localStorage.setItem(GUARDADO, JSON.stringify({ t: nuevo, hasta: caducaEn }));
+    localStorage.setItem(USADO, '1');
   } catch {
     /* sin almacenamiento se pierde la comodidad, no la función: seguirá valiendo en esta
        pestaña hasta que caduque */
@@ -147,7 +152,24 @@ function olvidar(): void {
   caducaEn = 0;
   try {
     localStorage.removeItem(GUARDADO);
+    localStorage.removeItem(USADO);
   } catch {}
+}
+
+/**
+ * Si esta persona ya ha conectado Drive alguna vez en este navegador.
+ *
+ * Distinto de `hayPermiso`: eso es «puedo usarlo ahora», esto es «lo quiere». Pasada la
+ * hora lo primero es falso y lo segundo sigue siendo verdad, y esa diferencia es la que
+ * evita que una subida se vaya al disco sin decir nada.
+ */
+export function seHaUsadoDrive(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(USADO) === '1';
+  } catch {
+    return false;
+  }
 }
 
 /** Si hay un token utilizable **ahora**, sin pedirle nada a nadie ni abrir nada. */

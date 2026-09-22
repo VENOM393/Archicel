@@ -362,6 +362,27 @@ ventana — y si ya se concedió, se abre y se cierra sin enseñar nada.
 Guardar el token es aceptable **por el mismo motivo por el que puede vivir en el navegador**: con
 `drive.file` no abre nada salvo lo que esta aplicación creó.
 
+### Qué pasa cuando pasa la hora
+
+Tres capas, y las tres hacen falta:
+
+1. **Se renueva antes de nada.** `subir` pide el token en su **primera línea**, antes de buscar la
+   carpeta. Renovar puede abrir una ventana de Google, y eso solo se permite mientras dura el
+   permiso que deja un gesto —unos segundos desde el clic—; gastarlo en dos peticiones de red hacía
+   que la ventana llegara tarde y la bloquearan. Con el consentimiento ya dado no se ve nada.
+2. **Si aun así no se puede, se guarda en el equipo y se dice.** Antes se iba al disco en silencio:
+   creías que estaba en Drive y estaba en el portátil, que es peor que un error porque un error se
+   ve. Ahora el `remoto` que vuelve dice `local`, la pantalla lo compara con lo que esperaba y sale
+   una tira con el motivo y un botón **«Reconectar y reintentar»**.
+3. **El fichero no se pierde de vista.** La tira guarda el `File`, así que reintentar es un botón y
+   no volver a buscarlo en el disco. Un aviso que se va en tres segundos es el peor sitio posible
+   para un fallo: de cinco ficheros arrastrados no dice cuál falló, ni por qué, ni deja repetirlo.
+
+Y la marca `archicel.drive.usado` —que no guarda ninguna credencial— es lo que distingue «puedo
+usar Drive ahora» de «esta persona **quiere** Drive». Pasada la hora lo primero es falso y lo segundo
+sigue siendo verdad, y sin esa diferencia no hay forma de saber que caer al disco es una degradación
+y no lo normal.
+
 Cuatro cosas más que no se deducen y que cuestan una tarde cada una:
 
 - **No existe un scope de Google «solo esta carpeta».** Se usa `drive.file`, que es más fuerte: la

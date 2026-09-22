@@ -227,6 +227,19 @@ export function crearArchivadorDrive(): Archivador {
     },
 
     async subir(fichero, destino: Destino, alAvanzar) {
+      /*
+       * El token, **antes que nada**, y ese orden es el arreglo.
+       *
+       * Renovarlo puede abrir una ventana de Google, y un navegador solo lo permite
+       * mientras dura el permiso que deja un gesto — unos segundos desde el clic o desde
+       * soltar el fichero. Buscando primero la carpeta se gastaban dos o tres peticiones
+       * de red en ese presupuesto, y la ventana llegaba tarde y la bloqueaban.
+       *
+       * El síntoma era exactamente «después de una hora, la primera subida falla». Con el
+       * permiso ya concedido, esa ventana se abre y se cierra sin enseñar nada.
+       */
+      await conseguirToken(true);
+
       const padre = await carpetaDeAsignatura(destino.asignatura);
       const meta = {
         name: fichero.name,

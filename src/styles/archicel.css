@@ -1566,6 +1566,39 @@
     transform-origin:left center;width:100%
   }
 
+  /* ── lo que no subió ──
+     Relleno y filete en el rojo de la casa, sin ser un panel: es un aviso dentro de una
+     superficie que ya es cristal, y cristal sobre cristal está prohibido. El botón es de
+     contorno y no sólido — la única pieza sólida de la pantalla sigue siendo la que crea
+     algo, aunque esta sea la que más urge. */
+  .asig-fallos{
+    overflow:hidden;flex:none;
+    margin-bottom:12px;border-radius:var(--r-md);
+    background:color-mix(in srgb,var(--late) 11%,transparent);
+    border:1px solid color-mix(in srgb,var(--late) 34%,transparent)
+  }
+  .asig-fallos-cab{
+    display:flex;align-items:center;gap:10px;padding:10px 10px 10px 13px;
+    font-size:13px;color:var(--ink)
+  }
+  .asig-fallos-cab > svg{flex:none;color:var(--late)}
+  .asig-fallos-cab > span{margin-right:auto;font-weight:500}
+  .asig-fallos-x{
+    flex:none;width:28px;height:28px;border-radius:var(--r-sm);display:grid;place-items:center;
+    border:0;background:none;color:var(--ink-subtle);cursor:pointer;
+    transition:color 200ms,background 200ms
+  }
+  .asig-fallos-x:hover{color:var(--ink);background:rgba(255,255,255,.07)}
+  .asig-fallos ul{
+    list-style:none;margin:0;padding:0 13px 11px;display:flex;flex-direction:column;gap:5px
+  }
+  .asig-fallos li{display:flex;align-items:baseline;gap:9px;min-width:0;font-size:12px}
+  .asig-fallos li b{
+    font-weight:500;color:var(--ink-muted);min-width:0;flex:0 1 auto;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+  }
+  .asig-fallos li span{color:var(--late);flex:none}
+
   /* ── «suéltalo aquí» ──
      Relleno y filete, no un segundo cristal. Ocupa el panel entero porque lo que hay
      debajo deja de poder pulsarse mientras se arrastra. */

@@ -18,7 +18,7 @@
 
 import { crearArchivadorDrive } from './archivador-drive';
 import { crearArchivadorLocal } from './archivador-local';
-import { hayClienteConfigurado, hayPermiso, yaEstaConectado } from './google';
+import { conseguirToken, hayClienteConfigurado, hayPermiso, seHaUsadoDrive, yaEstaConectado } from './google';
 import { FalloDeArchivo, type Archivador, type Remoto } from './archivador';
 
 let local: Archivador | null = null;
@@ -55,6 +55,11 @@ export function reconectarDriveEnSilencio(): Promise<boolean> {
   return Promise.resolve(yaEstaConectado());
 }
 
+/** Si esta persona usa Drive, aunque su sesión esté caducada ahora mismo. */
+export function driveEsLoNormal(): boolean {
+  return hayClienteConfigurado() && seHaUsadoDrive();
+}
+
 /** Si Drive está conectado **ahora**, en esta pestaña. */
 export function driveConectado(): boolean {
   return hayClienteConfigurado() && hayPermiso();
@@ -80,8 +85,34 @@ export function elArchivador(): Archivador & { conectarDrive(): Promise<void> } 
       return this.conectar();
     },
 
-    subir(fichero, destino, alAvanzar) {
-      return (driveConectado() ? elDrive() : elLocal()).subir(fichero, destino, alAvanzar);
+    /**
+     * Sube por el preferido, **renovando antes de rendirse**.
+     *
+     * Sin esto, pasada la hora el token deja de valer y la subida se iba al disco en
+     * silencio: creías que estaba en Drive y estaba en el portátil. Eso es peor que un
+     * error, porque un error se ve.
+     *
+     * Así que si esta persona usa Drive, primero se intenta renovar. Con el permiso ya
+     * concedido eso no enseña nada, y funciona porque esta llamada nace de un gesto —
+     * pulsar subir o soltar un fichero.
+     *
+     * Y si aun así no se puede, **se guarda igual en el equipo y se dice**: el `remoto`
+     * que vuelve lleva `proveedor: 'local'`, y quien llamó compara con lo que esperaba.
+     * Perder el fichero por no poder guardarlo donde tocaba sería el peor de los finales.
+     */
+    async subir(fichero, destino, alAvanzar) {
+      if (driveConectado()) return elDrive().subir(fichero, destino, alAvanzar);
+
+      if (hayClienteConfigurado() && seHaUsadoDrive()) {
+        try {
+          await conseguirToken(true);
+          return await elDrive().subir(fichero, destino, alAvanzar);
+        } catch {
+          /* ni renovando: al disco, y que se note */
+        }
+      }
+
+      return elLocal().subir(fichero, destino, alAvanzar);
     },
 
     borrar(remoto) {

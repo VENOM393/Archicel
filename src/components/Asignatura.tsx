@@ -37,6 +37,7 @@ import { useArchicel } from '@/lib/firebase/sesion';
 import {
   deQuienEsElDrive,
   driveConectado,
+  driveEsLoNormal,
   elArchivador,
   nombreDeTipo,
   pesoLegible,
@@ -267,20 +268,59 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
    */
   const cuenta = useRef(0);
 
+  /**
+   * Lo que no ha podido subir, con su motivo y el fichero todavía en la mano.
+   *
+   * Un aviso que se va en tres segundos es el peor sitio donde poner un fallo: cuentas
+   * cinco ficheros arrastrados, ves «no se pudo subir» de reojo y no sabes cuál de los
+   * cinco fue, ni por qué, ni tienes forma de repetirlo sin volver a buscarlo en el disco.
+   *
+   * Guardando el `File` —que sigue siendo válido mientras la página viva— el reintento es
+   * un botón, no una expedición.
+   */
+  const [fallidos, setFallidos] = useState<Array<{ f: File; motivo: string; caducada: boolean }>>([]);
+
   const subir = useCallback(
     async (ficheros: FileList | File[]) => {
       const lista = [...ficheros];
       if (lista.length === 0) return;
 
+      setFallidos([]);
       setSubiendo(lista.map((f) => ({ nombre: f.name, tanto: 0 })));
       const arranque = Date.now();
       let bien = 0;
+      const malos: Array<{ f: File; motivo: string; caducada: boolean }> = [];
 
       for (const fichero of lista) {
         try {
           const remoto = await archivador.subir(fichero, { asignatura: clave }, (tanto) =>
             setSubiendo((s) => s.map((x) => (x.nombre === fichero.name ? { ...x, tanto } : x))),
           );
+
+          /*
+           * Se guardó, pero no donde tocaba.
+           *
+           * Pasa cuando la sesión de Drive ha caducado y ni renovándola se pudo: el
+           * fichero se queda en el equipo, que es mejor que perderlo, **pero hay que
+           * decirlo**. Un apunte que crees en la nube y está en el portátil es justo el
+           * que no vas a tener el día que abras esto en otro sitio.
+           */
+          if (remoto.proveedor === 'local' && driveEsLoNormal()) {
+            malos.push({ f: fichero, motivo: 'Guardado en este equipo: la sesión de Drive caducó.', caducada: true });
+            setEnDrive(false);
+          } else if (remoto.proveedor === 'drive' && !enDrive) {
+            /*
+             * Se renovó sola por el camino.
+             *
+             * La cabecera se calcula al montar la página, así que tras una renovación a
+             * mitad de subida decía «Guardados en este equipo» mientras las filas ya
+             * llevaban su flecha a Drive. Dos sitios de la misma pantalla contando cosas
+             * distintas sobre lo mismo, que es peor que cualquiera de las dos por
+             * separado.
+             */
+            setEnDrive(true);
+            void deQuienEsElDrive().then(setCorreo);
+          }
           await almacen.apuntes.guardar({
             asignatura: clave,
             nombre: fichero.name,
@@ -300,17 +340,22 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
            * no distingue no es prudencia: es perder la única pista que había.
            */
           const f = e instanceof FalloDeArchivo ? e : null;
-          const porque =
+          const bloqueada = e instanceof Error && /bloque|ventana/i.test(e.message);
+          /* «Caducada» es el caso que hay que tratar aparte: no es una avería, es que la
+             hora pasó y hay que volver a dar permiso. Su arreglo es un botón distinto. */
+          const caducada = f?.causa === 'sin-permiso' || bloqueada || (!f && e instanceof Error);
+          const motivo =
             f?.causa === 'sin-sitio'
               ? f.message
               : f?.causa === 'demasiado-grande'
-                ? 'es demasiado grande'
-                : f?.causa === 'sin-permiso'
-                  ? f.message
-                  : f?.causa === 'red'
-                    ? 'se cortó la conexión'
-                    : (f?.message ?? (e instanceof Error ? e.message : ''));
-          avisar(`No se pudo subir «${fichero.name}»${porque ? ` — ${porque}` : ''}`);
+                ? 'Es demasiado grande.'
+                : f?.causa === 'red'
+                  ? 'Se cortó la conexión.'
+                  : caducada
+                    ? 'La sesión de Drive ha caducado.'
+                    : (f?.message ?? (e instanceof Error ? e.message : 'Fallo desconocido.'));
+
+          malos.push({ f: fichero, motivo, caducada });
           /* Y en la consola, entero: el aviso cabe en una línea y esto no siempre. */
           console.error('[archicel] subida fallida', fichero.name, e);
         }
@@ -321,10 +366,40 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
       const falta = MINIMO_VISIBLE - (Date.now() - arranque);
       if (falta > 0) await new Promise((r) => setTimeout(r, falta));
       setSubiendo([]);
+      setFallidos(malos);
+
+      /* El aviso solo cuenta lo que salió bien. Lo que salió mal se queda en pantalla con
+         su motivo y su botón, que es donde se puede hacer algo al respecto. */
       if (bien > 0) avisar(bien === 1 ? 'Apunte guardado' : `${bien} apuntes guardados`);
     },
-    [archivador, almacen, clave, avisar],
+    [archivador, almacen, clave, avisar, enDrive],
   );
+
+  /**
+   * Reintentar.
+   *
+   * Si lo que falló fue la sesión, **primero se reconecta y después se sube**, y en ese
+   * orden: reconectar abre la ventana de Google, y eso solo se puede hacer mientras dure
+   * el permiso que deja este clic. Meter una subida por delante se lo gasta.
+   */
+  const reintentar = useCallback(async () => {
+    const pendientes = fallidos.map((x) => x.f);
+    if (pendientes.length === 0) return;
+    if (fallidos.some((x) => x.caducada)) {
+      setConectando(true);
+      try {
+        await archivador.conectar();
+        setEnDrive(true);
+        void deQuienEsElDrive().then(setCorreo);
+      } catch (e) {
+        avisar(e instanceof Error && e.message ? e.message : 'No se pudo reconectar');
+        return;
+      } finally {
+        setConectando(false);
+      }
+    }
+    await subir(pendientes);
+  }, [fallidos, archivador, avisar, subir]);
 
   const borrar = useCallback(
     async (a: Apunte) => {
@@ -413,7 +488,56 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
         )}
       </AnimatePresence>
 
-      {apuntes.length === 0 && subiendo.length === 0 ? (
+      {/* Lo que no subió, con su motivo y un botón. Va **encima** de la lista y no en un
+          aviso: es lo único de esta pantalla que le pide algo a quien la mira. */}
+      <AnimatePresence>
+        {fallidos.length > 0 && (
+          <mo.div
+            className="asig-fallos"
+            key="fallos"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}
+            role="status"
+          >
+            <div className="asig-fallos-cab">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 8v5" />
+                <path d="M12 16.5v.01" />
+                <path d="M10.3 4.3 2.8 17.2A1.6 1.6 0 0 0 4.2 19.6h15.6a1.6 1.6 0 0 0 1.4-2.4L13.7 4.3a1.6 1.6 0 0 0-2.8 0Z" />
+              </svg>
+              <span>
+                {fallidos.length === 1
+                  ? `1 apunte no llegó a ${driveEsLoNormal() ? 'Drive' : 'guardarse'}`
+                  : `${fallidos.length} apuntes no llegaron a ${driveEsLoNormal() ? 'Drive' : 'guardarse'}`}
+              </span>
+              <Button type="button" variant="outline" size="sm" onClick={() => void reintentar()} disabled={conectando}>
+                {conectando
+                  ? 'Reconectando…'
+                  : fallidos.some((x) => x.caducada)
+                    ? 'Reconectar y reintentar'
+                    : 'Reintentar'}
+              </Button>
+              <button type="button" className="asig-fallos-x" onClick={() => setFallidos([])} aria-label="Descartar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <path d="m6 6 12 12M18 6 6 18" />
+                </svg>
+              </button>
+            </div>
+            <ul>
+              {fallidos.map((x) => (
+                <li key={x.f.name}>
+                  <b>{x.f.name}</b>
+                  <span>{x.motivo}</span>
+                </li>
+              ))}
+            </ul>
+          </mo.div>
+        )}
+      </AnimatePresence>
+
+      {apuntes.length === 0 && subiendo.length === 0 && fallidos.length === 0 ? (
         <div className="asig-vacio">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h3l2 2.5h6A2.5 2.5 0 0 1 20 10v7a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17Z" />
