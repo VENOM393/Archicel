@@ -18,7 +18,7 @@
 
 import { crearArchivadorDrive } from './archivador-drive';
 import { crearArchivadorLocal } from './archivador-local';
-import { conseguirToken, hayClienteConfigurado, hayPermiso } from './google';
+import { conseguirToken, hayClienteConfigurado, hayPermiso, seConcedioAntes } from './google';
 import { FalloDeArchivo, type Archivador, type Remoto } from './archivador';
 
 let local: Archivador | null = null;
@@ -48,12 +48,14 @@ export function sePuedeUsarDrive(): boolean {
 /**
  * Vuelve a conectar sin enseñar nada, si ya se concedió alguna vez.
  *
- * Se llama al abrir una asignatura. Si nunca se concedió, falla en silencio y no pasa
- * nada: la página sigue funcionando con el archivador de este equipo. Lo que **no** puede
- * hacer es abrir una ventana de Google a quien solo ha entrado a mirar sus apuntes.
+ * Se llama al abrir una asignatura, y **solo si ya se concedió alguna vez**. Esa
+ * condición no es una optimización: pedir en silencio a quien nunca ha concedido nada
+ * abre una ventana que el navegador bloquea, por no venir de un clic — y una ventana
+ * bloqueada no contesta, así que el intento se queda colgado y envenena al siguiente.
+ * Eso es lo que dejaba el botón en «Conectando…» para siempre.
  */
 export async function reconectarDriveEnSilencio(): Promise<boolean> {
-  if (!hayClienteConfigurado()) return false;
+  if (!hayClienteConfigurado() || !seConcedioAntes()) return false;
   try {
     await conseguirToken(false);
     return true;

@@ -92,12 +92,67 @@ function cargarGuion(): Promise<void> {
 let cliente: ClienteToken | null = null;
 let token: string | null = null;
 let caducaEn = 0;
-/** Una petición a la vez: dos subidas simultáneas no pueden abrir dos ventanas. */
-let enCurso: Promise<string> | null = null;
+
+/**
+ * La petición en vuelo, **y si era de las que pueden abrir ventana**.
+ *
+ * Guardar solo la promesa era un fallo con consecuencia visible: el botón «Conectar
+ * Drive» se quedaba en «Conectando…» para siempre.
+ *
+ * Lo que pasaba. Al abrir una asignatura se lanza un intento silencioso. Si ese intento
+ * no contesta —y no contesta cuando el navegador bloquea su ventana, que es lo normal
+ * para algo que no ha pedido nadie—, la promesa se queda pendiente. Al pulsar el botón,
+ * la protección de «una petición a la vez» devolvía **esa misma promesa muerta** en lugar
+ * de abrir la ventana de verdad. Nunca se pedía el permiso y nunca llegaba la respuesta.
+ *
+ * Así que una petición interactiva **nunca reutiliza una silenciosa**: la silenciosa se
+ * abandona y se pide de nuevo. Dos interactivas sí se comparten, que es de lo que iba la
+ * protección — que dos subidas a la vez no abran dos ventanas.
+ */
+let enCurso: { promesa: Promise<string>; interactivo: boolean } | null = null;
+
+/** Quien espera la respuesta de Google ahora mismo. Solo puede haber una. */
+interface Pendiente {
+  resolver: (token: string) => void;
+  rechazar: (error: Error) => void;
+  cerrar: () => void;
+}
+let pendiente: Pendiente | null = null;
+
+/** Lo que se espera a un intento silencioso antes de darlo por perdido. */
+const ESPERA_SILENCIOSA = 8_000;
 
 /** Si ya se concedió en esta pestaña y el token sigue sirviendo. */
 export function hayPermiso(): boolean {
   return Boolean(token) && Date.now() < caducaEn - MARGEN_MS;
+}
+
+/* ── la memoria de que esto ya se concedió una vez ──
+   No guarda ningún token: solo una marca. Sirve para no intentar renovar en silencio a
+   quien nunca ha concedido nada, porque ese intento abre una ventana que el navegador
+   bloquea por no venir de un clic. */
+const MARCA = 'archicel.drive.concedido';
+
+export function seConcedioAntes(): boolean {
+  try {
+    return localStorage.getItem(MARCA) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function recordarConcedido(): void {
+  try {
+    localStorage.setItem(MARCA, '1');
+  } catch {
+    /* sin almacenamiento se pierde la comodidad, no la función */
+  }
+}
+
+export function olvidarConcedido(): void {
+  try {
+    localStorage.removeItem(MARCA);
+  } catch {}
 }
 
 /**
@@ -113,30 +168,83 @@ export async function conseguirToken(interactivo: boolean): Promise<string> {
   const id = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   if (!id) throw new Error('Falta NEXT_PUBLIC_GOOGLE_CLIENT_ID.');
 
-  if (enCurso) return enCurso;
+  /* Solo se reutiliza lo que sirve: una interactiva vale para todo, una silenciosa solo
+     para otra silenciosa. */
+  if (enCurso && (enCurso.interactivo || !interactivo)) return enCurso.promesa;
 
-  enCurso = (async () => {
+  const promesa = (async () => {
     await cargarGuion();
     const oauth2 = window.google?.accounts?.oauth2;
     if (!oauth2) throw new Error('El acceso de Google no está disponible.');
 
     return new Promise<string>((resolver, rechazar) => {
+      /* Un reloj por si Google no contesta nunca. Sin esto, un intento perdido deja la
+         promesa colgada y con ella cualquier cosa que la esté esperando. */
+      const reloj = interactivo
+        ? null
+        : setTimeout(() => {
+            if (pendiente === yo) pendiente = null;
+            rechazar(new Error('Sin respuesta de Google.'));
+          }, ESPERA_SILENCIOSA);
+
+      const yo: Pendiente = {
+        resolver,
+        rechazar,
+        cerrar: () => {
+          if (reloj) clearTimeout(reloj);
+        },
+      };
+
+      /*
+       * El cliente se crea **una sola vez** y su respuesta va a quien esté esperando en
+       * ese momento, no a quien lo creó.
+       *
+       * Escrito de la forma evidente —crear el cliente con `callback: resolver` la primera
+       * vez y reutilizarlo— la respuesta de la segunda petición resolvía la promesa de la
+       * primera, que ya no la esperaba nadie. La segunda no se enteraba nunca. Era la
+       * misma avería que el botón colgado, una capa más abajo, y no se ve leyendo porque
+       * parece una memorización inofensiva.
+       */
       cliente ??= oauth2.initTokenClient({
         client_id: id,
         scope: PERMISO,
         callback: (r) => {
+          const quien = pendiente;
+          pendiente = null;
+          quien?.cerrar();
           if (r.access_token) {
             token = r.access_token;
             caducaEn = Date.now() + (r.expires_in ?? 3600) * 1000;
-            resolver(r.access_token);
+            recordarConcedido();
+            quien?.resolver(r.access_token);
           } else {
-            rechazar(new Error(r.error_description ?? r.error ?? 'Permiso no concedido.'));
+            quien?.rechazar(new Error(r.error_description ?? r.error ?? 'Permiso no concedido.'));
           }
         },
-        /* Se dispara cuando se cierra la ventana sin conceder. Sin esto la promesa se
-           queda colgada para siempre y la interfaz con el botón girando. */
-        error_callback: (e) => rechazar(new Error(e?.type === 'popup_closed' ? 'Ventana cerrada.' : 'Permiso no concedido.')),
+        /* Se dispara al cerrar la ventana sin conceder, y también cuando el navegador la
+           bloquea. Sin esto la promesa se queda colgada para siempre y la interfaz con el
+           botón girando — que es exactamente lo que pasaba. */
+        error_callback: (e) => {
+          const quien = pendiente;
+          pendiente = null;
+          quien?.cerrar();
+          quien?.rechazar(
+            new Error(
+              e?.type === 'popup_closed'
+                ? 'Ventana cerrada sin conceder el permiso.'
+                : e?.type === 'popup_failed_to_open'
+                  ? 'El navegador bloqueó la ventana de Google.'
+                  : 'Permiso no concedido.',
+            ),
+          );
+        },
       });
+
+      /* Si había otra esperando, se le dice que ha perdido su turno en vez de dejarla
+         colgada: solo puede haber una respuesta en vuelo. */
+      pendiente?.cerrar();
+      pendiente?.rechazar(new Error('Otra petición tomó el relevo.'));
+      pendiente = yo;
 
       /*
        * `prompt: ''` pide en silencio: si ya se concedió alguna vez, devuelve un token sin
@@ -147,10 +255,14 @@ export async function conseguirToken(interactivo: boolean): Promise<string> {
     });
   })();
 
+  enCurso = { promesa, interactivo };
   try {
-    return await enCurso;
+    return await promesa;
   } finally {
-    enCurso = null;
+    /* Solo se limpia si sigue siendo la nuestra: una interactiva puede haber sustituido
+       a esta silenciosa mientras tanto, y borrarla dejaría a quien la espera sin nadie
+       que la resuelva. */
+    if (enCurso?.promesa === promesa) enCurso = null;
   }
 }
 
@@ -159,5 +271,6 @@ export function soltarPermiso(): void {
   const t = token;
   token = null;
   caducaEn = 0;
+  olvidarConcedido();
   if (t) window.google?.accounts?.oauth2?.revoke(t);
 }

@@ -241,8 +241,10 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
       setEnDrive(true);
       avisar('Drive conectado');
     } catch (e) {
-      const f = e instanceof FalloDeArchivo ? e : null;
-      avisar(f?.message ?? 'No se pudo conectar con Drive');
+      /* El motivo concreto vale mucho más que un «no se pudo»: cerrar la ventana,
+         bloquearla el navegador y no tener permiso se arreglan de formas distintas, y
+         quien lo lee necesita saber cuál de las tres le ha pasado. */
+      avisar(e instanceof Error && e.message ? e.message : 'No se pudo conectar con Drive');
     } finally {
       setConectando(false);
     }

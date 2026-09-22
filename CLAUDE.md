@@ -345,6 +345,12 @@ Cuatro cosas que no se deducen y que cuestan una tarde cada una:
   y al borrar manda el `proveedor` que lleve el propio apunte. Sin eso, conectar Drive haría
   desaparecer todo lo guardado antes en el equipo — en el momento exacto en que la usuaria hace algo
   que, para ella, solo añade opciones.
+- **El cliente de tokens de Google se crea una vez, pero su respuesta va a quien espera en ese
+  momento**, no a quien lo creó. Memorizarlo con `callback: resolver` —que es lo que parece
+  correcto— hace que la segunda petición resuelva la promesa de la primera y nunca conteste a la
+  suya. Y **una petición interactiva nunca reutiliza una silenciosa en vuelo**: si la silenciosa se
+  perdió porque el navegador bloqueó su ventana, compartirla deja el botón en «Conectando…» para
+  siempre. Las dos averías son la misma y ninguna se ve leyendo el código.
 - **El progreso de subida va con `XMLHttpRequest` y no con `fetch`**, que no informa de él. No es un
   adorno: es lo único que distingue «está subiendo 60 MB» de «se ha colgado».
 
