@@ -18,7 +18,7 @@
 
 import { crearArchivadorDrive } from './archivador-drive';
 import { crearArchivadorLocal } from './archivador-local';
-import { conseguirToken, hayClienteConfigurado, hayPermiso, seConcedioAntes } from './google';
+import { hayClienteConfigurado, hayPermiso, yaEstaConectado } from './google';
 import { FalloDeArchivo, type Archivador, type Remoto } from './archivador';
 
 let local: Archivador | null = null;
@@ -46,22 +46,13 @@ export function sePuedeUsarDrive(): boolean {
 }
 
 /**
- * Vuelve a conectar sin enseñar nada, si ya se concedió alguna vez.
+ * Si al abrir la página ya se puede usar Drive, sin abrir nada ni preguntar a nadie.
  *
- * Se llama al abrir una asignatura, y **solo si ya se concedió alguna vez**. Esa
- * condición no es una optimización: pedir en silencio a quien nunca ha concedido nada
- * abre una ventana que el navegador bloquea, por no venir de un clic — y una ventana
- * bloqueada no contesta, así que el intento se queda colgado y envenena al siguiente.
- * Eso es lo que dejaba el botón en «Conectando…» para siempre.
+ * Es una lectura del token recordado y nada más. Lo que hace que recargar deje de pedir
+ * permisos no es reconectar: es que el token de la vez anterior **sigue valiendo**.
  */
-export async function reconectarDriveEnSilencio(): Promise<boolean> {
-  if (!hayClienteConfigurado() || !seConcedioAntes()) return false;
-  try {
-    await conseguirToken(false);
-    return true;
-  } catch {
-    return false;
-  }
+export function reconectarDriveEnSilencio(): Promise<boolean> {
+  return Promise.resolve(yaEstaConectado());
 }
 
 /** Si Drive está conectado **ahora**, en esta pestaña. */
@@ -108,5 +99,6 @@ export function elArchivador(): Archivador & { conectarDrive(): Promise<void> } 
   };
 }
 
+export { deQuienEsElDrive } from './archivador-drive';
 export * from './archivador';
 export { soltarPermiso } from './google';

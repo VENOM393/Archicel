@@ -78,7 +78,15 @@ function traducir(estado: number, cuerpo?: string): FalloDeArchivo {
   return new FalloDeArchivo('desconocida', `Drive respondió ${estado}${dijo ? `: ${dijo}` : '.'}`);
 }
 
-async function llamar(url: string, opciones: RequestInit = {}, interactivo = false): Promise<Response> {
+/**
+ * Una llamada a Drive con el token puesto.
+ *
+ * `interactivo` por defecto en `true` **a propósito**: todo lo que llega aquí nace de un
+ * gesto —pulsar subir, soltar un fichero, abrir un apunte— y eso es lo único que permite
+ * renovar el token cuando ha caducado. En falso, una subida a la hora y media fallaría con
+ * «Drive no está conectado» teniendo el permiso concedido desde hace semanas.
+ */
+async function llamar(url: string, opciones: RequestInit = {}, interactivo = true): Promise<Response> {
   const token = await conseguirToken(interactivo);
   let r: Response;
   try {
@@ -171,6 +179,41 @@ function enviarTrozo(
     };
     pet.send(trozo);
   });
+}
+
+/**
+ * De quién es el Drive conectado.
+ *
+ * Hace falta porque cada persona conecta el suyo: «En tu Drive» no dice cuál, y con dos
+ * cuentas de Google abiertas en el mismo navegador —que es lo normal— es perfectamente
+ * posible conceder con la que no era y no enterarse hasta que los apuntes no aparecen
+ * donde deberían.
+ *
+ * `about` funciona con `drive.file` sin pedir ningún permiso extra: devuelve quién ha
+ * autorizado, no una lista de nada.
+ *
+ * Se recuerda por pestaña: la cuenta no cambia sin volver a conectar.
+ */
+let quienEs: string | null = null;
+
+export async function deQuienEsElDrive(): Promise<string | null> {
+  if (quienEs) return quienEs;
+  if (!hayPermiso()) return null;
+  try {
+    const r = await llamar(`${API}/about?fields=user(emailAddress,displayName)`, {}, false);
+    const { user } = (await r.json()) as { user?: { emailAddress?: string; displayName?: string } };
+    quienEs = user?.emailAddress ?? user?.displayName ?? null;
+    return quienEs;
+  } catch {
+    /* Saber de quién es es una comodidad, no un requisito: si falla, la pantalla dice
+       «En tu Drive» como antes y todo lo demás sigue funcionando. */
+    return null;
+  }
+}
+
+/** Al desconectar hay que olvidarlo, o la pantalla seguiría enseñando la cuenta anterior. */
+export function olvidarQuien(): void {
+  quienEs = null;
 }
 
 export function crearArchivadorDrive(): Archivador {

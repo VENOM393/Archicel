@@ -321,38 +321,71 @@ Cada asignatura va a tener su página, y en ella los apuntes de Celeste —fotos
 Los bytes van a **Google Drive**; Firestore guarda solo la ficha. El planteamiento entero, con los
 pasos de la consola, está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
 
-**Estado: escrito, sin estrenar.** El ID de cliente está puesto en `.env.local`. Lo que falta es
-que una persona acepte la ventana de consentimiento **una vez**: eso no se puede automatizar, así
-que la subida a Drive **no está verificada**. Sí está comprobado que sin conceder no sale ni una
-petición a `googleapis.com` y que todo sigue funcionando contra el disco.
+**Estado: funcionando.** Subida, visor y borrado contra Drive real, con el permiso concedido.
 
 **Falta añadir `NEXT_PUBLIC_GOOGLE_CLIENT_ID` en las variables de Vercel**, o en producción no
-habrá Drive.
+habrá Drive. Es la única variable que falta; las otras nueve ya están.
 
-Cuatro cosas que no se deducen y que cuestan una tarde cada una:
+### Cada persona conecta su propio Drive
+
+La conexión vive **en el navegador**, no en la cuenta de Archicel: quien pulsa «Conectar» elige la
+cuenta de Google en esa ventana, y esa es la que recibe los ficheros desde ese navegador. Celeste
+conecta el suyo, Cristian el suyo.
+
+De ahí que la cabecera diga **de quién** es el Drive y no solo «En tu Drive»: con dos cuentas de
+Google abiertas a la vez —lo normal— es fácil conceder con la que no era y no enterarse hasta que
+los apuntes no aparecen donde deberían. El correo sale de `drive/v3/about`, que funciona con
+`drive.file` sin pedir ningún permiso extra.
+
+**La consecuencia si algún día comparten cuenta de Archicel:** las fichas viajan por Firestore y los
+ficheros no. Uno vería en la lista un apunte del otro y al abrirlo saldría «ese apunte ya no está en
+tu Drive», porque con `drive.file` un token solo alcanza lo que la app creó bajo **su**
+autorización. No rompe nada —el fallo tiene nombre y la pantalla lo dice— pero es un apunte
+fantasma.
+
+### Sin secreto de cliente, y lo que eso cuesta
+
+Se puede montar de dos maneras y se eligió a conciencia:
+
+- **Con secreto**, en una ruta de servidor, Google entrega un `refresh_token` y la conexión es
+  permanente de verdad. A cambio hay que mantener un secreto en el entorno.
+- **Sin secreto**, que es lo que hay, Google **no entrega refresco** — no es una opción que se esté
+  evitando, es que no existe para un cliente web. Lo que se hace es **recordar el token de acceso**
+  en `localStorage`, que dura una hora.
+
+Se eligió lo segundo porque Archicel es de una persona y no debe pedirle que mantenga credenciales
+a mano. El precio está medido: **dentro de la hora, recargar no pide nada** (comprobado: conectar
+una vez y recargar tres veces pregunta a Google **una sola vez**); pasada la hora, la siguiente
+acción lo renueva sola, porque subir y arrastrar nacen de un gesto y desde ahí Google deja abrir su
+ventana — y si ya se concedió, se abre y se cierra sin enseñar nada.
+
+Guardar el token es aceptable **por el mismo motivo por el que puede vivir en el navegador**: con
+`drive.file` no abre nada salvo lo que esta aplicación creó.
+
+Cuatro cosas más que no se deducen y que cuestan una tarde cada una:
 
 - **No existe un scope de Google «solo esta carpeta».** Se usa `drive.file`, que es más fuerte: la
-  app solo ve **lo que ella misma creó**. El resto del Drive no está prohibido, es que no existe
-  para ella. La carpeta `Archicel` es una comodidad para el humano, no la frontera de seguridad.
+  app solo ve **lo que ella misma creó**. La carpeta `Archicel` es una comodidad para el humano, no
+  la frontera de seguridad.
 - **Una cuenta de servicio no sirve.** No tienen cuota propia y no pueden poseer ficheros en un Drive
   personal; la subida falla. La salida oficial es una unidad compartida, que es Workspace de pago.
 - **El navegador sube directo a Google, no por `/api`.** Vercel corta el cuerpo de una petición en
-  4,5 MB y un PDF escaneado se pasa de ahí sin esfuerzo. El token en el cliente es aceptable
-  **precisamente** porque con `drive.file` no abre nada más.
-- **El ID de cliente es público** y lleva `NEXT_PUBLIC_`; lo que lo protege es la lista de orígenes
-  autorizados. **El secreto de cliente no hace falta**: el flujo de tokens del navegador no lo usa.
+  4,5 MB y un PDF escaneado se pasa de ahí sin esfuerzo.
 - **`archivo/index.ts` es un encaminador, no un interruptor.** Al subir manda el preferido; al abrir
   y al borrar manda el `proveedor` que lleve el propio apunte. Sin eso, conectar Drive haría
-  desaparecer todo lo guardado antes en el equipo — en el momento exacto en que la usuaria hace algo
-  que, para ella, solo añade opciones.
-- **El cliente de tokens de Google se crea una vez, pero su respuesta va a quien espera en ese
-  momento**, no a quien lo creó. Memorizarlo con `callback: resolver` —que es lo que parece
-  correcto— hace que la segunda petición resuelva la promesa de la primera y nunca conteste a la
-  suya. Y **una petición interactiva nunca reutiliza una silenciosa en vuelo**: si la silenciosa se
-  perdió porque el navegador bloqueó su ventana, compartirla deja el botón en «Conectando…» para
-  siempre. Las dos averías son la misma y ninguna se ve leyendo el código.
-- **El progreso de subida va con `XMLHttpRequest` y no con `fetch`**, que no informa de él. No es un
-  adorno: es lo único que distingue «está subiendo 60 MB» de «se ha colgado».
+  desaparecer todo lo guardado antes en el equipo.
+
+Y tres trampas de las que costó salir:
+
+- **`requestAccessToken` abre una ventana siempre**, incluso con `prompt: ''`, y una ventana que no
+  nace de un clic la bloquea el navegador. Por eso no se puede renovar al cargar la página, y por
+  eso lo que arregla la recarga es **recordar el token**, no insistir en renovarlo.
+- **El cliente de Google no se memoriza.** Su función de respuesta se queda atrapada en el cliente
+  que la creó, así que la segunda petición resolvía la promesa de la primera y nunca contestaba a la
+  suya. Se crea uno por petición y esa clase entera de avería desaparece.
+- **Un error sin el texto de Drive no sirve de nada.** Un «no se pudo subir» genérico escondió
+  durante tres rondas que la API de Drive estaba deshabilitada en el proyecto — el mensaje lo decía
+  con todas las letras y el código lo estaba tirando.
 
 Y lo de siempre, que aquí entra contenido de fuera por primera vez: **el nombre de un fichero lo
 escribe quien sea**, así que se pinta como texto y nunca como HTML.

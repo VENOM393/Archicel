@@ -1,47 +1,56 @@
 /**
  * El permiso de Google, y nada más.
  *
- * Aquí solo se consigue y se renueva un token de acceso para `drive.file`. Lo que se hace
+ * Aquí solo se consigue y se recuerda un token de acceso para `drive.file`. Lo que se hace
  * con él está en `archivador-drive`, y esa separación importa: este fichero es el único
  * sitio del proyecto que sabe de OAuth, así que es el único que hay que mirar el día que
  * Google cambie algo.
  *
- * ## Por qué el cliente de tokens y no Firebase
+ * ## Cero configuración, y lo que eso cuesta
  *
- * Firebase devuelve un token de Google al entrar con `signInWithPopup`, y es tentador
- * reutilizarlo. Pero **no devuelve token de refresco** y el de acceso dura una hora: a la
- * hora de estar trabajando, subir deja de funcionar y nadie sabe por qué.
+ * Esto se puede montar de dos maneras y hubo que elegir:
  *
- * El cliente de tokens de Google Identity Services lo renueva **en silencio** mientras la
- * sesión de Google siga viva en el navegador, y no necesita secreto de cliente — así que
- * no hay nada que guardar en el servidor ni nada que se pueda filtrar de él.
+ * **Con secreto de cliente**, en un servidor, se consigue un `refresh_token` y la conexión
+ * es permanente de verdad: se concede una vez en la vida y nunca más. A cambio hay que
+ * guardar un secreto en el entorno y mantener una ruta de servidor.
  *
- * ## Por qué se pide aparte de entrar
+ * **Sin secreto**, que es lo que hay aquí, Google no entrega refresco — no es una opción
+ * que se esté evitando, es que **no existe para un cliente web**. Lo que se puede hacer es
+ * recordar el token de acceso, que dura una hora.
  *
- * El permiso se pide la primera vez que hace falta —cuando se pulsa «conectar» o se sube
- * el primer apunte—, no al abrir la aplicación. Un permiso que llega en el momento en que
- * se entiende para qué es, se concede; uno que salta nada más entrar, se cierra. Y aquí la
- * cuenta es una invitación, no un muro: Archicel funciona sin conceder nada.
+ * Se eligió lo segundo a propósito: Archicel es de una persona y no tiene que pedirle que
+ * mantenga credenciales en un fichero. El precio está medido y es este:
+ *
+ *   · recargar, cerrar la pestaña o volver mañana **dentro de la hora** → nada que hacer;
+ *   · pasada la hora, **la siguiente acción lo renueva sola**, porque subir y arrastrar
+ *     nacen de un gesto y Google deja abrir su ventana desde ahí. Si ya se concedió, esa
+ *     ventana se abre y se cierra sin enseñar nada.
+ *
+ * Lo que **no** se puede hacer es renovar al cargar la página: `requestAccessToken` abre
+ * una ventana siempre, y una ventana que no nace de un clic la bloquea el navegador. Ese
+ * era el fallo de antes —volver a conceder en cada recarga— y lo que lo arregla es
+ * recordar el token, no insistir en renovarlo.
+ *
+ * ## Por qué es aceptable guardarlo
+ *
+ * El token vive en `localStorage`, donde puede leerlo cualquier guion de este dominio. Es
+ * aceptable **por el mismo motivo por el que puede vivir en el navegador**: con
+ * `drive.file` no abre nada salvo los ficheros que esta aplicación creó. Ni el resto del
+ * Drive, ni el correo, ni nada más. Con `drive` completo esto sería indefendible.
  */
 
 /** Solo esto. Ni `drive`, ni `drive.readonly`: solo lo que la propia app cree. */
 export const PERMISO = 'https://www.googleapis.com/auth/drive.file';
 
 const GUION = 'https://accounts.google.com/gsi/client';
+const GUARDADO = 'archicel.drive.token.v1';
 
-/* Se renueva antes de que caduque de verdad: un token que expira a mitad de una subida
-   de 80 MB la tira entera. */
+/* Se renueva antes de caducar de verdad: un token que expira a mitad de una subida de
+   80 MB la tira entera. */
 const MARGEN_MS = 120_000;
 
 interface ClienteToken {
   requestAccessToken(opciones?: { prompt?: string }): void;
-}
-
-interface RespuestaToken {
-  access_token?: string;
-  expires_in?: number;
-  error?: string;
-  error_description?: string;
 }
 
 declare global {
@@ -52,7 +61,7 @@ declare global {
           initTokenClient(opciones: {
             client_id: string;
             scope: string;
-            callback: (r: RespuestaToken) => void;
+            callback: (r: { access_token?: string; expires_in?: number; error?: string; error_description?: string }) => void;
             error_callback?: (e: { type?: string }) => void;
           }): ClienteToken;
           revoke(token: string, hecho?: () => void): void;
@@ -66,9 +75,10 @@ export function hayClienteConfigurado(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 }
 
+/* ───────────────────────── el guion de Google ───────────────────────── */
+
 let cargando: Promise<void> | null = null;
 
-/** Trae el guion de Google una sola vez por pestaña. */
 function cargarGuion(): Promise<void> {
   if (typeof window === 'undefined') return Promise.reject(new Error('sin navegador'));
   if (window.google?.accounts?.oauth2) return Promise.resolve();
@@ -89,146 +99,99 @@ function cargarGuion(): Promise<void> {
   return cargando;
 }
 
-let cliente: ClienteToken | null = null;
+/* ───────────────────────── el token recordado ───────────────────────── */
+
 let token: string | null = null;
 let caducaEn = 0;
+let leido = false;
 
 /**
- * La petición en vuelo, **y si era de las que pueden abrir ventana**.
+ * Se lee de `localStorage` **la primera vez que hace falta**, no al cargar el módulo.
  *
- * Guardar solo la promesa era un fallo con consecuencia visible: el botón «Conectar
- * Drive» se quedaba en «Conectando…» para siempre.
- *
- * Lo que pasaba. Al abrir una asignatura se lanza un intento silencioso. Si ese intento
- * no contesta —y no contesta cuando el navegador bloquea su ventana, que es lo normal
- * para algo que no ha pedido nadie—, la promesa se queda pendiente. Al pulsar el botón,
- * la protección de «una petición a la vez» devolvía **esa misma promesa muerta** en lugar
- * de abrir la ventana de verdad. Nunca se pedía el permiso y nunca llegaba la respuesta.
- *
- * Así que una petición interactiva **nunca reutiliza una silenciosa**: la silenciosa se
- * abandona y se pide de nuevo. Dos interactivas sí se comparten, que es de lo que iba la
- * protección — que dos subidas a la vez no abran dos ventanas.
+ * Esta página se prerrenderiza y allí no hay `localStorage`. Leerlo arriba del todo
+ * reventaría la construcción, y leerlo durante el render daría un árbol distinto en el
+ * servidor y en el navegador — que es la avería de hidratación de siempre.
  */
-let enCurso: { promesa: Promise<string>; interactivo: boolean } | null = null;
-
-/** Quien espera la respuesta de Google ahora mismo. Solo puede haber una. */
-interface Pendiente {
-  resolver: (token: string) => void;
-  rechazar: (error: Error) => void;
-  cerrar: () => void;
-}
-let pendiente: Pendiente | null = null;
-
-/** Lo que se espera a un intento silencioso antes de darlo por perdido. */
-const ESPERA_SILENCIOSA = 8_000;
-
-/** Si ya se concedió en esta pestaña y el token sigue sirviendo. */
-export function hayPermiso(): boolean {
-  return Boolean(token) && Date.now() < caducaEn - MARGEN_MS;
-}
-
-/* ── la memoria de que esto ya se concedió una vez ──
-   No guarda ningún token: solo una marca. Sirve para no intentar renovar en silencio a
-   quien nunca ha concedido nada, porque ese intento abre una ventana que el navegador
-   bloquea por no venir de un clic. */
-const MARCA = 'archicel.drive.concedido';
-
-export function seConcedioAntes(): boolean {
+function recordar(): void {
+  if (leido || typeof window === 'undefined') return;
+  leido = true;
   try {
-    return localStorage.getItem(MARCA) === '1';
+    const crudo = localStorage.getItem(GUARDADO);
+    if (!crudo) return;
+    const { t, hasta } = JSON.parse(crudo) as { t?: string; hasta?: number };
+    if (t && typeof hasta === 'number' && Date.now() < hasta - MARGEN_MS) {
+      token = t;
+      caducaEn = hasta;
+    } else {
+      localStorage.removeItem(GUARDADO);
+    }
   } catch {
-    return false;
+    /* almacenamiento bloqueado o contenido corrupto: se empieza de cero */
   }
 }
 
-function recordarConcedido(): void {
+function guardar(nuevo: string, dura: number): string {
+  token = nuevo;
+  caducaEn = Date.now() + dura * 1000;
   try {
-    localStorage.setItem(MARCA, '1');
+    localStorage.setItem(GUARDADO, JSON.stringify({ t: nuevo, hasta: caducaEn }));
   } catch {
-    /* sin almacenamiento se pierde la comodidad, no la función */
+    /* sin almacenamiento se pierde la comodidad, no la función: seguirá valiendo en esta
+       pestaña hasta que caduque */
   }
+  return nuevo;
 }
 
-export function olvidarConcedido(): void {
+function olvidar(): void {
+  token = null;
+  caducaEn = 0;
   try {
-    localStorage.removeItem(MARCA);
+    localStorage.removeItem(GUARDADO);
   } catch {}
 }
 
-/**
- * Consigue un token.
- *
- * `interactivo` decide si puede abrir la ventana de Google. En falso solo devuelve algo si
- * ya se puede renovar sin molestar — que es lo que hay que usar al arrancar, para no
- * plantarle una ventana en la cara a quien solo ha abierto una asignatura.
- */
-export async function conseguirToken(interactivo: boolean): Promise<string> {
-  if (hayPermiso()) return token as string;
+/** Si hay un token utilizable **ahora**, sin pedirle nada a nadie ni abrir nada. */
+export function hayPermiso(): boolean {
+  recordar();
+  return Boolean(token) && Date.now() < caducaEn - MARGEN_MS;
+}
+
+/* ───────────────────────── pedirlo ───────────────────────── */
+
+/** Una ventana a la vez: subir cinco ficheros no puede abrir cinco. */
+let pidiendo: Promise<string> | null = null;
+
+async function pedir(): Promise<string> {
+  if (pidiendo) return pidiendo;
 
   const id = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   if (!id) throw new Error('Falta NEXT_PUBLIC_GOOGLE_CLIENT_ID.');
 
-  /* Solo se reutiliza lo que sirve: una interactiva vale para todo, una silenciosa solo
-     para otra silenciosa. */
-  if (enCurso && (enCurso.interactivo || !interactivo)) return enCurso.promesa;
-
-  const promesa = (async () => {
+  pidiendo = (async () => {
     await cargarGuion();
     const oauth2 = window.google?.accounts?.oauth2;
     if (!oauth2) throw new Error('El acceso de Google no está disponible.');
 
     return new Promise<string>((resolver, rechazar) => {
-      /* Un reloj por si Google no contesta nunca. Sin esto, un intento perdido deja la
-         promesa colgada y con ella cualquier cosa que la esté esperando. */
-      const reloj = interactivo
-        ? null
-        : setTimeout(() => {
-            if (pendiente === yo) pendiente = null;
-            rechazar(new Error('Sin respuesta de Google.'));
-          }, ESPERA_SILENCIOSA);
-
-      const yo: Pendiente = {
-        resolver,
-        rechazar,
-        cerrar: () => {
-          if (reloj) clearTimeout(reloj);
-        },
-      };
-
       /*
-       * El cliente se crea **una sola vez** y su respuesta va a quien esté esperando en
-       * ese momento, no a quien lo creó.
+       * El cliente se crea **en cada petición** y no se memoriza.
        *
-       * Escrito de la forma evidente —crear el cliente con `callback: resolver` la primera
-       * vez y reutilizarlo— la respuesta de la segunda petición resolvía la promesa de la
-       * primera, que ya no la esperaba nadie. La segunda no se enteraba nunca. Era la
-       * misma avería que el botón colgado, una capa más abajo, y no se ve leyendo porque
-       * parece una memorización inofensiva.
+       * Memorizarlo hacía que la respuesta de la segunda petición resolviera la promesa de
+       * la primera, porque la función de respuesta se queda atrapada en el cliente que la
+       * creó. Crear uno nuevo no cuesta nada y quita de en medio esa clase entera de
+       * avería.
        */
-      cliente ??= oauth2.initTokenClient({
+      const cliente = oauth2.initTokenClient({
         client_id: id,
         scope: PERMISO,
         callback: (r) => {
-          const quien = pendiente;
-          pendiente = null;
-          quien?.cerrar();
-          if (r.access_token) {
-            token = r.access_token;
-            caducaEn = Date.now() + (r.expires_in ?? 3600) * 1000;
-            recordarConcedido();
-            quien?.resolver(r.access_token);
-          } else {
-            quien?.rechazar(new Error(r.error_description ?? r.error ?? 'Permiso no concedido.'));
-          }
+          if (r.access_token) resolver(guardar(r.access_token, r.expires_in ?? 3600));
+          else rechazar(new Error(r.error_description ?? r.error ?? 'Permiso no concedido.'));
         },
-        /* Se dispara al cerrar la ventana sin conceder, y también cuando el navegador la
-           bloquea. Sin esto la promesa se queda colgada para siempre y la interfaz con el
-           botón girando — que es exactamente lo que pasaba. */
-        error_callback: (e) => {
-          const quien = pendiente;
-          pendiente = null;
-          quien?.cerrar();
-          quien?.rechazar(
+        /* Se dispara al cerrar la ventana sin conceder y cuando el navegador la bloquea.
+           Sin esto la promesa se queda colgada y la interfaz con el botón girando. */
+        error_callback: (e) =>
+          rechazar(
             new Error(
               e?.type === 'popup_closed'
                 ? 'Ventana cerrada sin conceder el permiso.'
@@ -236,41 +199,47 @@ export async function conseguirToken(interactivo: boolean): Promise<string> {
                   ? 'El navegador bloqueó la ventana de Google.'
                   : 'Permiso no concedido.',
             ),
-          );
-        },
+          ),
       });
 
-      /* Si había otra esperando, se le dice que ha perdido su turno en vez de dejarla
-         colgada: solo puede haber una respuesta en vuelo. */
-      pendiente?.cerrar();
-      pendiente?.rechazar(new Error('Otra petición tomó el relevo.'));
-      pendiente = yo;
-
       /*
-       * `prompt: ''` pide en silencio: si ya se concedió alguna vez, devuelve un token sin
-       * enseñar nada. Solo cuando la usuaria ha pedido conectar explícitamente se fuerza
-       * el consentimiento.
+       * `prompt: ''` y no `'consent'`.
+       *
+       * Con el consentimiento ya dado, Google devuelve el token **sin enseñar nada**: la
+       * ventana se abre y se cierra sola. Forzar `consent` obligaría a aceptar otra vez
+       * cada hora, que es justo lo que se está arreglando.
        */
-      cliente.requestAccessToken({ prompt: interactivo ? 'consent' : '' });
+      cliente.requestAccessToken({ prompt: '' });
     });
   })();
 
-  enCurso = { promesa, interactivo };
   try {
-    return await promesa;
+    return await pidiendo;
   } finally {
-    /* Solo se limpia si sigue siendo la nuestra: una interactiva puede haber sustituido
-       a esta silenciosa mientras tanto, y borrarla dejaría a quien la espera sin nadie
-       que la resuelva. */
-    if (enCurso?.promesa === promesa) enCurso = null;
+    pidiendo = null;
   }
 }
 
-/** Olvida el permiso en esta pestaña y se lo dice a Google. */
+/**
+ * Consigue un token.
+ *
+ * `interactivo` dice si **se viene de un gesto de la usuaria**, que es lo único que
+ * permite abrir la ventana de Google. Subir y arrastrar lo son; cargar la página no.
+ */
+export async function conseguirToken(interactivo: boolean): Promise<string> {
+  if (hayPermiso()) return token as string;
+  if (!interactivo) throw new Error('Drive no está conectado.');
+  return pedir();
+}
+
+/** Si Drive está listo para usarse ahora mismo, sin abrir nada. */
+export function yaEstaConectado(): boolean {
+  return hayClienteConfigurado() && hayPermiso();
+}
+
+/** Corta la conexión: se la revoca a Google y se olvida el token. */
 export function soltarPermiso(): void {
   const t = token;
-  token = null;
-  caducaEn = 0;
-  olvidarConcedido();
+  olvidar();
   if (t) window.google?.accounts?.oauth2?.revoke(t);
 }

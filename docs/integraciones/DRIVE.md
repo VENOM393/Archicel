@@ -8,8 +8,12 @@ Este documento es el planteamiento completo: qué permiso hace falta y por qué 
 quién son los ficheros, cómo encaja con el almacén que ya existe, qué hay que tocar, y qué tiene que
 hacer Cristian en la consola de Google.
 
-**Estado: fases 1 y 2 escritas.** Lo único que queda es aceptar el consentimiento de Google una
-vez desde un navegador de verdad — eso no se puede automatizar, y por eso no está verificado.
+**Estado: funcionando.** Subida, visor y borrado contra Drive real.
+
+**Cada persona conecta su propio Drive** — la conexión vive en el navegador, no en la cuenta de
+Archicel. Y **no hace falta secreto de cliente**: a cambio, la sesión de Drive dura una hora y se
+renueva sola en la siguiente acción, en vez de ser permanente. El porqué de ese cambio está en
+CLAUDE.md.
 
 ---
 

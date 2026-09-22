@@ -35,6 +35,7 @@ import { useAhora, useApuntes, useEventos } from '@/hooks/useDatos';
 import { useUI } from '@/lib/ui/contexto';
 import { useArchicel } from '@/lib/firebase/sesion';
 import {
+  deQuienEsElDrive,
   driveConectado,
   elArchivador,
   nombreDeTipo,
@@ -228,10 +229,15 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
    * render daría dos árboles distintos y React se quejaría al hidratar.
    */
   const [enDrive, setEnDrive] = useState(false);
+  const [correo, setCorreo] = useState<string | null>(null);
   const [conectando, setConectando] = useState(false);
 
   useEffect(() => {
-    void reconectarDriveEnSilencio().then((s) => setEnDrive(s || driveConectado()));
+    void reconectarDriveEnSilencio().then((s) => {
+      const listo = s || driveConectado();
+      setEnDrive(listo);
+      if (listo) void deQuienEsElDrive().then(setCorreo);
+    });
   }, []);
 
   const conectar = useCallback(async () => {
@@ -239,6 +245,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
     try {
       await archivador.conectar();
       setEnDrive(true);
+      void deQuienEsElDrive().then(setCorreo);
       avisar('Drive conectado');
     } catch (e) {
       /* El motivo concreto vale mucho más que un «no se pudo»: cerrar la ventana,
@@ -356,8 +363,11 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
     >
       <div className="asig-cab">
         <h2>Apuntes</h2>
-        <span className="asig-donde">
-          {enDrive ? 'En tu Drive' : 'Guardados en este equipo'}
+        {/* La cuenta, cuando se sabe. Llega una fracción de segundo después del estado
+            y por eso hay dos textos y no uno: enseñar «En el Drive de …» con el hueco
+            vacío mientras llega se lee peor que decir «En tu Drive» y precisarlo luego. */}
+        <span className="asig-donde" title={correo ?? undefined}>
+          {enDrive ? (correo ? `En el Drive de ${correo}` : 'En tu Drive') : 'Guardados en este equipo'}
         </span>
 
         {/* Una oferta, no un muro: la página funciona sin esto y por eso el botón es
