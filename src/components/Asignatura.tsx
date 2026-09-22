@@ -35,9 +35,12 @@ import { useAhora, useApuntes, useEventos } from '@/hooks/useDatos';
 import { useUI } from '@/lib/ui/contexto';
 import { useArchicel } from '@/lib/firebase/sesion';
 import {
+  driveConectado,
   elArchivador,
   nombreDeTipo,
   pesoLegible,
+  reconectarDriveEnSilencio,
+  sePuedeUsarDrive,
   seVeDentro,
   FalloDeArchivo,
   type Remoto,
@@ -215,6 +218,37 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
   const [abierto, setAbierto] = useState<Apunte | null>(null);
 
   /**
+   * Si Drive está conectado en esta pestaña.
+   *
+   * Vive en estado y no se lee del módulo en cada render porque conectar no provoca un
+   * render por sí solo: es una promesa que se resuelve fuera de React.
+   *
+   * Y arranca en `false` a propósito, incluso si ya hubiera permiso: el servidor
+   * prerrenderiza esta página y allí no hay ni ventana ni token. Decidirlo durante el
+   * render daría dos árboles distintos y React se quejaría al hidratar.
+   */
+  const [enDrive, setEnDrive] = useState(false);
+  const [conectando, setConectando] = useState(false);
+
+  useEffect(() => {
+    void reconectarDriveEnSilencio().then((s) => setEnDrive(s || driveConectado()));
+  }, []);
+
+  const conectar = useCallback(async () => {
+    setConectando(true);
+    try {
+      await archivador.conectar();
+      setEnDrive(true);
+      avisar('Drive conectado');
+    } catch (e) {
+      const f = e instanceof FalloDeArchivo ? e : null;
+      avisar(f?.message ?? 'No se pudo conectar con Drive');
+    } finally {
+      setConectando(false);
+    }
+  }, [archivador, avisar]);
+
+  /**
    * El contador de arrastre, y por qué no basta un booleano.
    *
    * `dragenter` y `dragleave` se disparan también al cruzar de un hijo a otro dentro de la
@@ -307,8 +341,16 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
       <div className="asig-cab">
         <h2>Apuntes</h2>
         <span className="asig-donde">
-          {archivador.nombre === 'local' ? 'Guardados en este equipo' : 'En tu Drive'}
+          {enDrive ? 'En tu Drive' : 'Guardados en este equipo'}
         </span>
+
+        {/* Una oferta, no un muro: la página funciona sin esto y por eso el botón es
+            fantasma. La única pieza sólida de la pantalla sigue siendo la que crea algo. */}
+        {!enDrive && sePuedeUsarDrive() && (
+          <Button type="button" variant="ghost" onClick={() => void conectar()} disabled={conectando}>
+            {conectando ? 'Conectando…' : 'Conectar Drive'}
+          </Button>
+        )}
         <Button type="button" onClick={() => entrada.current?.click()}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 20V7" />

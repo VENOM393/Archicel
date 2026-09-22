@@ -321,7 +321,13 @@ Cada asignatura va a tener su página, y en ella los apuntes de Celeste —fotos
 Los bytes van a **Google Drive**; Firestore guarda solo la ficha. El planteamiento entero, con los
 pasos de la consola, está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
 
-**Estado hoy: planteado, nada implementado.** Falta el ID de cliente de OAuth.
+**Estado: escrito, sin estrenar.** El ID de cliente está puesto en `.env.local`. Lo que falta es
+que una persona acepte la ventana de consentimiento **una vez**: eso no se puede automatizar, así
+que la subida a Drive **no está verificada**. Sí está comprobado que sin conceder no sale ni una
+petición a `googleapis.com` y que todo sigue funcionando contra el disco.
+
+**Falta añadir `NEXT_PUBLIC_GOOGLE_CLIENT_ID` en las variables de Vercel**, o en producción no
+habrá Drive.
 
 Cuatro cosas que no se deducen y que cuestan una tarde cada una:
 
@@ -335,6 +341,12 @@ Cuatro cosas que no se deducen y que cuestan una tarde cada una:
   **precisamente** porque con `drive.file` no abre nada más.
 - **El ID de cliente es público** y lleva `NEXT_PUBLIC_`; lo que lo protege es la lista de orígenes
   autorizados. **El secreto de cliente no hace falta**: el flujo de tokens del navegador no lo usa.
+- **`archivo/index.ts` es un encaminador, no un interruptor.** Al subir manda el preferido; al abrir
+  y al borrar manda el `proveedor` que lleve el propio apunte. Sin eso, conectar Drive haría
+  desaparecer todo lo guardado antes en el equipo — en el momento exacto en que la usuaria hace algo
+  que, para ella, solo añade opciones.
+- **El progreso de subida va con `XMLHttpRequest` y no con `fetch`**, que no informa de él. No es un
+  adorno: es lo único que distingue «está subiendo 60 MB» de «se ha colgado».
 
 Y lo de siempre, que aquí entra contenido de fuera por primera vez: **el nombre de un fichero lo
 escribe quien sea**, así que se pinta como texto y nunca como HTML.

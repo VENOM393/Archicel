@@ -6,7 +6,10 @@ Firestore y no deben estar ahí; van a Google Drive.
 
 Este documento es el planteamiento completo: qué permiso hace falta y por qué ese y no otro, de
 quién son los ficheros, cómo encaja con el almacén que ya existe, qué hay que tocar, y qué tiene que
-hacer Cristian en la consola de Google. No hay nada implementado todavía.
+hacer Cristian en la consola de Google.
+
+**Estado: fases 1 y 2 escritas.** Lo único que queda es aceptar el consentimiento de Google una
+vez desde un navegador de verdad — eso no se puede automatizar, y por eso no está verificado.
 
 ---
 
@@ -372,7 +375,7 @@ Cuando lo tengas, ponlo en `.env.local` tú y dime «puesto». Igual que con los
 | Fase | Qué entra | Sirve para |
 |---|---|---|
 | **1** ✅ | `Archivador` + `archivador-local` + la página de asignatura entera | **Hecha.** Todo el diseño y toda la animación funcionando **sin tocar Google** |
-| **2** | `archivador-drive`, conectar, subir reanudable, borrar, visor | Lo de verdad. Necesita el paso 7 hecho |
+| **2** ✅ | `archivador-drive`, conectar, subir reanudable, borrar, visor | **Escrita.** Falta que una persona acepte la ventana de consentimiento una vez |
 | **3** | Selector de Google, miniaturas, orden a mano, búsqueda | Adjuntar lo que ya esté en su Drive, y que la pantalla aguante doscientos apuntes |
 
 La fase 1 no es relleno: es lo que permite que el día que llegue el ID de cliente solo haya que
