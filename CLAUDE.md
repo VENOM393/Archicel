@@ -377,26 +377,54 @@ ventana — y si ya se concedió, se abre y se cierra sin enseñar nada.
 Guardar el token es aceptable **por el mismo motivo por el que puede vivir en el navegador**: con
 `drive.file` no abre nada salvo lo que esta aplicación creó.
 
-### Qué pasa cuando pasa la hora
+### Siempre Drive, nunca el disco
 
-Tres capas, y las tres hacen falta:
+Una subida acaba en Drive o **falla**. Hubo una caída al almacenamiento del navegador y se quitó a
+conciencia: un apunte en el portátil no está en ningún sitio útil —no viaja a otro dispositivo y el
+navegador puede tirarlo cuando le falte espacio— y sobre todo **parece guardado**. Media carrera de
+apuntes en un almacén que se borra solo es peor final que una subida que se niega a ocurrir.
+
+El archivador local sigue existiendo, pero **solo para abrir y borrar** lo que se guardó ahí antes
+de este cambio. Nada nuevo va a parar al disco.
+
+De ahí que sin conectar la pantalla no ofrezca subir: «Subir» y «Carpeta» se deshabilitan y la
+acción sólida pasa a ser **Conectar Drive**. Ofrecer un botón sabiendo que va a fallar es hacer
+perder el tiempo a quien lo pulse.
+
+### Qué pasa cuando pasa la hora
 
 1. **Se renueva antes de nada.** `subir` pide el token en su **primera línea**, antes de buscar la
    carpeta. Renovar puede abrir una ventana de Google, y eso solo se permite mientras dura el
    permiso que deja un gesto —unos segundos desde el clic—; gastarlo en dos peticiones de red hacía
    que la ventana llegara tarde y la bloquearan. Con el consentimiento ya dado no se ve nada.
-2. **Si aun así no se puede, se guarda en el equipo y se dice.** Antes se iba al disco en silencio:
-   creías que estaba en Drive y estaba en el portátil, que es peor que un error porque un error se
-   ve. Ahora el `remoto` que vuelve dice `local`, la pantalla lo compara con lo que esperaba y sale
-   una tira con el motivo y un botón **«Reconectar y reintentar»**.
+2. **Si aun así no se puede, se dice y no se guarda en otro sitio.** Sale una tira con el fichero,
+   el motivo **y cómo se arregla** — que es la mitad que faltaba: saber que no queda espacio sin
+   saber que hay que vaciar la papelera de Drive deja a quien lo lee igual de atascada. Cada causa
+   tiene su salida y la pantalla es el único sitio donde cabe decirla.
 3. **El fichero no se pierde de vista.** La tira guarda el `File`, así que reintentar es un botón y
    no volver a buscarlo en el disco. Un aviso que se va en tres segundos es el peor sitio posible
    para un fallo: de cinco ficheros arrastrados no dice cuál falló, ni por qué, ni deja repetirlo.
 
-Y la marca `archicel.drive.usado` —que no guarda ninguna credencial— es lo que distingue «puedo
-usar Drive ahora» de «esta persona **quiere** Drive». Pasada la hora lo primero es falso y lo segundo
-sigue siendo verdad, y sin esa diferencia no hay forma de saber que caer al disco es una degradación
-y no lo normal.
+### Un icono por tipo de fichero
+
+En `src/lib/archivo/iconos.tsx`. Doce clases —imagen, vídeo, audio, PDF, documento, hoja,
+presentación, comprimido, **plano**, **modelo 3D**, código y texto— más el genérico.
+
+Tres decisiones:
+
+- **El color sale de la paleta de la casa**, de los mismos `--c-*` que usan las asignaturas, al
+  15 % de relleno. El contrato visual prohíbe «un segundo color saturado» y una lista que inventa
+  un acento por fila es exactamente eso; reutilizar los tokens existentes no mete **ni un tono
+  nuevo** en el sistema, y el color de la asignatura sigue siendo el único saturado de la página.
+- **Dos siluetas, no una.** Lo que es un documento se dibuja como una hoja con la esquina doblada;
+  lo que no lo es tiene su propia forma. Trece hojas idénticas con un garabato distinto dentro
+  obligan a leer el garabato; una silueta distinta se reconoce sin leer nada.
+- **`.dwg` y `.skp` tienen icono propio** porque es lo que de verdad va a llegar a una escuela de
+  arquitectura. Un `.exe` no: si llega, lo correcto es que se vea como lo que es.
+
+El tipo se decide **por MIME primero y por extensión después**: el navegador manda el MIME vacío
+más de lo que parece —`.heic`, `.dwg`, lo que venga de un disco de red— y entonces el nombre es lo
+único que queda.
 
 Cuatro cosas más que no se deducen y que cuestan una tarde cada una:
 
@@ -407,9 +435,9 @@ Cuatro cosas más que no se deducen y que cuestan una tarde cada una:
   personal; la subida falla. La salida oficial es una unidad compartida, que es Workspace de pago.
 - **El navegador sube directo a Google, no por `/api`.** Vercel corta el cuerpo de una petición en
   4,5 MB y un PDF escaneado se pasa de ahí sin esfuerzo.
-- **`archivo/index.ts` es un encaminador, no un interruptor.** Al subir manda el preferido; al abrir
-  y al borrar manda el `proveedor` que lleve el propio apunte. Sin eso, conectar Drive haría
-  desaparecer todo lo guardado antes en el equipo.
+- **`archivo/index.ts` es un encaminador, no un interruptor.** Al subir va siempre a Drive; al abrir
+  y al borrar manda el `proveedor` que lleve el propio apunte. Eso último no es nostalgia: es lo que
+  hace que lo guardado en el equipo antes de este cambio siga abriéndose.
 
 Y tres trampas de las que costó salir:
 
@@ -457,14 +485,14 @@ gesto de arrastre— y tapa el del DOM, que es el que lleva `dataTransfer`.
 horario o su chip en la leyenda, y es **una página compuesta, no un tablero de widgets**: la portada
 manda, y los apuntes son la superficie de trabajo.
 
-**Estado: fase 1 terminada.** Los bytes se guardan en este equipo (IndexedDB) mientras no haya Drive;
-el planteamiento completo está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
+**Estado: terminada.** Los bytes van a Drive —y solo a Drive—, con carpetas, renombrar y mover. El
+planteamiento completo está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
 
 Lo que no se deduce leyendo el código:
 
-- **La interfaz no habla con el almacenamiento.** Habla con `Archivador`, cuatro verbos, en
-  `src/lib/archivo/`. Enchufar Drive es escribir `archivador-drive` y cambiar **una línea** en
-  `archivo/index.ts`. Es el mismo patrón que el almacén y por el mismo motivo.
+- **La interfaz no habla con el almacenamiento.** Habla con `Archivador`, en `src/lib/archivo/`. Es
+  el mismo patrón que el almacén y por el mismo motivo: el día que Drive se sustituya por otra cosa,
+  se escribe otro archivador y ninguna pantalla se entera.
 - **El almacén guarda la ficha, el archivador los bytes.** `Apunte` lleva nombre, tipo, tamaño y un
   `remoto`; por eso la pantalla se pinta entera sin una sola llamada al almacenamiento.
 - **Firestore excluye de una consulta los documentos que no tienen el campo por el que se ordena**, y

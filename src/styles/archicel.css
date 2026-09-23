@@ -1507,9 +1507,14 @@
   .asig-miga.diana{color:var(--ink);box-shadow:inset 0 0 0 1px var(--accent-linea)}
   .asig-donde{
     font-size:11.5px;color:var(--ink-subtle);margin-right:auto;
+    transition:color 240ms;
     /* No es una etiqueta decorativa: dice dónde acaban los ficheros, que es información
        que cambia el día que se conecte Drive. */
   }
+
+  /* Sin conectar no es un sitio donde guardar: se dice más flojo todavía, porque lo que
+     tiene que leerse es el botón de al lado. */
+  .asig-donde.flojo{opacity:.7}
 
   /* ── la lista ── */
   .asig-lista{
@@ -1533,9 +1538,9 @@
     border-radius:var(--r-sm)
   }
   .asig-fila.nueva,.asig-fila.carp .asig-abrir{align-items:center}
-  /* Una carpeta se lee antes que un fichero: por eso su icono lleva el color del acento y
-     el de un fichero no. Es la única diferencia y basta. */
-  .asig-ico.carp{color:var(--accent-linea);border-color:color-mix(in srgb,var(--accent-linea) 30%,transparent)}
+  /* La carpeta toma el acento de la casa y no un color de tipo: no es un fichero, es el
+     sitio donde van los ficheros, y esa diferencia tiene que leerse antes que ninguna. */
+  .asig-ico.carp{--tc:var(--accent-linea)}
 
   /* El campo de escribir un nombre, con la misma caja que la fila que sustituye para que
      la lista no dé un salto al entrar y salir de él. */
@@ -1554,13 +1559,25 @@
     transition:background 200ms
   }
   .asig-abrir:hover{background:rgba(255,255,255,.045)}
+  /* ── el icono de cada tipo ──
+     El color sale de `--tc`, que la fila rellena con un token `--c-*` de los que ya usan
+     las asignaturas: **no entra ni un tono nuevo en el sistema**. El relleno al 15 % con el
+     trazo a plena intensidad es lo que deja reconocerlo de un vistazo sin competir con el
+     color de la asignatura, que es el único saturado de la página. */
   .asig-ico{
-    width:30px;height:30px;border-radius:var(--r-xs);display:grid;place-items:center;
-    color:var(--ink-subtle);background:rgba(255,255,255,.05);
-    border:1px solid var(--hairline);
-    transition:color 220ms,border-color 220ms
+    width:32px;height:32px;border-radius:var(--r-sm);display:grid;place-items:center;
+    color:var(--tc,var(--ink-subtle));
+    background:color-mix(in srgb,var(--tc,var(--ink-subtle)) 15%,transparent);
+    border:1px solid color-mix(in srgb,var(--tc,var(--hairline)) 26%,transparent);
+    transition:background 220ms,border-color 220ms,transform 260ms var(--ease-out)
   }
-  .asig-abrir:hover .asig-ico{color:var(--ink-muted);border-color:var(--hairline-lit)}
+  .asig-abrir:hover .asig-ico{
+    background:color-mix(in srgb,var(--tc,var(--ink-subtle)) 24%,transparent);
+    border-color:color-mix(in srgb,var(--tc,var(--hairline-lit)) 42%,transparent)
+  }
+  /* Se adelanta un píxel al pasar por encima: lo justo para que la fila conteste sin que
+     parezca que se mueve. */
+  .asig-fila:hover .asig-ico{transform:translateX(1px)}
   /* Una imagen y un PDF se distinguen por el dibujo, no por el color: un color por tipo
      de fichero serían siete acentos nuevos peleándose entre ellos. */
   .asig-nombre{
@@ -1646,6 +1663,13 @@
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis
   }
   .asig-fallos li span{color:var(--late);flex:none}
+  /* La salida, en su propia línea y en cursiva: es una instrucción, no un dato más de la
+     fila. Puesta al lado del motivo se lee como parte del error y se salta. */
+  .asig-fallos li i{
+    flex:1 1 100%;font-style:italic;font-size:11.5px;color:var(--ink-subtle);
+    padding-left:1px
+  }
+  .asig-fallos li{flex-wrap:wrap;row-gap:2px}
 
   /* ── «suéltalo aquí» ──
      Relleno y filete, no un segundo cristal. Ocupa el panel entero porque lo que hay
@@ -1693,6 +1717,7 @@
   }
   .visor-cuerpo img{max-width:100%;max-height:100%;display:block;object-fit:contain}
   .visor-cuerpo iframe{width:100%;height:100%;border:0;display:block}
+  .visor-cuerpo video{max-width:100%;max-height:100%;display:block;background:#000}
   .visor-aviso{margin:0;font-size:13px;color:var(--ink-subtle)}
   .visor-nada{display:flex;flex-direction:column;align-items:center;gap:14px;padding:28px}
   .visor-nada p{margin:0;font-size:13px;color:var(--ink-subtle)}

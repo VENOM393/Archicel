@@ -137,40 +137,6 @@ export interface Archivador {
   soltar(url: string): void;
 }
 
-/** Lo que Archicel acepta como apunte, y cómo se llama cada cosa en pantalla. */
-export const TIPOS_ACEPTADOS: Array<{ mime: string; ext: string[]; nombre: string }> = [
-  { mime: 'image/', ext: ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif', '.heic'], nombre: 'Imagen' },
-  { mime: 'application/pdf', ext: ['.pdf'], nombre: 'PDF' },
-  { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ext: ['.docx'], nombre: 'Documento' },
-  { mime: 'application/msword', ext: ['.doc'], nombre: 'Documento' },
-  { mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', ext: ['.pptx'], nombre: 'Presentación' },
-  { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ext: ['.xlsx'], nombre: 'Hoja' },
-  { mime: 'text/', ext: ['.txt', '.md'], nombre: 'Texto' },
-];
-
-/**
- * Cómo se llama un tipo en pantalla.
- *
- * Se mira primero el MIME y **después la extensión**, en ese orden y no al revés: el
- * navegador a veces manda el MIME vacío —pasa con `.heic` y con ficheros que vienen de un
- * disco de red— y entonces lo único que queda es el nombre. Devolver «Archivo» cuando se
- * podía saber que era un PDF es perder información que estaba ahí.
- */
-export function nombreDeTipo(mime: string, nombre: string): string {
-  for (const t of TIPOS_ACEPTADOS) if (mime && mime.startsWith(t.mime)) return t.nombre;
-  const ext = nombre.slice(nombre.lastIndexOf('.')).toLowerCase();
-  for (const t of TIPOS_ACEPTADOS) if (t.ext.includes(ext)) return t.nombre;
-  return 'Archivo';
-}
-
-/** Si se puede enseñar dentro de la página o hay que abrirlo fuera. */
-export function seVeDentro(mime: string, nombre: string): 'imagen' | 'pdf' | 'no' {
-  const ext = nombre.slice(nombre.lastIndexOf('.')).toLowerCase();
-  if (mime.startsWith('image/') || ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif'].includes(ext)) return 'imagen';
-  if (mime === 'application/pdf' || ext === '.pdf') return 'pdf';
-  return 'no';
-}
-
 /**
  * El tamaño, dicho como lo diría una persona.
  *

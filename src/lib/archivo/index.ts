@@ -18,7 +18,7 @@
 
 import { crearArchivadorDrive } from './archivador-drive';
 import { crearArchivadorLocal } from './archivador-local';
-import { conseguirToken, hayClienteConfigurado, hayPermiso, seHaUsadoDrive, yaEstaConectado } from './google';
+import { conseguirToken, hayClienteConfigurado, hayPermiso, yaEstaConectado } from './google';
 import { FalloDeArchivo, type Archivador, type Remoto } from './archivador';
 
 let local: Archivador | null = null;
@@ -55,23 +55,41 @@ export function reconectarDriveEnSilencio(): Promise<boolean> {
   return Promise.resolve(yaEstaConectado());
 }
 
-/** Si esta persona usa Drive, aunque su sesión esté caducada ahora mismo. */
-export function driveEsLoNormal(): boolean {
-  return hayClienteConfigurado() && seHaUsadoDrive();
-}
-
 /** Si Drive está conectado **ahora**, en esta pestaña. */
 export function driveConectado(): boolean {
   return hayClienteConfigurado() && hayPermiso();
 }
 
+/**
+ * Deja Drive listo o explica por qué no.
+ *
+ * Se llama antes de cualquier escritura. Si el token caducó lo renueva, y como esto se
+ * invoca desde un gesto —pulsar subir, soltar un fichero, crear una carpeta— Google deja
+ * abrir su ventana; con el permiso ya concedido no se ve nada.
+ */
+async function asegurarDrive(): Promise<void> {
+  if (!hayClienteConfigurado()) {
+    throw new FalloDeArchivo('sin-permiso', 'Drive no está configurado en esta aplicación.');
+  }
+  if (driveConectado()) return;
+  try {
+    await conseguirToken(true);
+  } catch (e) {
+    throw new FalloDeArchivo(
+      'sin-permiso',
+      e instanceof Error && e.message ? e.message : 'Drive no está conectado.',
+      e,
+    );
+  }
+}
+
 export function elArchivador(): Archivador & { conectarDrive(): Promise<void> } {
   return {
-    get nombre() {
-      return driveConectado() ? ('drive' as const) : ('local' as const);
-    },
+    /* Siempre Drive: el archivador local sigue existiendo, pero solo para **abrir y
+       borrar** lo que se guardó ahí antes de este cambio. Nada nuevo va a parar al disco. */
+    nombre: 'drive' as const,
 
-    disponible: () => elLocal().disponible() || driveConectado(),
+    disponible: () => driveConectado(),
 
     /** Sin Drive configurado no hay nada que conectar, y decirlo es mejor que fallar. */
     async conectar() {
@@ -86,47 +104,25 @@ export function elArchivador(): Archivador & { conectarDrive(): Promise<void> } 
     },
 
     /**
-     * Sube por el preferido, **renovando antes de rendirse**.
+     * Sube a Drive. **Y si no se puede, falla.**
      *
-     * Sin esto, pasada la hora el token deja de valer y la subida se iba al disco en
-     * silencio: creías que estaba en Drive y estaba en el portátil. Eso es peor que un
-     * error, porque un error se ve.
+     * Antes caía al disco cuando Drive no estaba disponible, y eso se quitó a propósito:
+     * un apunte guardado en el portátil no está en ningún sitio útil. No viaja a otro
+     * dispositivo, el navegador puede tirarlo cuando le falte espacio, y sobre todo
+     * **parece guardado**. Media carrera de apuntes en un almacenamiento que se borra solo
+     * es peor final que una subida que se niega a ocurrir.
      *
-     * Así que si esta persona usa Drive, primero se intenta renovar. Con el permiso ya
-     * concedido eso no enseña nada, y funciona porque esta llamada nace de un gesto —
-     * pulsar subir o soltar un fichero.
-     *
-     * Y si aun así no se puede, **se guarda igual en el equipo y se dice**: el `remoto`
-     * que vuelve lleva `proveedor: 'local'`, y quien llamó compara con lo que esperaba.
-     * Perder el fichero por no poder guardarlo donde tocaba sería el peor de los finales.
+     * Así que aquí solo hay dos caminos: Drive, o un fallo con nombre que la pantalla sabe
+     * explicar y reintentar.
      */
     async subir(fichero, destino, alAvanzar) {
-      if (driveConectado()) return elDrive().subir(fichero, destino, alAvanzar);
-
-      if (hayClienteConfigurado() && seHaUsadoDrive()) {
-        try {
-          await conseguirToken(true);
-          return await elDrive().subir(fichero, destino, alAvanzar);
-        } catch {
-          /* ni renovando: al disco, y que se note */
-        }
-      }
-
-      return elLocal().subir(fichero, destino, alAvanzar);
+      await asegurarDrive();
+      return elDrive().subir(fichero, destino, alAvanzar);
     },
 
-    /* Una carpeta se crea donde vayan a ir sus ficheros: por el preferido. */
     async crearCarpeta(nombre, destino) {
-      if (driveConectado()) return elDrive().crearCarpeta(nombre, destino);
-      if (hayClienteConfigurado() && seHaUsadoDrive()) {
-        try {
-          await conseguirToken(true);
-          return await elDrive().crearCarpeta(nombre, destino);
-        } catch {
-          /* al disco, como con los ficheros */
-        }
-      }
-      return elLocal().crearCarpeta(nombre, destino);
+      await asegurarDrive();
+      return elDrive().crearCarpeta(nombre, destino);
     },
 
     renombrar(remoto, nombre) {
@@ -153,5 +149,6 @@ export function elArchivador(): Archivador & { conectarDrive(): Promise<void> } 
 }
 
 export { deQuienEsElDrive } from './archivador-drive';
+export * from './iconos';
 export * from './archivador';
 export { soltarPermiso } from './google';

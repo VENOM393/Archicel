@@ -37,13 +37,14 @@ import { useArchicel } from '@/lib/firebase/sesion';
 import {
   deQuienEsElDrive,
   driveConectado,
-  driveEsLoNormal,
   elArchivador,
   nombreDeTipo,
   pesoLegible,
   reconectarDriveEnSilencio,
   sePuedeUsarDrive,
   seVeDentro,
+  tipoDeFichero,
+  IconoDeFichero,
   FalloDeArchivo,
   type Remoto,
 } from '@/lib/archivo';
@@ -315,7 +316,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
   /* ── subir ── */
 
   const cuenta = useRef(0);
-  const [fallidos, setFallidos] = useState<Array<{ f: File; motivo: string; caducada: boolean }>>([]);
+  const [fallidos, setFallidos] = useState<Array<{ f: File; motivo: string; arreglo: string; caducada: boolean }>>([]);
 
   const subir = useCallback(
     async (ficheros: FileList | File[]) => {
@@ -326,7 +327,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
       setSubiendo(lista.map((f) => ({ nombre: f.name, tanto: 0 })));
       const arranque = Date.now();
       let bien = 0;
-      const malos: Array<{ f: File; motivo: string; caducada: boolean }> = [];
+      const malos: Array<{ f: File; motivo: string; arreglo: string; caducada: boolean }> = [];
 
       for (const fichero of lista) {
         try {
@@ -334,10 +335,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
             setSubiendo((s) => s.map((x) => (x.nombre === fichero.name ? { ...x, tanto } : x))),
           );
 
-          if (remoto.proveedor === 'local' && driveEsLoNormal()) {
-            malos.push({ f: fichero, motivo: 'Guardado en este equipo: la sesión de Drive caducó.', caducada: true });
-            setEnDrive(false);
-          } else if (remoto.proveedor === 'drive' && !enDrive) {
+          if (remoto.proveedor === 'drive' && !enDrive) {
             setEnDrive(true);
             void deQuienEsElDrive().then(setCorreo);
           }
@@ -353,12 +351,20 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
           });
           bien++;
         } catch (e) {
+          /*
+           * El motivo **y cómo se arregla**, que es la mitad que faltaba.
+           *
+           * Saber que no queda sitio sin saber que hay que vaciar la papelera de Drive
+           * deja a quien lo lee igual de atascada. Cada causa tiene una salida distinta
+           * y la pantalla es el único sitio donde cabe decirla.
+           */
           const f = e instanceof FalloDeArchivo ? e : null;
           const bloqueada = e instanceof Error && /bloque|ventana/i.test(e.message);
-          const caducada = f?.causa === 'sin-permiso' || bloqueada || (!f && e instanceof Error);
+          const caducada = f?.causa === 'sin-permiso' || bloqueada;
+
           const motivo =
             f?.causa === 'sin-sitio'
-              ? f.message
+              ? 'No queda espacio en tu Drive.'
               : f?.causa === 'demasiado-grande'
                 ? 'Es demasiado grande.'
                 : f?.causa === 'red'
@@ -366,7 +372,20 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
                   : caducada
                     ? 'La sesión de Drive ha caducado.'
                     : (f?.message ?? (e instanceof Error ? e.message : 'Fallo desconocido.'));
-          malos.push({ f: fichero, motivo, caducada });
+
+          const arreglo =
+            f?.causa === 'sin-sitio'
+              ? 'Vacía la papelera de Drive o haz sitio, y reintenta.'
+              : f?.causa === 'demasiado-grande'
+                ? 'Súbelo a Drive desde el navegador y enlázalo desde ahí.'
+                : f?.causa === 'red'
+                  ? 'Comprueba la conexión y vuelve a intentarlo.'
+                  : caducada
+                    ? 'Pulsa «Reconectar y reintentar»: Google pedirá permiso una vez.'
+                    : 'Reintenta; si vuelve a fallar, lo de arriba es lo que dice Drive.'
+;
+
+          malos.push({ f: fichero, motivo, arreglo, caducada });
           console.error('[archicel] subida fallida', fichero.name, e);
         }
       }
@@ -573,17 +592,24 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
           sobre={sobre}
           setSobre={setSobre}
         />
-        <span className="asig-donde" title={correo ?? undefined}>
-          {enDrive ? (correo ? `En el Drive de ${correo}` : 'En tu Drive') : 'Guardados en este equipo'}
+        <span className={`asig-donde${enDrive ? '' : ' flojo'}`} title={correo ?? undefined}>
+          {enDrive ? (correo ? `En el Drive de ${correo}` : 'En tu Drive') : 'Sin conectar'}
         </span>
 
+        {/* Sin Drive no hay dónde guardar, así que conectar **es** la acción sólida de la
+            pantalla y las otras dos se apartan. Ofrecer «Subir» sabiendo que va a fallar es
+            hacer perder el tiempo a quien lo pulse. */}
         {!enDrive && sePuedeUsarDrive() && (
-          <Button type="button" variant="ghost" onClick={() => void conectar()} disabled={conectando}>
+          <Button type="button" onClick={() => void conectar()} disabled={conectando}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 3.6 20.2 8v8L12 20.4 3.8 16V8Z" />
+              <path d="M3.8 8 12 12.4 20.2 8M12 12.4v8" />
+            </svg>
             {conectando ? 'Conectando…' : 'Conectar Drive'}
           </Button>
         )}
 
-        <Button type="button" variant="outline" onClick={() => setCreando(true)}>
+        <Button type="button" variant="outline" onClick={() => setCreando(true)} disabled={!enDrive}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h3l2 2.5h6A2.5 2.5 0 0 1 20 10v7a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17Z" />
             <path d="M12 11.5v5M9.5 14h5" />
@@ -591,7 +617,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
           Carpeta
         </Button>
 
-        <Button type="button" onClick={() => entrada.current?.click()}>
+        <Button type="button" variant={enDrive ? 'default' : 'outline'} onClick={() => entrada.current?.click()} disabled={!enDrive}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 20V7" />
             <path d="m7.5 11.5 4.5-4.5 4.5 4.5" />
@@ -644,9 +670,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
                 <path d="M10.3 4.3 2.8 17.2A1.6 1.6 0 0 0 4.2 19.6h15.6a1.6 1.6 0 0 0 1.4-2.4L13.7 4.3a1.6 1.6 0 0 0-2.8 0Z" />
               </svg>
               <span>
-                {fallidos.length === 1
-                  ? `1 apunte no llegó a ${driveEsLoNormal() ? 'Drive' : 'guardarse'}`
-                  : `${fallidos.length} apuntes no llegaron a ${driveEsLoNormal() ? 'Drive' : 'guardarse'}`}
+                {fallidos.length === 1 ? '1 apunte no llegó a Drive' : `${fallidos.length} apuntes no llegaron a Drive`}
               </span>
               <Button type="button" variant="outline" size="sm" onClick={() => void reintentar()} disabled={conectando}>
                 {conectando ? 'Reconectando…' : fallidos.some((x) => x.caducada) ? 'Reconectar y reintentar' : 'Reintentar'}
@@ -662,6 +686,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
                 <li key={x.f.name}>
                   <b>{x.f.name}</b>
                   <span>{x.motivo}</span>
+                  <i>{x.arreglo}</i>
                 </li>
               ))}
             </ul>
@@ -675,9 +700,11 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
             <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h3l2 2.5h6A2.5 2.5 0 0 1 20 10v7a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17Z" />
           </svg>
           <p>
-            {aqui
-              ? 'Esta carpeta está vacía. Arrastra aquí lo que vaya dentro.'
-              : 'Arrastra aquí tus fotos de pizarra, los PDF de teoría o lo que te manden.'}
+            {!enDrive
+              ? 'Conecta tu Drive y los apuntes se guardarán ahí, no en este ordenador.'
+              : aqui
+                ? 'Esta carpeta está vacía. Arrastra aquí lo que vaya dentro.'
+                : 'Arrastra aquí tus fotos de pizarra, los PDF de teoría o lo que te manden.'}
           </p>
         </div>
       ) : (
@@ -968,7 +995,7 @@ function Fila({
   alCancelar: () => void;
   alBorrar: () => void;
 }) {
-  const clase = seVeDentro(apunte.tipo, apunte.nombre);
+  const tipo = tipoDeFichero(apunte.tipo, apunte.nombre);
   const enDrive = apunte.remoto.proveedor === 'drive';
   return (
     <mo.li
@@ -983,20 +1010,20 @@ function Fila({
     >
       {editando ? (
         <>
-          <span className={`asig-ico tipo-${clase}`} aria-hidden="true">
-            <IconoDeTipo clase={clase} />
+          <span className="asig-ico" style={{ ['--tc' as string]: `var(--c-${tipo.color})` }} aria-hidden="true">
+            <IconoDeFichero clase={tipo.clase} />
           </span>
           <Bautizo inicial={apunte.nombre} alTerminar={alBautizar} alCancelar={alCancelar} />
         </>
       ) : (
         <>
           <button type="button" className="asig-abrir" onClick={alAbrir} title={apunte.nombre}>
-            <span className={`asig-ico tipo-${clase}`} aria-hidden="true">
-              <IconoDeTipo clase={clase} />
+            <span className="asig-ico" style={{ ['--tc' as string]: `var(--c-${tipo.color})` }} aria-hidden="true">
+              <IconoDeFichero clase={tipo.clase} />
             </span>
             <span className="asig-nombre">{apunte.nombre}</span>
             <span className="asig-meta">
-              {nombreDeTipo(apunte.tipo, apunte.nombre)} · {pesoLegible(apunte.tam)}
+              {tipo.nombre} · {pesoLegible(apunte.tam)}
             </span>
           </button>
           {enDrive && (
@@ -1019,32 +1046,6 @@ function Fila({
         </>
       )}
     </mo.li>
-  );
-}
-
-function IconoDeTipo({ clase }: { clase: 'imagen' | 'pdf' | 'no' }) {
-  const comun = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  if (clase === 'imagen')
-    return (
-      <svg {...comun}>
-        <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
-        <circle cx="9" cy="10" r="1.4" />
-        <path d="m4.5 17 4.2-4.2a1.6 1.6 0 0 1 2.3 0L16 17.5" />
-      </svg>
-    );
-  if (clase === 'pdf')
-    return (
-      <svg {...comun}>
-        <path d="M14 3.5H7.5A1.5 1.5 0 0 0 6 5v14a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 19V7.5Z" />
-        <path d="M14 3.5V7a.5.5 0 0 0 .5.5H18" />
-        <path d="M9 14h6M9 17h4" />
-      </svg>
-    );
-  return (
-    <svg {...comun}>
-      <path d="M14 3.5H7.5A1.5 1.5 0 0 0 6 5v14a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 19V7.5Z" />
-      <path d="M14 3.5V7a.5.5 0 0 0 .5.5H18" />
-    </svg>
   );
 }
 
@@ -1134,6 +1135,10 @@ function Contenido({ apunte, cerrar }: { apunte: Apunte; cerrar: () => void }) {
           ) : clase === 'imagen' ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={url} alt={apunte.nombre} />
+          ) : clase === 'video' ? (
+            /* Con controles y sin reproducción automática: un vídeo que arranca solo al
+               abrirlo asusta más que ayuda, sobre todo con auriculares puestos. */
+            <video src={url} controls playsInline />
           ) : clase === 'pdf' ? (
             <iframe src={url} title={apunte.nombre} />
           ) : (
