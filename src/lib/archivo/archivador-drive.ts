@@ -314,6 +314,16 @@ export function olvidarCarpetas(): void {
   rutas.clear();
 }
 
+/**
+ * Qué conexión es esta. Sube cada vez que se desconecta Drive.
+ *
+ * Lo que se recuerda aquí —ids de carpeta, ficheros abiertos, subidas a medias— es **de una
+ * cuenta de Google**, y las búsquedas van por nombre, no por cuenta: desconectar y conectar
+ * otra en la misma pestaña subiría a los ids de la anterior. Todo lo que estaba en vuelo al
+ * desconectar comprueba este número antes de guardar lo que trae.
+ */
+let conexion = 0;
+
 /** Las comillas y las barras del nombre romperían la consulta: Drive las escapa con barra. */
 const escapar = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
@@ -421,9 +431,10 @@ function carpetaDeAsignatura(clave: string): Promise<string> {
  */
 export function prepararCarpeta(clave: string): void {
   if (rutas.has(clave) || !hayPermiso()) return;
+  const mia = conexion;
   void buscarRuta(nombreDe(clave), false)
     .then((b) => {
-      if (b.asig && !rutas.has(clave)) rutas.set(clave, Promise.resolve(b.asig));
+      if (b.asig && conexion === mia && !rutas.has(clave)) rutas.set(clave, Promise.resolve(b.asig));
     })
     .catch(() => {});
 }
@@ -483,7 +494,7 @@ async function subirDeUnaVez(fichero: File, meta: object, alAvanzar?: (tanto: nu
  * destino que la primera vez. Una sesión de Drive vale una semana; un `WeakMap` la suelta
  * sola cuando nadie guarda ya el fichero.
  */
-const aMedias = new WeakMap<File, string>();
+let aMedias = new WeakMap<File, string>();
 
 /** La sesión de subida caducó o no existe: hay que abrir otra. */
 class SesionPerdida extends FalloDeArchivo {
@@ -636,6 +647,7 @@ const bajando = new Map<string, Descarga>();
  */
 function descargar(id: string, op: OpcionesDeLectura, interactivo: boolean): Descarga {
   const d: Descarga = { oyentes: new Set(), promesa: Promise.resolve(new Blob()) };
+  const mia = conexion;
   d.promesa = (async () => {
     const r = await llamar(`${API}/files/${encodeURIComponent(id)}?alt=media`, {}, { interactivo });
     const tipo = op.tipo || r.headers.get('Content-Type') || '';
@@ -667,7 +679,7 @@ function descargar(id: string, op: OpcionesDeLectura, interactivo: boolean): Des
     }
     if (sueltos.length) partes.push(new Blob(sueltos));
     const blob = new Blob(partes, { type: tipo });
-    recordarBlob(id, blob);
+    if (conexion === mia) recordarBlob(id, blob);
     return blob;
   })();
   bajando.set(id, d);
@@ -727,9 +739,25 @@ export async function deQuienEsElDrive(): Promise<string | null> {
   }
 }
 
-/** Al desconectar hay que olvidarlo, o la pantalla seguiría enseñando la cuenta anterior. */
+/**
+ * Al desconectar hay que olvidar **todo lo de esa cuenta**: quién es, o la pantalla seguiría
+ * enseñando la anterior; los ids de las carpetas fijas, o la siguiente cuenta subiría a
+ * carpetas que no son suyas (404); las sesiones de subida a medias, que siguen escribiendo
+ * en el Drive de quien las abrió; y los ficheros abiertos, que no son de quien viene.
+ *
+ * Si la cuenta cambia sin pasar por aquí —caduca la hora y al reconectar se elige otra—, la
+ * primera escritura se tropieza con un id de la anterior, Drive contesta 404 y `enCarpeta`
+ * la busca otra vez. Esto es lo limpio; aquello, la red de seguridad.
+ */
 export function olvidarQuien(): void {
   quienEs = null;
+  conexion++;
+  rutas.clear();
+  turno = Promise.resolve();
+  aMedias = new WeakMap();
+  recordados.clear();
+  ocupado = 0;
+  bajando.clear();
 }
 
 /* ───────────────────────── el archivador ───────────────────────── */
