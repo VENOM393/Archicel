@@ -554,9 +554,13 @@ escribe quien sea**, así que se pinta como texto y nunca como HTML.
 
 La usuaria decide el árbol, **en Drive**: una carpeta de Archicel es una carpeta de verdad allí,
 para que quien abra Drive vea lo mismo que en la aplicación. Por eso crear carpeta exige Drive
-igual que subir —decidido por Cristian—, y sin conectar el botón «Carpeta» se deshabilita y la
-acción es **Conectar Drive**. Renombrar y mover lo antiguo guardado en el equipo sí funciona sin
-conectar.
+igual que subir —decidido por Cristian—, y sin conectar la superficie de apuntes no enseña botones
+apagados: enseña un **estado vacío** —«No tienes Drive conectado», la marca de Drive a trazo (no el
+logo de tres colores: sería un segundo saturado) y una sola acción sólida— que abre un **asistente**
+(`HojaConectarDrive`). El asistente explica qué es conectar Drive, qué permiso pide (`drive.file`:
+solo ve lo que ella crea) y con qué cuenta **antes** de abrir la ventana de Google, y al terminar
+dice de quién quedó el Drive; cerrar el consentimiento sin conceder no rompe nada y ofrece reintentar.
+Renombrar y mover lo antiguo guardado en el equipo sí funciona sin conectar.
 
 Cuatro cosas que no se deducen:
 
