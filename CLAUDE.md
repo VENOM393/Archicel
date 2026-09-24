@@ -457,8 +457,16 @@ perder el tiempo a quien lo pulse.
   decide qué hay que mandar y qué fichas se pueden borrar.
 - **La ficha solo se borra cuando Drive lo confirma.** Si falla, la ficha se queda, la fila vuelve y
   la tira dice por qué, con reintentar. Lo que falla dentro de una carpeta conserva su ficha y la de
-  cada carpeta del camino: nunca queda una hija con una madre que ya no existe. Un 404 sí es
-  confirmación —ya no estaba— y la ficha se quita.
+  cada carpeta del camino: nunca queda una hija con una madre que ya no existe. Las fichas se
+  borran en orden —apuntes, y después carpetas de la más honda a la de arriba— para que un corte
+  a mitad no deje nada invisible.
+- **Un 404 no es «ya no estaba».** Con `drive.file`, Drive contesta 404 también a lo que subió
+  **otra cuenta de Google**, que sigue vivo en su Drive. `borrar` devuelve `'no-estaba'` y la
+  pantalla pregunta si se quita solo de Archicel; una carpeta conserva todas sus fichas y la tira
+  ofrece hacerlo. La ficha guarda qué cuenta subió cada cosa (`remoto.cuenta`) para decirlo.
+- **Lo antiguo del navegador no va a ninguna papelera.** Si una carpeta de Drive lleva dentro
+  apuntes guardados en el equipo, la pregunta lo dice —«se borran sin vuelta atrás»— y el foco
+  va a Cancelar.
 - **La pregunta y el visor van a `body` por un portal.** El panel de los apuntes lleva
   `backdrop-filter`, que lo convierte en el bloque contenedor de todo lo `fixed` de dentro: el
   visor se quedaba encerrado en el panel y su telón le quedaba **encima**, así que cualquier clic

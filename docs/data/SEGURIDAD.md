@@ -41,6 +41,41 @@ embeber Archicel para engañar a quien pulsa), `nosniff`, una política de refer
 filtra la ruta abierta al salir a otro sitio, y una renuncia explícita a cámara, micrófono
 y ubicación, que la aplicación no usa.
 
+## Google Drive: lo que protege a los apuntes
+
+Los apuntes son lo único que entra en Archicel **desde fuera** y lo único que vive en un
+servicio que no es Firebase. Lo que los protege, capa a capa:
+
+- **El permiso es `drive.file`, y solo ese.** Archicel únicamente alcanza los ficheros que
+  ella misma creó: el resto del Drive —documentos, fotos, facturas— no existe para ella. Lo
+  garantiza Google en su servidor, no una condición del código. Un fichero de otra cuenta, o
+  uno ajeno aunque se sepa su id, contesta 404. Por eso **un 404 no se toma como «ya estaba
+  borrado»** al borrar: puede ser de otra cuenta y seguir vivo; se pregunta antes de quitar la
+  ficha. `drive.file` no es un scope sensible y publicar no exige la auditoría CASA.
+- **El token vive en `localStorage`** (`archicel.drive.token.v1`), legible por cualquier
+  guion de este dominio. Es aceptable **por el mismo motivo por el que puede vivir en el
+  navegador**: con `drive.file` ese token no abre nada salvo lo que creó Archicel, y caduca en
+  una hora. No hay secreto de cliente ni `refresh_token` en ningún sitio que se pueda filtrar.
+  La defensa de fondo sigue siendo la de siempre: que ningún dato de la usuaria se convierta en
+  HTML, porque un guion inyectado sí podría leer ese token durante su hora.
+- **Un token que no sirve se tira.** Un 401, un 403 porque el permiso concedido no incluye
+  Drive (se desmarcó la casilla) o porque la organización no lo deja: se borra y el siguiente
+  gesto pide otro. Y un token que Google entrega **sin** el permiso de Drive ni se guarda
+  (`hasGrantedAllScopes`).
+- **Desconectar revoca de verdad.** Ajustes → Desconectar Drive olvida el token, el correo y
+  todo lo que el archivador recordaba de esa cuenta en **cada** pestaña, y pide a Google que
+  retire el permiso (incluidos los dos últimos minutos de vida del token, en que ya no se usa
+  para subir pero todavía se puede revocar). Si Google no lo confirma —el token ya había
+  caducado, o no hay red— la pantalla lo dice y enlaza a la cuenta de Google para retirarlo.
+- **El visor no deja un enlace utilizable.** El fichero se baja con el token en la cabecera y se
+  enseña desde una dirección `blob:` que solo existe en esa pestaña y se suelta al cerrar el
+  visor. Nunca se guarda un enlace de descarga en Firestore: uno con el token dentro sería una
+  puerta pública a un apunte.
+- **Los bytes no pasan por el servidor de Archicel.** Van del navegador a Google directamente,
+  así que no hay nada que filtrar desde `/api`.
+- **El nombre de un fichero lo escribe quien sea** y se pinta siempre como texto (regla 1 de
+  arriba). Lo mismo el texto de error que devuelve Drive, que la tira enseña tal cual.
+
 ## Sobre cifrar: qué se puede y qué no
 
 **Ya está cifrado lo que importa y no lo hacemos nosotros:** el tráfico va por TLS y

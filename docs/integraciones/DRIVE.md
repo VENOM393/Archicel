@@ -151,6 +151,7 @@ arranque sin repetir lo demás. El mecanismo está en [CUENTAS.md](../data/CUENT
 Un apunte con `remoto.proveedor: 'local'` —de antes de que todo fuera a Drive— sube igual: su ficha
 llega a la nube, pero sus bytes siguen en el IndexedDB de **ese** navegador. Ahí se sigue abriendo;
 en otro dispositivo sale «ya no está», que es la verdad.
+
 ### El contrato: `Archivador`
 
 En `src/lib/archivo/archivador.ts`. Empezó con cuatro verbos, como el almacén, y creció con la
@@ -169,8 +170,8 @@ export interface Archivador {
   renombrar(remoto: Remoto, nombre: string): Promise<void>;
   /** Drive no mueve: quita un padre y pone otro. Por eso hace falta `desde`. */
   mover(remoto: Remoto, desde: Remoto | null, hasta: Remoto | null, destino: Destino): Promise<void>;
-  /** Solo resuelve si el proveedor lo confirmó (un «ya no estaba» cuenta). Si falla, lanza. */
-  borrar(remoto: Remoto): Promise<void>;
+  /** 'hecho' si el proveedor lo confirmó; 'no-estaba' si no lo encuentra (¡no es lo mismo!). */
+  borrar(remoto: Remoto): Promise<'hecho' | 'no-estaba'>;
   /** Los bytes, con los parciales según llegan. La dirección `blob:` la hace quien pinta. */
   leer(remoto: Remoto, opciones?: { tipo?: string; tam?: number;
        alAvanzar?: (hastaAhora: Blob, tanto: number) => void }): Promise<Blob>;
@@ -300,7 +301,7 @@ arreglo:
 | 429, 403 `rateLimitExceeded` / `userRateLimitExceeded` | `limite` | **Se reintenta solo** (1, 2, 4 s); si sigue, «espera un minuto» |
 | 403 `dailyLimitExceeded` | `limite` | No se reintenta: «mañana» |
 | 404 del destino | `sin-carpeta` | Carpeta fija: se recrea y se repite. De la usuaria: se dice cuál |
-| 404 del propio fichero | `no-esta` | Al borrar, cuenta como hecho |
+| 404 del propio fichero | `no-esta` | Al borrar **no** cuenta como hecho: vuelve `'no-estaba'` y se pregunta (§ 9) |
 | 5xx | `servidor` | Se reintenta solo si repetir no duplica (no en un `POST` que crea) |
 | corte | `red` | Igual que 5xx |
 
@@ -345,7 +346,8 @@ export interface Apunte {
   tipo: string;
   /** Bytes. Para decir "2,4 MB" sin preguntar a Drive. */
   tam: number;
-  remoto: { proveedor: 'local' | 'drive'; id: string };
+  /** `cuenta`: qué cuenta de Google lo subió, si se supo. */
+  remoto: { proveedor: 'local' | 'drive'; id: string; cuenta?: string };
   /** En qué carpeta está. Vacío significa la raíz de la asignatura. */
   carpeta?: ID;
   /** Para ordenar a mano. Hoy no hay interfaz que lo escriba. */
@@ -360,7 +362,8 @@ export interface Carpeta {
   /** Dentro de qué otra carpeta está. Vacío significa la raíz de la asignatura. */
   madre?: ID;
   nombre: string;
-  remoto: { proveedor: 'local' | 'drive'; id: string };
+  /** `cuenta`: qué cuenta de Google lo subió, si se supo. */
+  remoto: { proveedor: 'local' | 'drive'; id: string; cuenta?: string };
   creado?: number;
   actualizado?: number;
 }
@@ -383,8 +386,9 @@ comodín del final deja entrar cualquier cosa saltándose la validación de form
 
 Cada una tiene además su `match` propio. Lo que comprueba, sin adornos: que `asignatura` y `nombre`
 no estén vacíos y tengan tope de longitud (120 y 300 en apuntes, 120 y 200 en carpetas), que `tam`
-sea un entero entre 0 y 2 GB, que `remoto` sea un mapa con `proveedor` `local` o `drive` y un `id`
-de hasta 300, y que `carpeta`/`madre` sean texto corto. **No comprueba** que la asignatura sea una
+sea un entero entre 0 y 2 GB, que `remoto` sea un mapa con `proveedor` `local` o `drive`, un `id`
+de hasta 300 y, si lo lleva, la `cuenta` que lo subió (hasta 320), y que `carpeta`/`madre` sean
+texto corto. **No comprueba** que la asignatura sea una
 de las del catálogo ni que la carpeta madre exista — Firestore no sigue referencias al validar.
 
 ### Lo que Firestore no guarda nunca
@@ -435,10 +439,6 @@ que es lo que hace que lleguen escalonadas sin tocar un número:
    progreso. Descargar solo aparece con el fichero entero. Lo abierto se recuerda en memoria (96 MB,
    32 por fichero), y **posarse 120 ms sobre una fila** precarga lo de hasta 8 MB con el token
    vigente. Va a `body` por un portal, igual que la pregunta de borrar (§ 9).
-4. **El visor.** Imágenes, PDF y vídeo se ven dentro; el resto (`.docx`, planos, modelos…) ofrece
-   **Descargar**, porque sin convertir nada no hay forma razonable de enseñarlo. El fichero se baja
-   entero y se envuelve en un `blob:`, porque un `<img>` o un `<iframe>` no saben mandar la cabecera
-   de autorización.
 
 ### Ajustes: con qué cuenta, y cómo soltarla
 
@@ -589,8 +589,13 @@ contrato sigue en pie con otro proveedor detrás.
   `backdrop-filter`, que encierra todo lo `fixed` de dentro.
 - **Si Celeste lo borra desde Drive, la ficha se queda huérfana.** La pantalla sobrevive: al
   abrirlo, el visor dice «Ya no está en tu Drive» con el texto de Drive y dónde mirar, y borrar la
-  fila quita la ficha (un 404 al mandar a la papelera cuenta como hecho). Lo que no hay es la marca
-  previa: la fila no se enseña apagada hasta que se intenta abrir.
+  fila **pregunta** antes de quitar la ficha: con `drive.file`, Drive contesta lo mismo —404— a
+  un fichero borrado desde Drive que a uno que subió **otra cuenta de Google** y sigue vivo en
+  su Drive. Un apunte suelto pregunta en el acto («El Drive de … no lo encuentra; ¿quitarlo solo
+  de Archicel?», y dice quién lo subió si la ficha lo sabe: `remoto.cuenta`). Una carpeta no
+  borra ninguna ficha en cascada: se conserva entera y la tira ofrece «Quitar solo de
+  Archicel…». Lo que no hay es la marca previa: la fila no se enseña apagada hasta que se
+  intenta abrir.
 
 ---
 
@@ -713,6 +718,47 @@ tener dos cuentas —cada una solo ve lo suyo, como con `drive.file`—:
   renombrar y mover se copia la ficha completa), así que el `deleteField()` solo borra lo que se
   quita a propósito.
 
+### Segunda revisión (archicel-6)
+
+Una revisión independiente de la rama encontró ocho cosas más. Todas arregladas; lo marcado
+**(visto)** se reprodujo con sus guiones (`s1`–`s4`) y con los propios, contra
+`npm run build && npm start`, Drive simulado con dos cuentas:
+
+- **Con otra cuenta conectada, borrar quitaba fichas sin mandar nada a la papelera (visto).** Con
+  `drive.file`, el fichero de otra cuenta contesta 404, y eso se tomaba como «ya no estaba».
+  Ahora `borrar` devuelve `'no-estaba'`, distinto de `'hecho'`: un apunte suelto pregunta
+  «El Drive de … no lo encuentra; ¿quitarlo solo de Archicel?» con el foco en Cancelar, y una
+  carpeta cuya carpeta de arriba da 404 conserva todas sus fichas y la tira ofrece «Quitar solo
+  de Archicel…». Contestar que sí quita las fichas sin tocar ningún Drive. La ficha guarda ahora
+  **qué cuenta lo subió** (`remoto.cuenta`, validada en las reglas), y la pregunta lo dice:
+  «Lo subió celeste@…: conectando esa cuenta se podría mandar a su papelera».
+- **Un apunte antiguo del navegador dentro de una carpeta de Drive se borraba sin avisar (visto).**
+  Se eligió **avisar y no sacarlo a la raíz**: quien borra una carpeta pide que se vaya con todo,
+  y dejar algo atrás en silencio contradice la pregunta. Ahora la pregunta dice «1 apunte se
+  guardó en este equipo… y ese se borra sin vuelta atrás», el botón pasa a «Eliminar» y el foco
+  a Cancelar.
+- **«Reconectar» no reconectaba con un 403 de alcance o de organización (visto).** Esos 403 tiran
+  el token como un 401, así que reconectar abre la ventana de Google (1 vez, antes 0). Y un token
+  que Google entrega **sin** el permiso de Drive (`hasGrantedAllScopes`) ni se guarda: «No se
+  concedió el permiso de Drive: al conectar, deja marcada su casilla».
+- **La cabecera decía la cuenta anterior tras reconectar con otra (visto).** Cada token nuevo
+  vuelve a preguntar el correo, y si la cuenta es otra se suelta lo recordado de la anterior.
+- **La migración no terminaba nunca si las reglas rechazaban un documento.** Ahora cada documento
+  falla por su cuenta, los nombres se acortan antes de subir, la parte se marca aunque la nube
+  rechace alguno y lo rechazado queda apuntado (id y motivo) en
+  `archicel.migrado.<uid>.<parte>.rechazados`. *No visto*: necesita sesión y Firestore.
+- **Borrar fichas a medias podía dejar apuntes invisibles.** Primero los apuntes, luego las
+  carpetas de la más honda a la de arriba; reintentar recalcula el plan. *El corte a mitad no se
+  ha podido provocar* con el almacén local; el orden sí se ve en el código y el camino feliz pasa.
+- **Mover confiaba en la ficha para saber los padres (visto).** Se leen de Drive
+  (`fields=parents`) y se quitan los reales: con la ficha desfasada, el fichero acabó solo en la
+  carpeta de destino.
+- **Menores.** Desconectar revoca también un token en sus dos últimos minutos (y el token
+  recordado se conserva hasta que caduca de verdad, no hasta el margen); `USUARIA` vive en un
+  solo sitio (`src/lib/data/limites.ts`); los apuntes se ordenan bien aunque `creado` venga como
+  número (migrados) o como `Timestamp` (creados en la nube). *El orden con `Timestamp` no se ha
+  visto*: necesita Firestore.
+
 ### Lo que queda
 - **Recargar pasada la hora** vuelve a «Sin conectar» y pide pulsar Conectar Drive: es el precio de
   no tener secreto de cliente (§ 4), no un fallo.
@@ -721,7 +767,4 @@ tener dos cuentas —cada una solo ve lo suyo, como con `drive.file`—:
 - **Borrar una carpeta confía en que Drive refleja el árbol de Archicel.** Si alguien movió un
   fichero fuera de su carpeta desde Drive, mandar la carpeta a la papelera no se lo lleva, y su
   ficha se borra igual: el fichero queda vivo en Drive, fuera de Archicel.
-- **Un 404 al borrar quita la ficha.** Es lo correcto si se borró desde Drive; si algún día dos
-  personas comparten cuenta de Archicel, borrar un apunte fantasma del otro quitaría su ficha
-  (su fichero seguiría en su Drive). La pregunta de confirmación sale igual en los dos casos.
 - **La fila no se marca huérfana** hasta que se intenta abrir (§ 9).
