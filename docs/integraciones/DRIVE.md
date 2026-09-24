@@ -17,6 +17,9 @@ de ser permanente. Dentro de la hora, recargar no pide nada. Pasada la hora, con
 la siguiente acción la renueva; si se recarga la página ya caducada, la pantalla vuelve a «Sin
 conectar» y hay que pulsar **Conectar Drive** (§ 4). El porqué está en CLAUDE.md.
 
+**Se desconecta desde Ajustes** (`/ajustes`, en el menú del avatar), que dice también con qué cuenta
+de Google está conectado. Desconectar no borra nada (§ 6).
+
 ---
 
 ## 1 · El permiso: lo que pides no existe, y lo que existe es mejor
@@ -137,8 +140,14 @@ conexión. A Drive solo se va al subir, al abrir un fichero, al borrarlo y al or
 carpeta, renombrar, mover). La única llamada al cargar es `about`, para saber de quién es el Drive.
 
 Sin sesión de Archicel las fichas viven en el almacén del navegador y los bytes siguen yendo a Drive.
-**Ojo:** al entrar con una cuenta, la migración a la nube **no se lleva ni apuntes ni carpetas**
-(§ 10).
+Al entrar con una cuenta, **la migración sube también apuntes y carpetas**, con sus mismos ids —así
+un apunte sigue dentro de su carpeta y una carpeta dentro de su madre—. Cada colección lleva su
+propia marca, de modo que quien ya había migrado antes de este cambio recibe las dos en su siguiente
+arranque sin repetir lo demás. El mecanismo está en [CUENTAS.md](../data/CUENTAS.md).
+
+Un apunte con `remoto.proveedor: 'local'` —de antes de que todo fuera a Drive— sube igual: su ficha
+llega a la nube, pero sus bytes siguen en el IndexedDB de **ese** navegador. Ahí se sigue abriendo;
+en otro dispositivo sale «ya no está», que es la verdad.
 
 ### El contrato: `Archivador`
 
@@ -371,6 +380,47 @@ que es lo que hace que lleguen escalonadas sin tocar un número:
    entero y se envuelve en un `blob:`, porque un `<img>` o un `<iframe>` no saben mandar la cabecera
    de autorización.
 
+### Ajustes: con qué cuenta, y cómo soltarla
+
+Ruta **`/ajustes`** (`src/app/ajustes/page.tsx`), enlazada desde el menú del avatar. Antes no había
+pantalla de ajustes: la cuenta vivía solo en ese menú, y la conexión con Google no vivía en ningún
+sitio. Es una pantalla y no un trozo más del menú porque desconectar pide confirmar y explicar qué
+pasa con los apuntes, y eso no cabe en una caja de 266 px.
+
+Una portada tipográfica —quién es y dónde se guardan sus cosas— y un solo panel de cristal, el de
+Drive, con cuatro estados:
+
+| Estado | Cuándo | Qué ofrece |
+|---|---|---|
+| **Conectado** | hay token válido | el correo de `drive/v3/about` en grande y **Desconectar Drive** (contorno) |
+| **Caducado** | se conectó pero pasó la hora | **Renovar ahora** (la acción sólida) y Desconectar |
+| **Sin conectar** | nunca, o se desconectó | **Conectar Drive** |
+| **No configurado** | falta `NEXT_PUBLIC_GOOGLE_CLIENT_ID` en el despliegue | nada que pulsar |
+
+**Desconectar pide confirmación**, y la pregunta sustituye a la fila de botones en el mismo sitio en
+vez de abrir una ventana. El foco va a «Cancelar», Escape la cierra, y al cerrarla el foco vuelve al
+botón que la abrió. Confirmar llama a `desconectarDrive()` (`src/lib/archivo/index.ts`), que:
+
+1. olvida el correo y los **ids de carpeta** recordados en la pestaña —se buscaron con esa cuenta, y
+   conectando otra en la misma pestaña `drive.file` no los alcanzaría—;
+2. olvida el token y la marca de «se ha usado Drive» en `localStorage`;
+3. **pide a Google que revoque el permiso**, cargando antes su guion si hace falta: tras recargar el
+   token sale de `localStorage` y el guion no se ha pedido nunca, y sin él la revocación era un no-op.
+
+La pantalla pasa a «Sin conectar» **sin recargar**: `google.ts` emite `archicel:drive` al conectar y
+al desconectar, y `alCambiarDrive(fn)` lo escucha —también el evento `storage`, así que otra pestaña
+abierta suelta su token en memoria en lugar de seguir usando uno revocado—. La página de una
+asignatura no necesita escucharlo: se monta de nuevo al volver a ella y lee el estado entonces.
+
+**Desconectar no borra nada.** Los ficheros siguen en Drive y sus fichas en Archicel; al volver a
+conectar la **misma** cuenta todo se abre como antes. Con otra cuenta, los apuntes anteriores salen
+«ya no está en tu Drive» —`drive.file` solo alcanza lo que se creó bajo su autorización—.
+
+**Si Google no confirma la revocación** —pasa cuando el token ya había caducado, porque sin token no
+hay nada que revocar desde el navegador, o sin red—, Archicel se desconecta igual y lo dice: el
+permiso queda concedido en la cuenta de Google, sin ningún token que lo use, y la pantalla enlaza a
+*Cuenta de Google → Conexiones* para retirarlo desde allí.
+
 ---
 
 ## 7 · Qué necesito de ti
@@ -484,16 +534,19 @@ Resultado de la auditoría del 24 de septiembre de 2026, contrastando este docum
 Lo marcado **(visto)** se reprodujo en el navegador contra `npm run build && npm start`, con Drive
 simulado (token falso y respuestas de Google interceptadas); lo demás sale de leer el código.
 
+**Resuelto después:** la migración al entrar ya se lleva apuntes y carpetas (§ 3 y CUENTAS.md), y
+Drive se desconecta desde Ajustes (§ 6). Lo que queda de aquella lista sigue abajo.
+
 **Riesgo de perder o descolocar apuntes**
 
 - **Borrar se traga el fallo de Drive (visto).** `Asignatura.tsx:517-523` y `:547-551` ignoran
   cualquier error al mandar a la papelera —no solo «ya no está»— y borran la ficha igual. Con Drive
   devolviendo 503, la carpeta desapareció de Archicel y seguiría viva en Drive, sin nada que la
   enlace ya.
-- **La migración al entrar no se lleva apuntes ni carpetas.** `src/lib/data/index.ts:75-86` solo
-  sube eventos, tareas, ajustes y el layout. Lo organizado sin cuenta deja de verse al entrar
-  (los ficheros siguen en Drive, las fichas se quedan en el almacén local), y la marca de migración
-  es de una sola vez.
+- **Mover a la raíz no llega a la nube.** `Asignatura.tsx:499-506` borra `madre` o `carpeta` del
+  objeto y lo guarda, pero `almacen-firestore.ts` escribe con `merge: true`, que **conserva** los
+  campos que no vienen: en Firestore el apunte o la carpeta sigue dentro de la carpeta de antes. En
+  el almacén local sí funciona, porque reescribe el documento entero. Hace falta `deleteField()`.
 - **Borrar una carpeta con subcarpetas llenas vuelve a preguntar por cada una**
   (`Asignatura.tsx:541-546`). Si se cancela una de dentro, la de fuera se borra igual y la hija
   queda con una `madre` que ya no existe: invisible en el árbol.
@@ -528,11 +581,8 @@ sirve de nada:
 - **Los ids de las carpetas fijas se recuerdan por pestaña** (`archivador-drive.ts:47`): si se
   borran desde Drive a mitad de sesión, las subidas fallan con «ya no está» hasta recargar.
 
-**Piezas escritas y sin usar**
+**Tipos de fichero**
 
-- **No hay forma de desconectar Drive.** `soltarPermiso` (`google.ts:263`) está exportado pero
-  ninguna pantalla lo llama; `olvidarQuien` (`archivador-drive.ts:254`) y `seHaUsadoDrive`
-  (`google.ts:166`) no los usa nadie.
 - **`image/vnd.dwg` nunca llega a «Plano»** (`iconos.tsx:135`): `image/` se comprueba antes
   (`:70`), así que un `.dwg` con ese MIME se enseña como imagen y el visor intenta pintarlo en un
   `<img>`.
@@ -545,6 +595,6 @@ sirve de nada:
   (`Asignatura.tsx:418`).
 - El visor descarga el fichero entero a memoria antes de enseñarlo (`archivador-drive.ts:402-403`):
   una lámina de 80 MB tarda en abrir sin decir cuánto le falta.
-- Comentarios del código que se quedaron atrás: `index.ts:12` («este equipo si no»),
-  `archivador.ts:8-12`, `archivador-local.ts:4-11`, `tipos.ts:177` («Drive mañana, el navegador
-  hoy»), `firestore.rules:125` y `iconos.tsx:12` (dice 16 %; el CSS usa 15 %).
+- Comentarios del código que se quedaron atrás: `archivador.ts:8-12`, `archivador-local.ts:4-11`,
+  `tipos.ts:177` («Drive mañana, el navegador hoy»), `firestore.rules:125` e `iconos.tsx:12` (dice
+  16 %; el CSS usa 15 %).

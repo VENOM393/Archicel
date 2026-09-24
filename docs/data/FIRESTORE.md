@@ -182,8 +182,11 @@ El orden de trabajo cuando tengamos la configuración:
 
 1. Meter `firebaseConfig` en variables de entorno del proyecto Next.js (`NEXT_PUBLIC_FIREBASE_*`).
 2. Entrar con Google y comprobar que aparece el `uid`.
-3. Subir de una vez lo que haya en `localStorage` a Firestore (migración única). **Hoy se lleva
-   eventos, tareas, ajustes y el layout, pero no apuntes ni carpetas** (`migrarLocalANube`).
+3. Subir lo que haya en `localStorage` a Firestore al entrar (`migrarLocalANube`): eventos,
+   tareas, ajustes, el layout, carpetas y apuntes, con sus ids y **una marca por colección**, sin
+   pisar lo que ya esté en la nube. Las reglas aceptan lo que sube tal cual: la ficha local tiene la
+   misma forma que la de la nube, y `remoto.proveedor` puede ser `'local'` para lo anterior a
+   Drive. El detalle, en [CUENTAS.md](CUENTAS.md).
 4. Cambiar el almacén a Firestore y verificar que la app se comporta igual.
 5. Encender la escucha en tiempo real: marcar una tarea en el móvil y verla cambiar en el portátil.
 

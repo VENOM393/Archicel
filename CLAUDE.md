@@ -199,10 +199,11 @@ Dos cosas que no hay que olvidar:
 - **La clave de la app web es pública** y va en el cliente: lo que protege los datos son las
   reglas. Lo que nunca se comparte ni se sube al repositorio es el JSON de cuenta de servicio.
 - **La cuenta es una invitación, no un muro.** Archicel abre y funciona sin sesión; entrar solo
-  hace que todo la siga a otro dispositivo, y lo guardado sin cuenta sube solo al entrar —salvo,
-  hoy, las fichas de apuntes y carpetas, que la migración no incluye (DRIVE.md § 10)—. El
-  acceso, las dos vías (Google y correo) y qué hay que activar en la consola están en
-  [docs/data/CUENTAS.md](docs/data/CUENTAS.md).
+  hace que todo la siga a otro dispositivo, y lo guardado sin cuenta sube solo al entrar,
+  apuntes y carpetas incluidos. **La migración lleva una marca por colección**: una colección
+  nueva que deba sobrevivir a entrar se añade a `PASOS` en `src/lib/data/index.ts` y llega
+  también a quien ya había migrado. El acceso, las dos vías (Google y correo), la migración y
+  qué hay que activar en la consola están en [docs/data/CUENTAS.md](docs/data/CUENTAS.md).
 
 ## El movimiento
 
@@ -326,8 +327,8 @@ pasos de la consola, está en [docs/integraciones/DRIVE.md](docs/integraciones/D
 
 **Estado: funcionando.** Subida, visor, borrado, **carpetas, renombrar y mover** contra Drive real.
 Lo que falta o está a medias —con fichero y línea— está en el § 10 de DRIVE.md; lo más serio: borrar
-se traga los fallos de Drive, la tira presenta cualquier `sin-permiso` como sesión caducada, y la
-migración al entrar con cuenta no se lleva apuntes ni carpetas.
+se traga los fallos de Drive, la tira presenta cualquier `sin-permiso` como sesión caducada, y
+mover a la raíz no llega a Firestore (`merge: true` conserva el campo `madre`/`carpeta`).
 
 La ruta en Drive es `Archicel/Asignaturas/<nombre de la asignatura>`, y dentro el árbol que la
 usuaria haya montado. Se llamó `Apuntes` y **la aplicación renombra la vieja** la primera vez que
@@ -358,6 +359,14 @@ De ahí que la cabecera diga **de quién** es el Drive y no solo «En tu Drive»
 Google abiertas a la vez —lo normal— es fácil conceder con la que no era y no enterarse hasta que
 los apuntes no aparecen donde deberían. El correo sale de `drive/v3/about`, que funciona con
 `drive.file` sin pedir ningún permiso extra.
+
+**Se ve y se suelta en Ajustes** (`/ajustes`, desde el menú del avatar): con qué cuenta está
+conectado y **Desconectar Drive**, que pide confirmación, revoca el permiso en Google, olvida el
+token, el correo y los ids de carpeta, y deja la pantalla en «Sin conectar» sin recargar. **No
+borra nada** de Drive ni de Archicel. Si el token ya había caducado, Google no puede confirmar la
+revocación y la pantalla lo dice, con el enlace para retirarla desde la cuenta de Google. Los
+avisos de conectar/desconectar viajan con `alCambiarDrive`, también entre pestañas. Detalle en
+DRIVE.md § 6.
 
 **La consecuencia si algún día comparten cuenta de Archicel:** las fichas viajan por Firestore y los
 ficheros no. Uno vería en la lista un apunte del otro y al abrirlo saldría «ese apunte ya no está en

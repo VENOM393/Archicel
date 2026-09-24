@@ -52,9 +52,11 @@ sesión y de que migrar a la nube al entrar sea una línea.
    las reglas dejará entrar cualquier cosa;
 5. su hook en `useDatos.ts`, apoyado en `useLista`, que ya trae orden estable y
    deduplicación;
-6. si tiene que sobrevivir a entrar con una cuenta, **su línea en `migrarLocalANube`**
-   (`lib/data/index.ts`). La migración nombra cada colección a mano, y ese paso se olvidó
-   con apuntes y carpetas.
+6. si tiene que sobrevivir a entrar con una cuenta, **su paso en `PASOS` y su nombre en
+   `ParteMigrada`** (`lib/data/index.ts`). Cada parte lleva su propia marca, así que la
+   colección nueva llega también a quien ya había migrado, sin repetir lo demás. Ese paso se
+   olvidó una vez con apuntes y carpetas; el mecanismo está en
+   [CUENTAS.md](../data/CUENTAS.md#la-migración-al-entrar).
 
 ## El archivador: los bytes, con el mismo patrón
 
@@ -114,8 +116,7 @@ Sinceridad sobre el estado real:
   tarea cambia, porque ya no guardan el suyo.
 - **No hay pruebas automatizadas.** Todo se verifica midiendo en el navegador. Para el
   tamaño actual funciona; en cuanto haya más de una persona tocando, hará falta.
-- **La migración al entrar no se lleva apuntes ni carpetas.** Lo que se organizó sin
-  cuenta deja de verse al entrar; los ficheros siguen en Drive. Ver DRIVE.md § 10, donde
-  están también el resto de pendientes de los apuntes.
+- **Los pendientes de los apuntes** —borrados que se tragan el fallo de Drive, mensajes que
+  no dicen la verdad, mover a la raíz que no llega a la nube— están en DRIVE.md § 10.
 - **`hecha` y `progreso` conviven** en las tareas. `hecha` es el campo antiguo y se sigue
   escribiendo para no romper lo guardado. Cuando no queden tareas viejas, se retira.
