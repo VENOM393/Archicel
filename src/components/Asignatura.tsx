@@ -49,7 +49,6 @@ import {
   prepararCarpeta,
   queSeBorra,
   reconectarDriveEnSilencio,
-  sePuedeUsarDrive,
   seVeDentro,
   tipoDeFichero,
   IconoDeFichero,
@@ -71,6 +70,7 @@ import {
   type Carpeta,
   type ClaveAsignatura,
 } from '@/lib/data';
+import { HojaConectarDrive, IconoDrive } from '@/components/HojaConectarDrive';
 
 const DIAS_CORTOS = ['L', 'M', 'X', 'J', 'V'] as const;
 
@@ -324,6 +324,8 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
   const [enDrive, setEnDrive] = useState(false);
   const [correo, setCorreo] = useState<string | null>(null);
   const [conectando, setConectando] = useState(false);
+  /** El asistente de conexión, que es lo que abre la ventana de Google con contexto. */
+  const [asistente, setAsistente] = useState(false);
 
   /*
    * Al llegar, y cada vez que Drive se conecta o se desconecta —aquí, desde los ajustes o
@@ -353,19 +355,18 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
     void deQuienEsElDrive().then(setCorreo);
   }, []);
 
-  const conectar = useCallback(async () => {
-    setConectando(true);
-    try {
-      await archivador.conectar();
-      yaConectado();
+  /* El asistente ya conectó y trae de quién es el Drive; aquí solo se recoge el resultado
+     para que la superficie aparezca conectada y la carpeta quede lista para la primera
+     subida. */
+  const alConectado = useCallback(
+    (email: string | null) => {
+      setEnDrive(true);
+      setCorreo(email);
       prepararCarpeta(clave);
       avisar('Drive conectado');
-    } catch (e) {
-      avisar(explicar(e).motivo);
-    } finally {
-      setConectando(false);
-    }
-  }, [archivador, avisar, clave, yaConectado]);
+    },
+    [avisar, clave],
+  );
 
   /* ── el árbol ── */
 
@@ -798,6 +799,10 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
         if (enDrive) void subir(e.dataTransfer.files);
       }}
     >
+      {!enDrive ? (
+        <SinDrive onConectar={() => setAsistente(true)} />
+      ) : (
+        <>
       <div className="asig-cab">
         <Camino
           camino={camino}
@@ -806,24 +811,11 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
           sobre={sobre}
           setSobre={setSobre}
         />
-        <span className={`asig-donde${enDrive ? '' : ' flojo'}`} title={correo ?? undefined}>
-          {enDrive ? (correo ? `En el Drive de ${correo}` : 'En tu Drive') : 'Sin conectar'}
+        <span className="asig-donde" title={correo ?? undefined}>
+          {correo ? `En el Drive de ${correo}` : 'En tu Drive'}
         </span>
 
-        {/* Sin Drive no hay dónde guardar, así que conectar **es** la acción sólida de la
-            pantalla y las otras dos se apartan. Ofrecer «Subir» sabiendo que va a fallar es
-            hacer perder el tiempo a quien lo pulse. */}
-        {!enDrive && sePuedeUsarDrive() && (
-          <Button type="button" onClick={() => void conectar()} disabled={conectando}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M12 3.6 20.2 8v8L12 20.4 3.8 16V8Z" />
-              <path d="M3.8 8 12 12.4 20.2 8M12 12.4v8" />
-            </svg>
-            {conectando ? 'Conectando…' : 'Conectar Drive'}
-          </Button>
-        )}
-
-        <Button type="button" variant="outline" onClick={() => setCreando(true)} disabled={!enDrive}>
+        <Button type="button" variant="outline" onClick={() => setCreando(true)}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h3l2 2.5h6A2.5 2.5 0 0 1 20 10v7a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17Z" />
             <path d="M12 11.5v5M9.5 14h5" />
@@ -831,7 +823,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
           Carpeta
         </Button>
 
-        <Button type="button" variant={enDrive ? 'default' : 'outline'} onClick={() => entrada.current?.click()} disabled={!enDrive}>
+        <Button type="button" onClick={() => entrada.current?.click()}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 20V7" />
             <path d="m7.5 11.5 4.5-4.5 4.5 4.5" />
@@ -880,11 +872,9 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
             <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h3l2 2.5h6A2.5 2.5 0 0 1 20 10v7a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17Z" />
           </svg>
           <p>
-            {!enDrive
-              ? 'Conecta tu Drive y los apuntes se guardarán ahí, no en este ordenador.'
-              : aqui
-                ? 'Esta carpeta está vacía. Arrastra aquí lo que vaya dentro.'
-                : 'Arrastra aquí tus fotos de pizarra, los PDF de teoría o lo que te manden.'}
+            {aqui
+              ? 'Esta carpeta está vacía. Arrastra aquí lo que vaya dentro.'
+              : 'Arrastra aquí tus fotos de pizarra, los PDF de teoría o lo que te manden.'}
           </p>
         </div>
       ) : (
@@ -940,7 +930,14 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
           </mo.span>
         )}
       </AnimatePresence>
+        </>
+      )}
 
+      <HojaConectarDrive
+        abierto={asistente}
+        cerrar={() => setAsistente(false)}
+        alConectado={alConectado}
+      />
       <Confirmacion
         peticion={confirmando}
         carpetas={carpetas}
@@ -961,6 +958,36 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
       />
       <Visor apunte={abierto} cerrar={() => setAbierto(null)} />
     </mo.div>
+  );
+}
+
+/* ───────────────────────── sin Drive ───────────────────────── */
+
+/**
+ * La superficie cuando no hay Drive conectado.
+ *
+ * No es «no hay nada»: es «esto todavía no tiene dónde vivir». En vez de una barra de
+ * botones apagados —que solo dice que no se puede, no por qué ni cómo—, un estado que
+ * explica dónde acabarán los apuntes y una sola acción sólida que abre el asistente. La
+ * marca de Drive va a trazo y en el acento de la casa: un logotipo de tres colores metería
+ * un segundo saturado que el contrato visual prohíbe.
+ */
+function SinDrive({ onConectar }: { onConectar: () => void }) {
+  return (
+    <div className="asig-sindrive">
+      <span className="asig-sindrive-marca" aria-hidden="true">
+        <IconoDrive tam={34} />
+      </span>
+      <h2>No tienes Drive conectado</h2>
+      <p>
+        Tus apuntes se guardan en tu propio Google Drive, no en este ordenador. Conéctalo y
+        podrás subir fotos de pizarra, PDF y láminas, y ordenarlos en carpetas.
+      </p>
+      <Button type="button" className="asig-sindrive-btn" onClick={onConectar}>
+        <IconoDrive tam={15} />
+        Conectar Drive
+      </Button>
+    </div>
   );
 }
 

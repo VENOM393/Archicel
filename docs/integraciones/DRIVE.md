@@ -318,8 +318,10 @@ La forma correcta es el **cliente de tokens de Google Identity Services** en el 
 (`src/lib/archivo/google.ts`, el único fichero que sabe de OAuth):
 
 - pide el permiso de Drive **aparte** de la sesión y solo cuando ella lo pide: sin Drive conectado,
-  la acción sólida de la pantalla es **Conectar Drive** y «Subir» y «Carpeta» se deshabilitan. Nada
-  salta al abrir la página;
+  la superficie de apuntes no enseña botones apagados sino un **estado vacío** —«No tienes Drive
+  conectado» + la marca de Drive a trazo + una sola acción sólida— que abre un **asistente**
+  (`HojaConectarDrive`); este explica qué es, qué permiso pide (`drive.file`) y con qué cuenta antes
+  de abrir la ventana de Google, y confirma de quién quedó el Drive. Nada salta al abrir la página;
 - **recuerda el token** en `localStorage` (`archicel.drive.token.v1`) hasta su caducidad, con dos
   minutos de margen para que no caduque a mitad de una subida;
 - **renueva desde un gesto, no en silencio.** `requestAccessToken` abre siempre una ventana, y una

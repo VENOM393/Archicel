@@ -833,6 +833,64 @@
     color:var(--ink)
   }
 
+  /* ── el asistente de conexión ──
+     La misma hoja, más estrecha y centrada: no es un formulario de diez campos, es una
+     conversación de tres frases que acaba abriendo la ventana de Google. La marca y el
+     acento son los mismos que en el estado vacío, para que se lea como su continuación. */
+  .hoja.asist{
+    width:min(92vw,440px);text-align:center;padding-top:26px;
+    /* Casi opaca: el asistente se abre centrado justo sobre el estado vacío, y a la opacidad
+       de las otras hojas su texto se transparentaba por detrás. */
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.055), transparent 38%),
+      rgba(9,9,12,.95)
+  }
+  .asist-x{
+    position:absolute;top:14px;right:14px;width:30px;height:30px;border-radius:var(--r-sm);
+    display:grid;place-items:center;border:0;background:none;color:var(--ink-subtle);cursor:pointer;
+    transition:color 200ms,background 200ms
+  }
+  .asist-x:hover{color:var(--ink);background:rgba(255,255,255,.07)}
+  .asist-marca{
+    width:60px;height:60px;margin:2px auto 18px;border-radius:var(--r-lg);display:grid;place-items:center;
+    color:var(--accent-linea);
+    background:color-mix(in srgb,var(--accent) 14%,transparent);
+    border:1px solid color-mix(in srgb,var(--accent-linea) 30%,transparent)
+  }
+  /* Alto reservado para que el paso no dé un salto al cambiar de texto. */
+  .asist-cuerpo{position:relative;min-height:122px}
+  .asist-paso{display:flex;flex-direction:column;align-items:center;gap:11px}
+  .hoja.asist .asist-paso h3{margin:0;font-size:19px;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+  .asist-paso p{margin:0;font-size:13.5px;line-height:1.6;color:var(--ink-muted);max-width:38ch}
+  .asist-cod{
+    font-family:var(--data);font-size:12px;color:var(--accent-linea);
+    background:color-mix(in srgb,var(--accent) 16%,transparent);
+    padding:1px 6px;border-radius:var(--r-xs)
+  }
+  .asist-error{color:var(--late);font-size:12.5px;font-style:italic;max-width:34ch}
+  /* El acuse va en el acento, no en el verde semántico: un segundo saturado se prohíbe, y el
+     éxito ya lo cuenta la palomita y el texto. */
+  .asist-hecho{
+    width:46px;height:46px;border-radius:999px;display:grid;place-items:center;margin-bottom:2px;
+    color:var(--accent-linea);
+    background:color-mix(in srgb,var(--accent) 15%,transparent);
+    border:1px solid color-mix(in srgb,var(--accent-linea) 34%,transparent)
+  }
+  .asist-correo{font-weight:600;color:var(--ink)}
+  /* Los pasos: puntos que dicen dónde vas, con el activo estirado en el acento. Es
+     información —cuánto queda—, no un número decorativo de sección. */
+  .asist-pasos{display:flex;gap:9px;justify-content:center;align-items:center;margin:20px 0 2px}
+  .asist-punto{
+    width:7px;height:7px;border-radius:999px;background:var(--hairline-lit);
+    /* El activo se agranda con `transform` y no con `width`: un círculo escalado sigue siendo
+       redondo y no obliga a recalcular la maquetación en cada fotograma. */
+    transition:background 240ms var(--ease-soft),transform 240ms var(--ease-soft)
+  }
+  .asist-punto.on{transform:scale(1.5);background:var(--accent-linea)}
+  .asist-punto.hecho{background:color-mix(in srgb,var(--accent-linea) 55%,transparent)}
+  .asist-pie{display:flex;gap:10px;justify-content:center;margin-top:18px}
+  .asist-ir{min-width:132px}
+
   /* ── el cuerpo, en dos columnas cuando hay ancho ──
      Con 620 px caben dos campos por fila, y eso acorta el formulario de diez filas a
      seis: se ve entero sin desplazar, que es la diferencia entre revisarlo de un vistazo
@@ -1619,6 +1677,27 @@
     gap:12px;padding:38px 20px;text-align:center;color:var(--ink-subtle)
   }
   .asig-vacio p{margin:0;font-size:13px;max-width:34ch;line-height:1.5}
+
+  /* ── sin Drive conectado ──
+     No es el vacío de una carpeta: es que la superficie entera todavía no tiene dónde
+     guardar. Centrado, con la marca de Drive a trazo y en el acento —un logotipo de tres
+     colores sería un segundo saturado— y una sola acción sólida, que es la que conecta. */
+  .asig-apuntes.sin{display:flex;align-items:center;justify-content:center}
+  .asig-sindrive{
+    flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:15px;padding:44px 24px;text-align:center;margin:0 auto
+  }
+  .asig-sindrive-marca{
+    width:72px;height:72px;border-radius:var(--r-lg);display:grid;place-items:center;
+    color:var(--accent-linea);
+    background:color-mix(in srgb,var(--accent) 14%,transparent);
+    border:1px solid color-mix(in srgb,var(--accent-linea) 30%,transparent)
+  }
+  .asig-sindrive h2{
+    margin:0;font-size:22px;font-weight:600;letter-spacing:-.025em;color:var(--ink)
+  }
+  .asig-sindrive p{margin:0;font-size:13.5px;line-height:1.6;color:var(--ink-muted);max-width:40ch}
+  .asig-sindrive-btn{margin-top:5px}
 
   /* ── la subida ── */
   .asig-subiendo{overflow:hidden;display:flex;flex-direction:column;gap:9px}
