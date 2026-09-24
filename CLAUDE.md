@@ -127,10 +127,10 @@ Cinco cosas que no se deducen:
   hay que quitar: los hooks con `graft-hooks.cjs` de `~/.claude/settings.json`, `mcpServers.graft`
   del nivel superior de `~/.claude.json` y `~/.claude/helpers/graft-hooks.cjs`. `graft uninstall` no
   sirve para esto: no tiene modo «solo global» y se llevaría también el cableado del repo.
-- **Los ficheros de Graft salen como modificados sin estarlo.** Con `core.autocrlf=true` el checkout
-  los deja en CRLF y Graft los reescribe en LF: `git status` marca cuatro ficheros de `.claude/` y
-  `git diff` sale vacío. AO no recoge un worktree sucio. Lo arregla un `.gitattributes` con
-  `text eol=lf` para esos ficheros (probado); está pendiente de que Cristian lo autorice.
+- **Los ficheros de Graft van fijados a LF en `.gitattributes`.** Con `core.autocrlf=true` el
+  checkout los dejaba en CRLF y Graft los reescribe en LF: `git status` marcaba cuatro ficheros de
+  `.claude/` con `git diff` vacío, y AO no recoge un worktree sucio. Si Graft empieza a escribir un
+  fichero nuevo en el repo, va también a esa lista.
 - **El primer `graft map` o `graft grep` de un worktree construye su grafo**, unos segundos. Cada
   worktree tiene el suyo y nunca se comparte: el código de dos ramas no es el mismo.
 - **En Windows no compila `tree-sitter-kotlin`**: no trae binario precompilado y aquí no hay Python ni
