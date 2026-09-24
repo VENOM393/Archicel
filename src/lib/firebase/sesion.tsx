@@ -78,9 +78,11 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
       (u) => {
         setUsuario(u);
         setCargando(false);
-        /* Lo que hubiera en este equipo sube a la nube la primera vez, y solo la primera:
-           `migrarLocalANube` deja su marca para no duplicar nada en el siguiente arranque. */
-        if (u) migrarLocalANube(u.uid).catch(() => {});
+        /* Lo que hubiera en este equipo sube a la nube, cada colección una sola vez:
+           `migrarLocalANube` deja una marca por parte y no pisa lo que ya esté arriba. Si
+           algo falla, esa parte se reintenta en el siguiente arranque; aquí solo queda
+           constancia en la consola, porque no hay nada que la usuaria pueda hacer. */
+        if (u) migrarLocalANube(u.uid).catch((e) => console.warn('[archicel] migración', e));
       },
       (e) => {
         setError(mensajeDeError(e));
