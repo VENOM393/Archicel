@@ -37,6 +37,7 @@ import { useDialogo } from '@/hooks/useDialogo';
 import { useUI } from '@/lib/ui/contexto';
 import { useArchicel } from '@/lib/firebase/sesion';
 import {
+  alCambiarDrive,
   arbolDe,
   deQuienEsElDrive,
   driveConectado,
@@ -322,17 +323,27 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
   const [correo, setCorreo] = useState<string | null>(null);
   const [conectando, setConectando] = useState(false);
 
-  /* Al llegar: de quién es el Drive y, sin crear nada, dónde está la carpeta de esta
-     asignatura. Lo segundo es lo que hace que la primera subida no espere a buscarla. */
+  /*
+   * Al llegar, y cada vez que Drive se conecta o se desconecta —aquí, desde los ajustes o
+   * en otra pestaña—: de quién es el Drive y, sin crear nada, dónde está la carpeta de esta
+   * asignatura. Lo segundo es lo que hace que la primera subida no espere a buscarla.
+   *
+   * Sin escuchar el cambio, desconectar desde los ajustes dejaba esta página diciendo «En
+   * el Drive de …» y ofreciendo subir con un permiso que ya no existe.
+   */
   useEffect(() => {
-    void reconectarDriveEnSilencio().then((s) => {
-      const listo = s || driveConectado();
+    const mirar = () => {
+      const listo = driveConectado();
       setEnDrive(listo);
       if (listo) {
         void deQuienEsElDrive().then(setCorreo);
         prepararCarpeta(clave);
+      } else {
+        setCorreo(null);
       }
-    });
+    };
+    void reconectarDriveEnSilencio().then(mirar);
+    return alCambiarDrive(mirar);
   }, [clave]);
 
   const yaConectado = useCallback(() => {

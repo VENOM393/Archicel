@@ -46,7 +46,7 @@ import {
   type OpcionesDeLectura,
   type Remoto,
 } from './archivador';
-import { caducarToken, conseguirToken, hayPermiso } from './google';
+import { alCambiarDrive, caducarToken, conseguirToken, hayPermiso, seHaUsadoDrive } from './google';
 
 const API = 'https://www.googleapis.com/drive/v3';
 const SUBIDA = 'https://www.googleapis.com/upload/drive/v3/files';
@@ -430,14 +430,19 @@ function carpetaDeAsignatura(clave: string): Promise<string> {
  * tocar su Drive sin que haya hecho nada. Si no existen, se crearán al subir.
  */
 export function prepararCarpeta(clave: string): void {
-  if (rutas.has(clave) || !hayPermiso()) return;
+  if (rutas.has(clave) || buscando.has(clave) || !hayPermiso()) return;
   const mia = conexion;
+  buscando.add(clave);
   void buscarRuta(nombreDe(clave), false)
     .then((b) => {
       if (b.asig && conexion === mia && !rutas.has(clave)) rutas.set(clave, Promise.resolve(b.asig));
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => buscando.delete(clave));
 }
+
+/** Las búsquedas previas en vuelo: conectar avisa dos veces y no hace falta buscar dos. */
+const buscando = new Set<string>();
 
 /**
  * Hace algo dentro de la carpeta de destino, y se recupera si la carpeta fija ya no está.
@@ -724,19 +729,33 @@ export function precargar(remoto: Remoto, op: { tipo?: string; tam?: number }): 
  */
 let quienEs: string | null = null;
 
-export async function deQuienEsElDrive(): Promise<string | null> {
-  if (quienEs) return quienEs;
-  if (!hayPermiso()) return null;
-  try {
-    const r = await llamar(`${API}/about?fields=user(emailAddress,displayName)`, {}, { interactivo: false });
-    const { user } = (await r.json()) as { user?: { emailAddress?: string; displayName?: string } };
-    quienEs = user?.emailAddress ?? user?.displayName ?? null;
-    return quienEs;
-  } catch {
-    /* Saber de quién es es una comodidad, no un requisito: si falla, la pantalla dice
-       «En tu Drive» como antes y todo lo demás sigue funcionando. */
-    return null;
-  }
+/** La pregunta en vuelo: dos pantallas que la hacen a la vez esperan a la misma respuesta. */
+let preguntando: Promise<string | null> | null = null;
+
+export function deQuienEsElDrive(): Promise<string | null> {
+  if (quienEs) return Promise.resolve(quienEs);
+  if (!hayPermiso()) return Promise.resolve(null);
+  if (preguntando) return preguntando;
+  const mia = conexion;
+  const p = (async () => {
+    try {
+      const r = await llamar(`${API}/about?fields=user(emailAddress,displayName)`, {}, { interactivo: false });
+      const { user } = (await r.json()) as { user?: { emailAddress?: string; displayName?: string } };
+      const quien = user?.emailAddress ?? user?.displayName ?? null;
+      /* Si se desconectó mientras tanto, la respuesta es de la cuenta anterior. */
+      if (conexion !== mia) return null;
+      quienEs = quien;
+      return quien;
+    } catch {
+      /* Saber de quién es es una comodidad, no un requisito: si falla, la pantalla dice
+         «En tu Drive» como antes y todo lo demás sigue funcionando. */
+      return null;
+    } finally {
+      if (conexion === mia) preguntando = null;
+    }
+  })();
+  preguntando = p;
+  return p;
 }
 
 /**
@@ -751,6 +770,7 @@ export async function deQuienEsElDrive(): Promise<string | null> {
  */
 export function olvidarQuien(): void {
   quienEs = null;
+  preguntando = null;
   conexion++;
   rutas.clear();
   turno = Promise.resolve();
@@ -758,6 +778,19 @@ export function olvidarQuien(): void {
   recordados.clear();
   ocupado = 0;
   bajando.clear();
+}
+
+/*
+ * Desconectar se pulsa en una pestaña, pero esta memoria es **de cada pestaña**. Una página
+ * de asignatura abierta en otra seguiría con los ids de la cuenta anterior, y al conectar la
+ * nueva subiría a carpetas que no son suyas. Así que cada pestaña escucha el cambio y, si lo
+ * que ha pasado es una desconexión de verdad —se fue la marca de uso, no solo caducó el
+ * token—, olvida lo suyo también. Caducar no cuenta: la cuenta sigue siendo la misma.
+ */
+if (typeof window !== 'undefined') {
+  alCambiarDrive(() => {
+    if (!seHaUsadoDrive()) olvidarQuien();
+  });
 }
 
 /* ───────────────────────── el archivador ───────────────────────── */
