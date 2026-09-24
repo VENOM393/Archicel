@@ -1,0 +1,8 @@
+# Graft rewrites its own wiring with LF. With core.autocrlf=true a checkout
+# leaves these files as CRLF, so every re-wire shows them as modified with an
+# empty diff, and AO will not reclaim a dirty worktree. Pin them to LF.
+.claude/settings.json text eol=lf
+.claude/helpers/graft-*.cjs text eol=lf
+.claude/skills/graft/** text eol=lf
+.mcp.json text eol=lf
+.ignore text eol=lf

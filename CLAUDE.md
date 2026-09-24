@@ -104,7 +104,7 @@ los hooks se resuelven con `${CLAUDE_PROJECT_DIR}` y el MCP arranca con `npx -y 
 que reutiliza la instalación global sin descargar nada. Lo que sí es de esta máquina es la ruta de
 Node dentro de `.claude/helpers/*.cjs`, y esos ficheros tienen su propio plan B si no la encuentran.
 
-Tres cosas que no se deducen:
+Cinco cosas que no se deducen:
 
 - **Un worktree nuevo, sin preparar, escribe fuera del repo.** Graft recuerda `--no-global` en un sello
   dentro de `graft/`, que no se versiona; sin sello, la primera sesión re-cablea con los valores por
@@ -115,8 +115,22 @@ Tres cosas que no se deducen:
   graft init --agents claude --no-global --no-build
   ```
 
-  Deja el sello con `global: false` y reescribe los ficheros del repo idénticos, así que no ensucia
-  el árbol. Es el `post-create` que tiene que llevar el proyecto en AO.
+  Deja el sello con `global: false` y reescribe los ficheros del repo con el mismo contenido. Es el
+  `post-create` del proyecto en AO, y lo que hay que lanzar a mano en un worktree que ya existía la
+  primera vez que trae el cableado desde `master`.
+- **Limpiar la configuración global no basta si queda un Graft vivo.** Ya ha pasado: se quitaron los
+  hooks y el MCP de `~/.claude`, y minutos después estaban otra vez. Cada sesión de Claude Code
+  abierta mientras la global estaba sucia tiene cargado el MCP `graft` de usuario, y ese servidor —o
+  el siguiente que la sesión levante— vuelve a cablear con los valores por defecto. Antes de limpiar
+  hay que matar los `graft mcp` vivos (`node`/`npx` con `graft` en la línea de comando) o cerrar
+  esas sesiones, y después de limpiar esperar un par de minutos y comprobar que no reaparece. Lo que
+  hay que quitar: los hooks con `graft-hooks.cjs` de `~/.claude/settings.json`, `mcpServers.graft`
+  del nivel superior de `~/.claude.json` y `~/.claude/helpers/graft-hooks.cjs`. `graft uninstall` no
+  sirve para esto: no tiene modo «solo global» y se llevaría también el cableado del repo.
+- **Los ficheros de Graft van fijados a LF en `.gitattributes`.** Con `core.autocrlf=true` el
+  checkout los dejaba en CRLF y Graft los reescribe en LF: `git status` marcaba cuatro ficheros de
+  `.claude/` con `git diff` vacío, y AO no recoge un worktree sucio. Si Graft empieza a escribir un
+  fichero nuevo en el repo, va también a esa lista.
 - **El primer `graft map` o `graft grep` de un worktree construye su grafo**, unos segundos. Cada
   worktree tiene el suyo y nunca se comparte: el código de dos ramas no es el mismo.
 - **En Windows no compila `tree-sitter-kotlin`**: no trae binario precompilado y aquí no hay Python ni
