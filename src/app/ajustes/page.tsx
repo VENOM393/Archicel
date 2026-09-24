@@ -40,8 +40,7 @@ import {
 import { useArchicel } from '@/lib/firebase/sesion';
 import { useUI } from '@/lib/ui/contexto';
 import { ORQUESTA, PIEZA, RELEVO } from '@/lib/ui/movimiento';
-
-const USUARIA = 'Celeste';
+import { USUARIA } from '@/lib/data';
 
 /** Donde se retira a mano el permiso de una aplicación en una cuenta de Google. */
 const PERMISOS_GOOGLE = 'https://myaccount.google.com/connections';

@@ -12,10 +12,9 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useAhora, useEventos, useProximaEntrega, useTareas, useTareasDeHoy } from '@/hooks/useDatos';
 import { useArchicel } from '@/lib/firebase/sesion';
-import { NOMBRE_PROGRESO, aFecha, deFecha, hhmm, progresoDe, type Tarea, type TipoEvento } from '@/lib/data';
+import { NOMBRE_PROGRESO, USUARIA, aFecha, deFecha, hhmm, progresoDe, type Tarea, type TipoEvento } from '@/lib/data';
 import { Nivel, TIPOS } from '@/lib/ui/catalogo';
 
-const USUARIA = 'Celeste';
 
 function pad(n: number) {
   return String(n).padStart(2, '0');

@@ -12,10 +12,12 @@ import { crearAlmacenFirestore } from './almacen-firestore';
 import { crearAlmacenLocal } from './almacen-local';
 import { conEspejoLocal } from './espejo';
 import type { Almacen, Coleccion, Documento } from './almacen';
-import type { ID } from './tipos';
+import { TOPES, acortar } from './limites';
+import type { Apunte, Carpeta, ID } from './tipos';
 
 export * from './tipos';
 export * from './curso';
+export * from './limites';
 export type { Almacen, Coleccion, Documento, Desuscribir } from './almacen';
 
 /** Se avisa a quien quiera enterarse de que la nube rechazó una escritura. */
@@ -86,6 +88,22 @@ function yaSubida(uid: string, parte: ParteMigrada): boolean {
   return CUBRIA_LA_UNICA.includes(parte) && Boolean(ls.getItem(`${MARCA_UNICA}.${uid}`));
 }
 
+/** Lo que dejó una parte: cuántos subieron y cuáles rechazó la nube, con su motivo. */
+interface Resultado {
+  subidos: number;
+  rechazados: Array<{ id: ID; motivo: string }>;
+}
+
+/**
+ * Los errores que no se arreglan reintentando: las reglas dijeron que no a **ese**
+ * documento. Un corte de red o una nube caída sí se arreglan, y esos dejan la parte sin
+ * marca para el siguiente arranque.
+ */
+function esRechazo(e: unknown): boolean {
+  const codigo = (e as { code?: string } | null)?.code ?? '';
+  return ['permission-denied', 'invalid-argument', 'failed-precondition'].some((c) => codigo.endsWith(c));
+}
+
 /**
  * Sube una colección **sin pisar nada de lo que ya esté en la nube**.
  *
@@ -93,40 +111,71 @@ function yaSubida(uid: string, parte: ParteMigrada): boolean {
  * un intento anterior que se cortó a medias— o una versión más nueva que se editó desde
  * otro dispositivo. En los dos casos lo correcto es dejarlo: por eso se consulta la nube
  * primero y solo se escribe lo que falta. Eso es lo que hace que repetir sea inofensivo.
+ *
+ * **Cada documento falla por su cuenta.** Antes bastaba uno que las reglas rechazaran —un
+ * nombre de 301 caracteres— para que la parte entera se quedara sin marca y se reintentara
+ * en cada arranque, para siempre, fallando siempre en el mismo. Ahora ese se apunta como
+ * rechazado y el resto sigue; solo un fallo que se pueda arreglar esperando —la red— hace
+ * que la parte se repita.
  */
 async function subirColeccion<T extends { id: ID }>(
   local: Coleccion<T>,
   nube: Coleccion<T>,
   preparar: (doc: T) => T = (d) => d,
-): Promise<number> {
+): Promise<Resultado> {
   const aqui = await local.listar();
-  if (aqui.length === 0) return 0;
+  if (aqui.length === 0) return { subidos: 0, rechazados: [] };
   const arriba = new Set((await nube.listar()).map((d) => d.id));
   const faltan = aqui.filter((d) => !arriba.has(d.id));
-  await Promise.all(faltan.map((d) => nube.guardar(preparar(d))));
-  return faltan.length;
+  const hechos = await Promise.allSettled(faltan.map((d) => nube.guardar(preparar(d))));
+
+  const rechazados: Resultado['rechazados'] = [];
+  const pasajeros: unknown[] = [];
+  hechos.forEach((h, i) => {
+    if (h.status === 'fulfilled') return;
+    if (esRechazo(h.reason)) rechazados.push({ id: faltan[i].id, motivo: String((h.reason as Error)?.message ?? h.reason).slice(0, 200) });
+    else pasajeros.push(h.reason);
+  });
+  if (pasajeros.length) throw new AggregateError(pasajeros, 'Algunos documentos no llegaron a la nube.');
+  return { subidos: faltan.length - rechazados.length, rechazados };
 }
 
 /** Lo mismo para un documento único: solo se escribe si arriba no hay nada. */
-async function subirDocumento<T>(local: Documento<T>, nube: Documento<T>): Promise<number> {
+async function subirDocumento<T>(local: Documento<T>, nube: Documento<T>): Promise<Resultado> {
   const aqui = await local.leer();
-  if (aqui === null) return 0;
-  if ((await nube.leer()) !== null) return 0;
+  if (aqui === null) return { subidos: 0, rechazados: [] };
+  if ((await nube.leer()) !== null) return { subidos: 0, rechazados: [] };
   await nube.escribir(aqui);
-  return 1;
+  return { subidos: 1, rechazados: [] };
 }
 
-const PASOS: Record<ParteMigrada, (local: Almacen, nube: Almacen) => Promise<number>> = {
+/* Lo que se sabe que las reglas rechazarían, arreglado antes de subir: nombres de más, un
+   tipo MIME absurdo. El navegador los aceptaba porque el almacén local no valida nada. */
+const carpetaSubible = (c: Carpeta): Carpeta => ({
+  ...c,
+  nombre: acortar(c.nombre, TOPES.nombreCarpeta),
+});
+const apunteSubible = (a: Apunte): Apunte => ({
+  ...a,
+  nombre: acortar(a.nombre, TOPES.nombreApunte),
+  tipo: (a.tipo ?? '').slice(0, TOPES.tipo),
+  /* En la nube los apuntes se ordenan por `creado`, y Firestore **deja fuera de la
+     consulta** al que no lo tenga: subiría y no se vería. Lo nuevo siempre lo lleva; lo
+     muy antiguo quizá no. */
+  creado: a.creado ?? Date.now(),
+});
+
+const PASOS: Record<ParteMigrada, (local: Almacen, nube: Almacen) => Promise<Resultado>> = {
   eventos: (l, n) => subirColeccion(l.eventos, n.eventos),
   tareas: (l, n) => subirColeccion(l.tareas, n.tareas),
   ajustes: (l, n) => subirDocumento(l.ajustes, n.ajustes),
   layout: (l, n) => subirDocumento(l.layout('escritorio'), n.layout('escritorio')),
-  carpetas: (l, n) => subirColeccion(l.carpetas, n.carpetas),
-  /* En la nube los apuntes se ordenan por `creado`, y Firestore **deja fuera de la
-     consulta** al que no lo tenga: subiría y no se vería. Lo nuevo siempre lo lleva; lo
-     muy antiguo quizá no, y ese es el único que se toca. */
-  apuntes: (l, n) => subirColeccion(l.apuntes, n.apuntes, (a) => (a.creado ? a : { ...a, creado: Date.now() })),
+  carpetas: (l, n) => subirColeccion(l.carpetas, n.carpetas, carpetaSubible),
+  apuntes: (l, n) => subirColeccion(l.apuntes, n.apuntes, apunteSubible),
 };
+
+/** Dónde queda constancia de lo que la nube rechazó al migrar una parte. */
+export const rechazadosAlMigrar = (uid: string, parte: ParteMigrada) => `${marca(uid, parte)}.rechazados`;
 
 /** Una migración por cuenta a la vez: la sesión puede avisar dos veces seguidas al entrar. */
 const enCurso = new Map<string, Promise<Partial<Record<ParteMigrada, number>> | null>>();
@@ -134,11 +183,12 @@ const enCurso = new Map<string, Promise<Partial<Record<ParteMigrada, number>> | 
 /**
  * Sube a la nube lo que hubiera en el navegador, parte por parte.
  *
- * Cada parte deja **su propia marca** y solo cuando ha subido entera. Si algo falla a
- * medias —sin red, una regla que rechaza un documento—, esa parte se queda sin marca y
- * se reintenta en el siguiente arranque; lo que ya llegó no se duplica porque se
- * comprueba antes de escribir. Nada se borra del navegador: la copia local se queda
- * donde estaba.
+ * Cada parte deja **su propia marca**. Si falla algo que se arregla esperando —sin red,
+ * la nube caída—, esa parte se queda sin marca y se reintenta en el siguiente arranque; lo
+ * que ya llegó no se duplica porque se comprueba antes de escribir. Si lo que pasa es que
+ * las reglas rechazan un documento concreto, la parte se marca igual —repetirla fallaría
+ * siempre en el mismo— y ese documento queda apuntado en `rechazadosAlMigrar`. Nada se
+ * borra del navegador: la copia local se queda donde estaba.
  *
  * Devuelve cuántos documentos subió cada parte que se intentó en esta pasada.
  */
@@ -157,17 +207,28 @@ export function migrarLocalANube(uid: string): Promise<Partial<Record<ParteMigra
 
     const hechas: Partial<Record<ParteMigrada, number>> = {};
     const fallos: unknown[] = [];
+    const rechazos: string[] = [];
     await Promise.all(
       pendientes.map(async (parte) => {
         try {
-          hechas[parte] = await PASOS[parte](local, nube);
+          const { subidos, rechazados } = await PASOS[parte](local, nube);
+          hechas[parte] = subidos;
+          /* La parte se marca aunque la nube rechazara alguno: repetirla no lo arreglaría.
+             Lo rechazado queda apuntado —id y motivo— y sigue en el navegador. */
+          if (rechazados.length) {
+            window.localStorage.setItem(rechazadosAlMigrar(uid, parte), JSON.stringify(rechazados));
+            rechazos.push(`${parte}: ${rechazados.map((r) => r.id).join(', ')}`);
+          }
           window.localStorage.setItem(marca(uid, parte), new Date().toISOString());
         } catch (e) {
           fallos.push(e);
         }
       }),
     );
-    if (fallos.length) throw new AggregateError(fallos, 'La migración no subió todo; se reintentará al volver a entrar.');
+    if (rechazos.length) {
+      fallos.push(new Error(`La nube rechazó algunos documentos, que siguen en este navegador (${rechazos.join('; ')}).`));
+    }
+    if (fallos.length) throw new AggregateError(fallos, 'La migración no subió todo.');
     return hechas;
   })().finally(() => enCurso.delete(uid));
 

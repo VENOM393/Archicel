@@ -19,8 +19,7 @@ import Link from 'next/link';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { FALTA_CONFIGURAR_ADMIN, NOMBRE_ROL } from '@/lib/auth/roles';
 import { useArchicel } from '@/lib/firebase/sesion';
-
-const USUARIA = 'Celeste';
+import { USUARIA } from '@/lib/data';
 
 /** Dos letras: iniciales del nombre si lo hay, y si no las de la usuaria de la casa. */
 function iniciales(nombre: string | null | undefined): string {

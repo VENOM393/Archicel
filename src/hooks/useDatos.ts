@@ -88,10 +88,27 @@ export function useTareas(rango?: Rango): Tarea[] {
   return useLista(escuchar, ordenarTareas, `${almacen.uid ?? ''}|${rango?.desde ?? ''}|${rango?.hasta ?? ''}`, rango);
 }
 
+/**
+ * `creado` en milisegundos, venga como venga.
+ *
+ * Lo que se crea en la nube lleva la hora del servidor, que llega como `Timestamp` de
+ * Firestore; lo que se creó en el navegador y subió la migración lleva un número. Restarlos
+ * tal cual mezclaba segundos con milisegundos (`Timestamp.valueOf` es un texto con segundos)
+ * y los apuntes migrados acababan siempre al final. Mientras el servidor no ha contestado,
+ * la hora del servidor es `null`: esos van los últimos, que es donde está lo recién subido.
+ */
+function ms(creado: unknown): number {
+  if (typeof creado === 'number') return creado;
+  if (creado && typeof (creado as { toMillis?: unknown }).toMillis === 'function') {
+    return (creado as { toMillis(): number }).toMillis();
+  }
+  return creado === null ? Number.MAX_SAFE_INTEGER : 0;
+}
+
 /** Ordena por el orden puesto a mano y, a falta de él, por cuándo se subió. */
 function ordenarApuntes(l: Apunte[]): Apunte[] {
   return [...l].sort(
-    (a, b) => (a.orden ?? Infinity) - (b.orden ?? Infinity) || (a.creado ?? 0) - (b.creado ?? 0) || a.id.localeCompare(b.id),
+    (a, b) => (a.orden ?? Infinity) - (b.orden ?? Infinity) || ms(a.creado) - ms(b.creado) || a.id.localeCompare(b.id),
   );
 }
 
