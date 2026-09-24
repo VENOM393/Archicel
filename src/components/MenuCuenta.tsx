@@ -35,6 +35,9 @@ export function MenuCuenta() {
   const { usuario, cargando, enLaNube, hayCuentas, rol, esAdmin, salir } = useArchicel();
   const nombre = usuario?.displayName ?? usuario?.email ?? null;
   const [copiado, setCopiado] = useState(false);
+  /* Abierto a mano porque el menú vive en el marco y no se desmonta al navegar: sin
+     cerrarlo, pulsar «Ajustes» cambiaba de página con el menú todavía encima. */
+  const [abierto, setAbierto] = useState(false);
 
   async function copiarId() {
     if (!usuario) return;
@@ -48,7 +51,7 @@ export function MenuCuenta() {
   }
 
   return (
-    <Popover>
+    <Popover open={abierto} onOpenChange={setAbierto}>
       <PopoverTrigger className="avatar" aria-label="Tu cuenta">
         {/* La foto de Google cuando la hay; las iniciales cuando no. Nunca las dos. */}
         {usuario?.photoURL ? (
@@ -94,17 +97,25 @@ export function MenuCuenta() {
 
         <hr />
 
-        {usuario ? (
-          <button type="button" className="cuenta-accion" onClick={salir}>
-            Cerrar sesión
-            <Salida />
-          </button>
-        ) : (
-          <Link href="/entrar" className="cuenta-accion destacada">
-            {hayCuentas ? 'Entrar con tu cuenta' : 'Ver el acceso'}
-            <Flecha />
+        <div className="cuenta-acciones">
+          {/* Aquí está la conexión con Google Drive: con qué cuenta, y cómo soltarla. */}
+          <Link href="/ajustes" className="cuenta-accion" onClick={() => setAbierto(false)}>
+            Ajustes
+            <Deslizadores />
           </Link>
-        )}
+
+          {usuario ? (
+            <button type="button" className="cuenta-accion" onClick={salir}>
+              Cerrar sesión
+              <Salida />
+            </button>
+          ) : (
+            <Link href="/entrar" className="cuenta-accion destacada">
+              {hayCuentas ? 'Entrar con tu cuenta' : 'Ver el acceso'}
+              <Flecha />
+            </Link>
+          )}
+        </div>
 
         {!usuario && hayCuentas && (
           <p className="cuenta-pie">
@@ -138,6 +149,16 @@ function Visto() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="m5 12.5 4.5 4.5L19 7" />
+    </svg>
+  );
+}
+
+function Deslizadores() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+      <circle cx="15" cy="7" r="2" />
+      <circle cx="9" cy="17" r="2" />
     </svg>
   );
 }

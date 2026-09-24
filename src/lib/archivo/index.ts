@@ -9,16 +9,18 @@
  *
  * Así que:
  *
- *   · **al subir** manda el preferido — Drive si hay permiso, este equipo si no;
+ *   · **al subir** va siempre a Drive, y si no se puede, falla — nunca a este equipo;
  *   · **al abrir y al borrar** manda el `proveedor` que lleve el propio apunte.
  *
  * Esa es toda la lógica, y es la que permite que los dos convivan sin que ninguna
  * pantalla tenga que saber que son dos.
  */
 
-import { crearArchivadorDrive } from './archivador-drive';
+import { crearArchivadorDrive, olvidarQuien } from './archivador-drive';
 import { crearArchivadorLocal } from './archivador-local';
-import { conseguirToken, hayClienteConfigurado, hayPermiso, yaEstaConectado } from './google';
+import {
+  conseguirToken, hayClienteConfigurado, hayPermiso, seHaUsadoDrive, soltarPermiso, yaEstaConectado,
+} from './google';
 import { FalloDeArchivo, type Archivador, type Remoto } from './archivador';
 
 let local: Archivador | null = null;
@@ -58,6 +60,31 @@ export function reconectarDriveEnSilencio(): Promise<boolean> {
 /** Si Drive está conectado **ahora**, en esta pestaña. */
 export function driveConectado(): boolean {
   return hayClienteConfigurado() && hayPermiso();
+}
+
+/**
+ * Si se conectó alguna vez en este navegador y no se ha desconectado, aunque el token
+ * haya caducado. Es lo que distingue «pasó la hora, la siguiente acción lo renueva» de
+ * «nunca se conectó» — dos pantallas distintas con el mismo `driveConectado() === false`.
+ */
+export function driveRecordado(): boolean {
+  return hayClienteConfigurado() && seHaUsadoDrive();
+}
+
+/**
+ * Desconecta Drive de este navegador.
+ *
+ * Retira el permiso en Google, olvida el token recordado, la cuenta y los ids de carpeta
+ * que se habían buscado con ella —si después se conecta otra cuenta, esos ids son de la
+ * anterior y no los alcanza—. **No borra nada de Drive**: los ficheros siguen donde
+ * estaban y las fichas de Archicel también; al volver a conectar la misma cuenta, todo
+ * se abre como antes.
+ *
+ * Devuelve si Google confirmó la revocación (ver `soltarPermiso`).
+ */
+export async function desconectarDrive(): Promise<boolean> {
+  olvidarQuien();
+  return soltarPermiso();
 }
 
 /**
@@ -151,4 +178,4 @@ export function elArchivador(): Archivador & { conectarDrive(): Promise<void> } 
 export { deQuienEsElDrive } from './archivador-drive';
 export * from './iconos';
 export * from './archivador';
-export { soltarPermiso } from './google';
+export { alCambiarDrive } from './google';

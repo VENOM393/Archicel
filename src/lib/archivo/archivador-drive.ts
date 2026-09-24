@@ -253,6 +253,9 @@ export async function deQuienEsElDrive(): Promise<string | null> {
 /** Al desconectar hay que olvidarlo, o la pantalla seguiría enseñando la cuenta anterior. */
 export function olvidarQuien(): void {
   quienEs = null;
+  /* Y los ids de carpeta, que se buscaron con esa cuenta: conectando otra en la misma
+     pestaña, `drive.file` no los alcanza y cada subida fallaría con «ya no está». */
+  carpetas.clear();
 }
 
 export function crearArchivadorDrive(): Archivador {
