@@ -15,7 +15,7 @@ next-env.d.ts
 .env*.local
 
 # grafo de Graft: caché local regenerable
-graft/
+/graft/
 
 # herramientas
 .playwright/

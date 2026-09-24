@@ -77,51 +77,53 @@ entendimiento leyendo ficheros cuesta miles y además pierde las aristas.
 Traducido a esta casa: **Graft es cómo se navega el código; las skills de frontend son cómo se
 diseña.** No compiten, se usan en fases distintas de la misma tarea.
 
-### Cuándo instalarlo — todavía no
+### Estado: instalado
 
-Graft indexa código, y aquí aún no hay ninguno. Instalarlo hoy produciría un grafo vacío. El momento
-correcto es **justo después de scaffoldear Next.js y tener las primeras pantallas**, no antes.
+Graft 0.19.0, instalado de forma global (`npm install -g @nanonets/graft`) y cableado solo para
+Claude Code con `graft init --agents claude --no-global`. Dos decisiones de Cristian:
 
-### Antes de `graft init`
+- **Telemetría desactivada**, con `graft telemetry disable`. Se guarda en la máquina, no en el repo;
+  `graft telemetry status` tiene que decir `off — you disabled it`. En una máquina nueva hay que
+  repetirlo.
+- **Sin `--deep`.** Solo el grafo estructural: gratis, sin clave y sin red. `--deep` escribe
+  resúmenes con un LLM y consume clave de API de pago; no se lanza.
 
-1. `git init` y primer commit. Graft se apoya en git para `.gitignore`, para `blast --base` y para
-   saber qué ficheros trackea. Sin repo, medio producto no funciona.
-2. Node ≥ 20 (aquí hay v24, correcto).
-3. Decidir **telemetría**: Graft manda estadísticas anónimas por defecto (sin código, rutas, nombre
-   de repo ni consultas). Se desactiva desmarcando la casilla en `init`, con `graft telemetry disable`
-   o con `DO_NOT_TRACK=1`. **Preguntar a Cristian antes**, no decidirlo por él.
-4. Decidir si habrá build `--deep`. El grafo estructural es gratis y sin clave; `--deep` añade
-   resúmenes escritos por un LLM y **consume clave de API de pago**. Por defecto: no.
+Lo que está versionado es el cableado, no el grafo: `.claude/settings.json` (statusline y hooks),
+`.claude/helpers/graft-*.cjs`, `.claude/skills/graft/SKILL.md` (el manual del propio Graft — **ahí
+está el detalle fino, no hay que duplicarlo aquí**), `.mcp.json` y `.ignore`. Todo eso es de Graft:
+lo reescribe al actualizarse, así que no se edita a mano. `graft/` es caché local regenerable, como
+`node_modules`, y va en `.gitignore` **anclado** (`/graft/`): sin la barra delante también ignoraba
+`.claude/skills/graft/` y la skill no llegaba al repositorio.
 
-### Cómo instalarlo
+**Hay que reiniciar Claude Code** después de instalarlo para que cargue el MCP.
 
-```bash
-npm install -g @nanonets/graft
-graft init --dry-run
-```
+### Graft y los worktrees
 
-`--dry-run` lista todo lo que tocaría sin escribir nada; se revisa **antes** de confirmar. Después:
+Cada sesión de AO trabaja en su propio worktree. Nada de lo commiteado lleva la ruta de un worktree:
+los hooks se resuelven con `${CLAUDE_PROJECT_DIR}` y el MCP arranca con `npx -y @nanonets/graft mcp`,
+que reutiliza la instalación global sin descargar nada. Lo que sí es de esta máquina es la ruta de
+Node dentro de `.claude/helpers/*.cjs`, y esos ficheros tienen su propio plan B si no la encuentran.
 
-```bash
-graft init --agents claude --no-global
-```
+Tres cosas que no se deducen:
 
-- `--agents claude` evita cablear agentes que aquí no se usan (Cursor, Gemini, Copilot…).
-- `--no-global` evita que escriba fuera del repo, en `~/.codex/`, que afectaría a **todos** tus otros
-  proyectos.
+- **Un worktree nuevo, sin preparar, escribe fuera del repo.** Graft recuerda `--no-global` en un sello
+  dentro de `graft/`, que no se versiona; sin sello, la primera sesión re-cablea con los valores por
+  defecto y mete sus hooks y su MCP en `~/.claude/settings.json` y `~/.claude.json`, **en todos los
+  proyectos**. Comprobado en un worktree de prueba. Lo evita esto, antes de abrir la primera sesión:
 
-Eso escribe: `.claude/skills/graft/SKILL.md` (el manual de uso del propio Graft, 150 líneas — **ahí
-está el detalle fino, no hay que duplicarlo aquí**), un statusline, hooks de auto-sync y el servidor
-MCP en `.mcp.json`. **Hay que reiniciar Claude Code** para que cargue el MCP. `init` es idempotente y
-nunca toca `CLAUDE.md` ni pisa el resto de `.claude/settings.json`.
+  ```bash
+  graft init --agents claude --no-global --no-build
+  ```
 
-Luego se commitea el cableado, no el grafo:
-
-```bash
-git add .claude .mcp.json && git commit -m "wire in graft"
-```
-
-`graft/` se añade solo al `.gitignore`: es caché local regenerable, como `node_modules`.
+  Deja el sello con `global: false` y reescribe los ficheros del repo idénticos, así que no ensucia
+  el árbol. Es el `post-create` que tiene que llevar el proyecto en AO.
+- **El primer `graft map` o `graft grep` de un worktree construye su grafo**, unos segundos. Cada
+  worktree tiene el suyo y nunca se comparte: el código de dos ramas no es el mismo.
+- **En Windows no compila `tree-sitter-kotlin`**: no trae binario precompilado y aquí no hay Python ni
+  compilador de C++. En esta máquina su `bindings/node/index.js` (dentro de la instalación global) es
+  un sustituto vacío, con el original al lado como `index.js.orig`. Graft solo lo usa al leer un
+  `.kt` y Archicel no tiene ninguno. **Un `npm install -g` o `graft upgrade` lo deshace**: se vuelve a
+  instalar con `--ignore-scripts` y se repone el sustituto, o `graft` no arranca.
 
 ### Cómo se usa durante el trabajo
 
@@ -526,7 +528,7 @@ Cosas que no se deducen mirando:
 ## Estructura
 
 ```
-.claude/skills/     las cinco skills de frontend (+ graft, cuando se instale)
+.claude/skills/     las cinco skills de frontend, más la de graft (la escribe graft init)
 docs/frontend/      SKILLS.md — uso de las skills
                     MOVIMIENTO.md — el sistema de animación (Motion)
                     WIDGETS.md — arquitectura del escritorio y modo edición
@@ -540,5 +542,5 @@ docs/tooling/       GRAFT.md — referencia de la capa de contexto
                     DESPLIEGUE.md — publicar en Vercel
 README.md           la cara del repositorio
 scripts/            iconos.mjs — genera los iconos desde public/icono.svg
-graft/              grafo del código (git-ignored, regenerable — no existe aún)
+graft/              grafo del código (git-ignored, regenerable — uno por worktree)
 ```
