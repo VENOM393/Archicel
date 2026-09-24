@@ -21,6 +21,7 @@ import { AnimatePresence } from 'motion/react';
 import { HOJA, VELO, RELEVO } from '@/lib/ui/movimiento';
 import { useDialogo } from '@/hooks/useDialogo';
 import { Button } from '@/components/ui/button';
+import { AlCuerpo } from '@/components/AlCuerpo';
 import { deQuienEsElDrive, elArchivador } from '@/lib/archivo';
 
 /**
@@ -63,9 +64,15 @@ export function HojaConectarDrive({
   alConectado: (correo: string | null) => void;
 }) {
   return (
-    <AnimatePresence>
-      {abierto && <Contenido key="asistente" cerrar={cerrar} alConectado={alConectado} />}
-    </AnimatePresence>
+    /* A `body`, no dentro del panel: `.asig-apuntes` lleva `backdrop-filter`, que convierte
+       cualquier `position:fixed` de dentro en relativo al panel —el telón cubriría solo el
+       panel y la hoja se centraría dentro de él, no sobre la pantalla—. Es el mismo portal
+       que usan el visor y la confirmación. */
+    <AlCuerpo>
+      <AnimatePresence>
+        {abierto && <Contenido key="asistente" cerrar={cerrar} alConectado={alConectado} />}
+      </AnimatePresence>
+    </AlCuerpo>
   );
 }
 

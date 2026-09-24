@@ -25,7 +25,6 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import * as mo from 'motion/react-m';
 import { AnimatePresence } from 'motion/react';
 
@@ -70,6 +69,7 @@ import {
   type Carpeta,
   type ClaveAsignatura,
 } from '@/lib/data';
+import { AlCuerpo } from '@/components/AlCuerpo';
 import { HojaConectarDrive, IconoDrive } from '@/components/HojaConectarDrive';
 
 const DIAS_CORTOS = ['L', 'M', 'X', 'J', 'V'] as const;
@@ -1252,17 +1252,6 @@ function Pregunta({
       </mo.aside>
     </>
   );
-}
-
-/**
- * Lo pinta en `body`, fuera del panel.
- *
- * Solo después de montar: la página se prerrenderiza y en el servidor no hay `document`.
- */
-function AlCuerpo({ children }: { children: React.ReactNode }) {
-  const [listo, setListo] = useState(false);
-  useEffect(() => setListo(true), []);
-  return listo ? createPortal(children, document.body) : null;
 }
 
 /* ───────────────────────── el camino ───────────────────────── */
