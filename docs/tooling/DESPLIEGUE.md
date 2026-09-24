@@ -25,6 +25,15 @@ consola de Google. Quitarle el prefijo la rompe.
 
 Al cambiarla hay que **redesplegar**: se hornea al construir.
 
+Sin ella la página de una asignatura abre, pero dice «Sin conectar», no ofrece Conectar Drive y
+deja «Subir» y «Carpeta» deshabilitados: no se puede guardar ningún apunte.
+
+Y el dominio de producción tiene que estar en los **orígenes de JavaScript autorizados** del ID de
+cliente, en la consola de Google Cloud (*APIs y servicios → Credenciales*). Si no, la ventana de
+Google se abre con un error de origen y no hay permiso. Es el equivalente, para Drive, de autorizar
+el dominio en Firebase (más abajo). Los pasos están en
+[DRIVE.md § 7](../integraciones/DRIVE.md).
+
 ## Las variables de entorno — el paso que rompe todo si se salta
 
 En *Settings → Environment Variables* del proyecto, las mismas que hay en `.env.local`:
@@ -37,6 +46,7 @@ En *Settings → Environment Variables* del proyecto, las mismas que hay en `.en
 | `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Firebase | Sí |
 | `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Firebase | Sí |
 | `NEXT_PUBLIC_FIREBASE_APP_ID` | Firebase | Sí |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Drive (apuntes) | Sí, por diseño — «Change to Config» |
 | `CANVAS_URL` | El campus | — |
 | `CANVAS_TOKEN` | El campus | **No. Jamás.** |
 | `CANVAS_ZONA` | El campus | — |
@@ -51,7 +61,8 @@ descarga cualquiera. `server-only` hace que importarlo desde un componente de na
 rompa la compilación, pero el prefijo se lo saltaría todo.
 
 **Sin ninguna de estas variables la aplicación arranca igual**, guardando en el navegador.
-Es deliberado. Lo que no hará es sincronizar ni leer del campus.
+Es deliberado. Lo que no hará es sincronizar, leer del campus ni guardar apuntes: esos solo van
+a Drive.
 
 ## Después de publicar: autorizar el dominio en Firebase
 
