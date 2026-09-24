@@ -74,9 +74,9 @@ export function driveRecordado(): boolean {
 /**
  * Desconecta Drive de este navegador.
  *
- * Retira el permiso en Google, olvida el token recordado, la cuenta y los ids de carpeta
- * que se habían buscado con ella —si después se conecta otra cuenta, esos ids son de la
- * anterior y no los alcanza—. **No borra nada de Drive**: los ficheros siguen donde
+ * Retira el permiso en Google y olvida el token recordado y la cuenta. Lo que el archivador
+ * recuerde de esa cuenta —los ids de carpeta— lo suelta él mismo en `olvidarQuien`, que es
+ * quien sabe cómo lo guarda. **No borra nada de Drive**: los ficheros siguen donde
  * estaban y las fichas de Archicel también; al volver a conectar la misma cuenta, todo
  * se abre como antes.
  *
