@@ -60,10 +60,13 @@ sesión y de que migrar a la nube al entrar sea una línea.
 
 Los apuntes tienen ficha y fichero, y cada uno va por su lado: la ficha por el almacén, los
 bytes por `lib/archivo`. Allí `archivador.ts` es el contrato (subir, crear carpeta,
-renombrar, mover, borrar, enlace), `archivador-drive.ts` la implementación de verdad y
+renombrar, mover, borrar, leer), `archivador-drive.ts` la implementación de verdad y
 `archivador-local.ts` la antigua de IndexedDB, que hoy solo abre y borra lo guardado antes.
 `index.ts` **encamina**: lo nuevo va siempre a Drive, y lo existente al proveedor que diga su
 propio `remoto`.
+Junto a ellos, `explicar.ts` convierte cada fallo en motivo, texto de Drive y arreglo, y
+`arbol.ts` decide qué hay que mandar a la papelera al borrar una carpeta y qué fichas se pueden
+borrar después.
 
 `google.ts` es el único fichero que sabe de OAuth. Ninguna pantalla importa
 `archivador-drive` ni `google` directamente: todo pasa por `@/lib/archivo`. El detalle está

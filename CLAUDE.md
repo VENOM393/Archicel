@@ -322,10 +322,10 @@ Cada asignatura tiene su página, y en ella los apuntes de Celeste —fotos, PDF
 Los bytes van a **Google Drive**; Firestore guarda solo la ficha. El planteamiento entero, con los
 pasos de la consola, está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
 
-**Estado: funcionando.** Subida, visor, borrado, **carpetas, renombrar y mover** contra Drive real.
-Lo que falta o está a medias —con fichero y línea— está en el § 10 de DRIVE.md; lo más serio: borrar
-se traga los fallos de Drive, la tira presenta cualquier `sin-permiso` como sesión caducada, y la
-migración al entrar con cuenta no se lleva apuntes ni carpetas.
+**Estado: funcionando.** Subida (reanudable de verdad), visor, borrado con confirmación,
+**carpetas, renombrar y mover** contra Drive real. Lo que queda pendiente está en el § 10 de
+DRIVE.md; lo más serio es que la migración al entrar con cuenta no se lleva apuntes ni carpetas
+(lo lleva otra tarea).
 
 La ruta en Drive es `Archicel/Asignaturas/<nombre de la asignatura>`, y dentro el árbol que la
 usuaria haya montado. Se llamó `Apuntes` y **la aplicación renombra la vieja** la primera vez que
@@ -410,13 +410,54 @@ perder el tiempo a quien lo pulse.
 2. **Si aun así no se puede, se dice y no se guarda en otro sitio.** Sale una tira con el fichero,
    el motivo **y cómo se arregla** — que es la mitad que faltaba: saber que no queda espacio sin
    saber que hay que vaciar la papelera de Drive deja a quien lo lee igual de atascada. Cada causa
-   tiene su salida y la pantalla es el único sitio donde cabe decirla. **Hoy la traducción se
-   equivoca en dos casos** (comprobados con Drive simulado): cualquier `sin-permiso` —también una
-   API deshabilitada— sale como «La sesión de Drive ha caducado» y el texto de Drive no llega a la
-   tira; y un límite de peticiones sale como «No queda espacio». Detalle en DRIVE.md § 10.
+   tiene su salida y la pantalla es el único sitio donde cabe decirla. La tira enseña además **lo
+   que dijo Drive, tal cual**.
+   Cada fallo se clasifica por la **razón estructurada** de Drive (`errors[].reason`,
+   `details[].reason`), nunca buscando palabras en su texto: el límite de peticiones dice «…exceed
+   configured project quota» y no es que falte espacio. Sesión caducada (401), permiso sin Drive,
+   API apagada, fichero de otra cuenta, cuota llena, límite diario y límite por minuto tienen cada
+   uno su frase y su arreglo (tabla en DRIVE.md § 4). Lo pasajero —429, límite por minuto, 5xx en
+   lo que se puede repetir— se reintenta solo con espera exponencial antes de llegar a la tira.
+   Un 401 **tira el token**: si no, «Reconectar» devolvía el mismo token muerto.
 3. **El fichero no se pierde de vista.** La tira guarda el `File`, así que reintentar es un botón y
-   no volver a buscarlo en el disco. Un aviso que se va en tres segundos es el peor sitio posible
-   para un fallo: de cinco ficheros arrastrados no dice cuál falló, ni por qué, ni deja repetirlo.
+   no volver a buscarlo en el disco — y va **a la carpeta de la primera vez**, no a la que se esté
+   mirando. Una subida por trozos cortada **sigue donde se quedó**: el archivador recuerda la sesión
+   de Drive por `File` y pregunta cuánto llegó. Un aviso que se va en tres segundos es el peor sitio
+   posible para un fallo: de cinco ficheros arrastrados no dice cuál falló, ni por qué, ni deja
+   repetirlo.
+4. **Si Drive lo tiene pero el almacén no aceptó la ficha**, la tira lo dice así («Está en tu
+   Drive, pero Archicel no pudo apuntarlo») y reintentar **solo vuelve a apuntarlo**: subirlo otra
+   vez dejaría dos copias. El caso típico —un nombre de más de 300 caracteres, que las reglas no
+   aceptan— ya no llega ahí: la ficha lo acorta por el medio y Drive se queda con el nombre entero.
+
+### Borrar pregunta siempre, y la ficha espera a Drive
+
+- **Siempre hay una pregunta**, apunte suelto o carpeta, y dice a dónde va: «Irá a la papelera de
+  tu Drive, y desde allí se puede recuperar durante 30 días». Lo antiguo del navegador dice que no
+  tiene vuelta atrás, y ahí el foco empieza en «Cancelar».
+- **Una carpeta se pregunta una vez para todo el árbol**, con la cuenta delante («2 carpetas y 4
+  apuntes»). En Drive, mandar la carpeta de arriba a la papelera se lleva todo lo de dentro —y
+  sacarla lo trae de vuelta—, así que es **una** llamada, no una por fichero. `src/lib/archivo/arbol.ts`
+  decide qué hay que mandar y qué fichas se pueden borrar.
+- **La ficha solo se borra cuando Drive lo confirma.** Si falla, la ficha se queda, la fila vuelve y
+  la tira dice por qué, con reintentar. Lo que falla dentro de una carpeta conserva su ficha y la de
+  cada carpeta del camino: nunca queda una hija con una madre que ya no existe. Un 404 sí es
+  confirmación —ya no estaba— y la ficha se quita.
+- **La pregunta y el visor van a `body` por un portal.** El panel de los apuntes lleva
+  `backdrop-filter`, que lo convierte en el bloque contenedor de todo lo `fixed` de dentro: el
+  visor se quedaba encerrado en el panel y su telón le quedaba **encima**, así que cualquier clic
+  dentro lo cerraba.
+
+### Rápido
+
+- **Las tres carpetas fijas salen de una sola búsqueda** (antes, cuatro viajes seguidos), se
+  recuerdan **como promesa** —cinco subidas a la vez no crean cinco `Archicel`— y se buscan ya al
+  abrir la página, **sin crear nada**. Si Drive dice que la carpeta recordada ya no existe, se
+  olvida, se busca o crea otra vez y se repite, sin recargar.
+- **Una tanda sube de tres en tres**, cada fichero con su barra por identificador, no por nombre.
+- **El visor lee el flujo**: una imagen se pinta mientras baja y el resto dice cuánto lleva. Lo
+  abierto se recuerda en memoria (hasta 96 MB), y **posarse sobre una fila** precarga lo pequeño.
+- Medido con Drive simulado a 150 ms por petición, en DRIVE.md § 10.
 
 ### Un icono por tipo de fichero
 
@@ -452,6 +493,9 @@ Cuatro cosas más que no se deducen y que cuestan una tarde cada una:
   siempre a Drive; al abrir, borrar, renombrar y mover manda el `proveedor` que lleve el propio
   apunte. Eso último no es nostalgia: es lo que hace que lo guardado en el equipo antes de este
   cambio siga abriéndose.
+- **Un `.dwg` puede llegar como `image/vnd.dwg`.** Por eso en `iconos.tsx` los planos y los
+  modelos se comprueban **antes** que `image/`: al revés salía como foto y el visor lo metía en un
+  `<img>`. Y no toda imagen se pinta: `.heic` y `.tif` ofrecen descargar.
 
 Y tres trampas de las que costó salir:
 
@@ -470,12 +514,11 @@ escribe quien sea**, así que se pinta como texto y nunca como HTML.
 
 ### Organizarse: carpetas, renombrar y mover
 
-La usuaria decide el árbol. La intención era que pudiera hacerlo **con Drive conectado y sin
-conectarlo** —organizarse no debería depender de la infraestructura—, pero **hoy crear una carpeta
-exige Drive**: desde que las subidas son solo Drive, `crearCarpeta` pasa por la misma comprobación
-y el botón «Carpeta» se deshabilita sin conectar. Renombrar y mover lo antiguo guardado en el equipo
-sí funciona sin conectar. Queda por decidir si se vuelve a la intención o se da por buena la
-realidad (DRIVE.md § 10).
+La usuaria decide el árbol, **en Drive**: una carpeta de Archicel es una carpeta de verdad allí,
+para que quien abra Drive vea lo mismo que en la aplicación. Por eso crear carpeta exige Drive
+igual que subir —decidido por Cristian—, y sin conectar el botón «Carpeta» se deshabilita y la
+acción es **Conectar Drive**. Renombrar y mover lo antiguo guardado en el equipo sí funciona sin
+conectar.
 
 Cuatro cosas que no se deducen:
 
@@ -504,7 +547,7 @@ manda, y los apuntes son la superficie de trabajo.
 
 **Estado: terminada**, con los pendientes de DRIVE.md § 10. Los bytes van a Drive —y solo a
 Drive—, con carpetas, renombrar y mover. Es una lista, no una rejilla, y sin miniaturas; el visor
-enseña dentro imágenes, PDF y vídeo, y el resto se descarga. El planteamiento completo está en
+enseña dentro imágenes que el navegador sabe pintar, PDF y vídeo, y el resto se descarga. El planteamiento completo está en
 [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
 
 Lo que no se deduce leyendo el código:

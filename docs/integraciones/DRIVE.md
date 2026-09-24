@@ -8,8 +8,9 @@ Este documento es el planteamiento completo: qué permiso hace falta y por qué 
 quién son los ficheros, cómo encaja con el almacén que ya existe, qué hay que tocar, y qué tiene que
 hacer Cristian en la consola de Google.
 
-**Estado: funcionando.** Subida, visor, borrado, carpetas, renombrar y mover contra Drive real. Lo
-que falta o está a medias está en el § 10, con el fichero y la línea de cada cosa.
+**Estado: funcionando.** Subida (reanudable de verdad), visor, borrado con confirmación, carpetas,
+renombrar y mover contra Drive real. El § 10 recoge lo que arregló la segunda pasada, cómo se
+verificó, lo medido y lo que queda.
 
 **Cada persona conecta su propio Drive** — la conexión vive en el navegador, no en la cuenta de
 Archicel. Y **no hace falta secreto de cliente**: a cambio, la sesión de Drive dura una hora en vez
@@ -134,7 +135,9 @@ hace lo que sabe hacer, y la ficha es lo que los une.
 Esto tiene una consecuencia práctica buena: **la página de una asignatura se pinta sin tocar Drive.**
 Los nombres, los tipos y el orden salen del almacén, que ya es tiempo real y ya funciona sin
 conexión. A Drive solo se va al subir, al abrir un fichero, al borrarlo y al organizar (crear
-carpeta, renombrar, mover). La única llamada al cargar es `about`, para saber de quién es el Drive.
+carpeta, renombrar, mover). Al cargar, con Drive conectado, hay dos llamadas y ninguna escribe:
+`about`, para saber de quién es el Drive, y **una búsqueda** de la carpeta de la asignatura, para
+que la primera subida no tenga que esperarla (§ 3, «La carpeta, en Drive»).
 
 Sin sesión de Archicel las fichas viven en el almacén del navegador y los bytes siguen yendo a Drive.
 **Ojo:** al entrar con una cuenta, la migración a la nube **no se lleva ni apuntes ni carpetas**
@@ -152,16 +155,17 @@ export interface Archivador {
   disponible(): boolean;
   /** Pide el permiso. Es lo único que puede abrir una ventana de Google. */
   conectar(): Promise<void>;
+  /** Reintentar el mismo `File` tras un corte sigue donde se quedó, al destino de la primera vez. */
   subir(fichero: File, destino: Destino, alAvanzar?: (tanto: number) => void): Promise<Remoto>;
   crearCarpeta(nombre: string, destino: Destino): Promise<Remoto>;
   renombrar(remoto: Remoto, nombre: string): Promise<void>;
   /** Drive no mueve: quita un padre y pone otro. Por eso hace falta `desde`. */
   mover(remoto: Remoto, desde: Remoto | null, hasta: Remoto | null, destino: Destino): Promise<void>;
+  /** Solo resuelve si el proveedor lo confirmó (un «ya no estaba» cuenta). Si falla, lanza. */
   borrar(remoto: Remoto): Promise<void>;
-  /** Una dirección `blob:` para ver o descargar. Caduca; no se guarda en el almacén. */
-  enlace(remoto: Remoto): Promise<string>;
-  /** Libera lo que `enlace` reservó. */
-  soltar(url: string): void;
+  /** Los bytes, con los parciales según llegan. La dirección `blob:` la hace quien pinta. */
+  leer(remoto: Remoto, opciones?: { tipo?: string; tam?: number;
+       alAvanzar?: (hastaAhora: Blob, tanto: number) => void }): Promise<Blob>;
 }
 
 /** Dónde va, en términos del producto y no del proveedor. */
@@ -175,9 +179,12 @@ export interface Destino {
 type Remoto = { proveedor: 'local' | 'drive'; id: string };
 ```
 
-Los fallos salen como `FalloDeArchivo` con una `causa` (`sin-permiso`, `sin-sitio`,
-`demasiado-grande`, `no-esta`, `red`, `desconocida`) para que la pantalla traduzca un código y no
-el texto del proveedor.
+Los fallos salen como `FalloDeArchivo` con una `causa` —`sin-conexion`, `caducada`,
+`sin-permiso`, `api-apagada`, `limite`, `sin-sitio`, `no-esta`, `sin-carpeta`, `red`,
+`servidor`, `desconocida`— y un `detalle` con el código HTTP, la **razón** estructurada de Drive y
+**lo que dijo**, tal cual. La pantalla traduce la causa con `explicar()` (`src/lib/archivo/explicar.ts`)
+en motivo, arreglo y el texto de Drive (tabla en § 4). Cada causa existe porque su arreglo es
+distinto.
 
 Dos implementaciones, y un encaminador delante (`src/lib/archivo/index.ts`):
 
@@ -205,17 +212,24 @@ que entender qué está mirando sin saber que existe un fichero `curso.ts`.
 Dentro de cada asignatura, las carpetas que haya creado la usuaria desde Archicel.
 
 Los identificadores de esas tres carpetas fijas **no se guardan en ningún sitio**: se buscan por
-nombre la primera vez que hacen falta en cada pestaña y se recuerdan en memoria. Con `drive.file` la
-búsqueda solo devuelve lo que creó la aplicación, así que no se confunde con una carpeta de Celeste
-que se llame igual. Consecuencias:
+nombre, **las tres en una sola consulta** (todas las carpetas que se llamen `Archicel` en la raíz,
+`Asignaturas`, `Apuntes` o como la asignatura, y el árbol se reconstruye siguiendo los padres; la
+más antigua gana). Se buscan al abrir la página —sin crear nada: crear carpetas en el Drive de
+alguien por abrir una página sería tocarlo sin que haya hecho nada— y se recuerdan en memoria **como
+promesa**, de modo que cinco subidas a la vez esperan a la misma búsqueda y no crean cinco
+`Archicel`. Lo que falte se crea en la primera escritura. Con `drive.file` la búsqueda solo devuelve
+lo que creó la aplicación, así que no se confunde con una carpeta de Celeste que se llame igual.
+Consecuencias:
 
 - **Si alguien renombra o mueve `Archicel` desde Drive**, la siguiente pestaña no la encuentra y crea
   otra nueva. Lo ya subido sigue abriéndose —la ficha guarda el id, no la ruta— pero lo nuevo va a la
   carpeta nueva.
 - **La primera vez**, si existe `Archicel/Apuntes` (el nombre antiguo), se renombra a `Asignaturas`
   en vez de crear una segunda.
-- **Si se borra una carpeta a mitad de sesión**, el id recordado sigue en memoria hasta recargar
-  (§ 10).
+- **Si se borra una carpeta fija a mitad de sesión**, la primera escritura que se tropiece con el
+  identificador muerto (un 404 que nombra la carpeta de destino) lo olvida, busca o crea la ruta
+  otra vez y **repite una vez**, sin recargar. Si la que falta es una carpeta de la usuaria no hay
+  nada que recrear, y la tira dice «La carpeta «Tema 3» ya no está en tu Drive».
 
 ---
 
@@ -238,13 +252,48 @@ Con `drive` completo esta decisión sería indefendible; con `drive.file` es la 
 ### Subida reanudable, no de un tirón
 
 Hasta 5 MB se sube con un `multipart` de una sola petición. Por encima se usa la **subida
-reanudable** de Drive: se pide una URL de sesión y se mandan trozos de 8 MB con `XMLHttpRequest`,
-que es lo que da el progreso real a la barra de la interfaz.
+reanudable** de Drive: se pide una URL de sesión y se mandan trozos de 8 MB. Las dos van con
+`XMLHttpRequest`, que es lo que da el progreso real a la barra (`fetch` no informa de la subida).
+Una tanda sube **de tres en tres**.
 
-**Lo que no hace todavía es reanudar.** Si la conexión se corta a mitad, la subida falla con `red`
-y «Reintentar» vuelve a empezar de cero; la URL de sesión no se conserva ni se pregunta a Drive
-cuánto había llegado (§ 10). Se implementa una vez, en `archivador-drive`, y ninguna pantalla sabe
-que existe.
+**Y reanuda de verdad:**
+
+- Tras cada trozo, Drive contesta 308 con `Range: bytes=0-N`: lo que tiene **de verdad**, que puede
+  ser menos de lo enviado. El siguiente trozo sale de ahí.
+- Tras un corte, un 5xx o un límite, se espera (1, 2, 4… s, hasta seis veces, ~1 min) y se
+  **pregunta** cuánto llegó (`PUT` con `Content-Range: bytes */total` y cuerpo vacío) en vez de
+  suponerlo.
+- Si aun así se rinde, la sesión se queda recordada **por `File`** (un `WeakMap`), y como la tira
+  guarda el mismo `File`, «Reintentar» pregunta a la misma sesión y sigue: al mismo destino que la
+  primera vez y sin reenviar lo que ya estaba. Si la sesión caducó (404/410), se abre otra.
+- Si el navegador no dejara leer `Range` (Google la expone, pero una respuesta de otro origen solo
+  enseña las cabeceras declaradas), tras enviar un trozo se da por recibido entero —suponer cero
+  repetiría el mismo trozo para siempre—; en una consulta, sin `Range` es cero, que es lo que dice
+  el protocolo.
+
+### Cuando Drive dice que no
+
+Se clasifica por la **razón estructurada** (`error.errors[].reason` y `error.details[].reason`),
+nunca buscando palabras en el texto. La pantalla enseña el motivo, **lo que dijo Drive** y el
+arreglo:
+
+| Drive | Causa | Qué pasa |
+|---|---|---|
+| 401, `authError` | `caducada` | Se tira el token; «Reconectar y reintentar» pide otro |
+| 403 `accessNotConfigured` / `SERVICE_DISABLED` | `api-apagada` | «Actívala en la consola…» — reconectar no lo arregla |
+| 403 `insufficientPermissions` / `ACCESS_TOKEN_SCOPE_INSUFFICIENT` | `sin-permiso` | Reconectar dejando marcada la casilla de Drive |
+| 403 `appNotAuthorizedToFile` / `insufficientFilePermissions` | `sin-permiso` | Es de otra cuenta: mirar de quién es el Drive conectado |
+| 403 `domainPolicy` | `sin-permiso` | La organización no deja: cuenta personal |
+| 403 `storageQuotaExceeded` | `sin-sitio` | Vaciar la papelera de Drive o liberar espacio |
+| 429, 403 `rateLimitExceeded` / `userRateLimitExceeded` | `limite` | **Se reintenta solo** (1, 2, 4 s); si sigue, «espera un minuto» |
+| 403 `dailyLimitExceeded` | `limite` | No se reintenta: «mañana» |
+| 404 del destino | `sin-carpeta` | Carpeta fija: se recrea y se repite. De la usuaria: se dice cuál |
+| 404 del propio fichero | `no-esta` | Al borrar, cuenta como hecho |
+| 5xx | `servidor` | Se reintenta solo si repetir no duplica (no en un `POST` que crea) |
+| corte | `red` | Igual que 5xx |
+
+Los reintentos pasan en `llamar()` (`archivador-drive.ts`) con espera exponencial y un poco de
+azar, respetando `Retry-After` si llega.
 
 ### El token: Google Identity Services, no Firebase
 
@@ -366,10 +415,14 @@ que es lo que hace que lleguen escalonadas sin tocar un número:
    apuntes después; migas de pan arriba («Apuntes › Tema 3»), que también sirven de diana para
    sacar algo arrastrándolo hacia arriba. Arrastrar ficheros del disco encima sube a la carpeta en
    la que se está. Cada fila de Drive lleva un enlace **Verlo en tu Drive**.
-4. **El visor.** Imágenes, PDF y vídeo se ven dentro; el resto (`.docx`, planos, modelos…) ofrece
-   **Descargar**, porque sin convertir nada no hay forma razonable de enseñarlo. El fichero se baja
-   entero y se envuelve en un `blob:`, porque un `<img>` o un `<iframe>` no saben mandar la cabecera
-   de autorización.
+4. **El visor.** Las imágenes que el navegador sabe pintar (no `.heic` ni `.tif`), PDF y vídeo se
+   ven dentro; el resto (`.docx`, planos, modelos…) ofrece **Descargar**. Un `<img>` o un `<iframe>`
+   no saben mandar la cabecera de autorización, así que el fichero se baja con `fetch` **leyendo el
+   flujo**: cada ~200 ms se entrega un `Blob` con lo recibido (`Blob` de `Blob`, que no copia), una
+   imagen se va pintando de arriba abajo, y lo demás enseña «Abriendo… 12 de 40 MB» con una línea de
+   progreso. Descargar solo aparece con el fichero entero. Lo abierto se recuerda en memoria (96 MB,
+   32 por fichero), y **posarse 120 ms sobre una fila** precarga lo de hasta 8 MB con el token
+   vigente. Va a `body` por un portal, igual que la pregunta de borrar (§ 9).
 
 ---
 
@@ -447,7 +500,8 @@ Cuando lo tengas, ponlo en `.env.local` tú y dime «puesto». Igual que con los
 | **1** ✅ | `Archivador` + `archivador-local` + la página de asignatura entera | **Hecha.** El diseño y la animación funcionaron **sin tocar Google**. Hoy lo local solo abre y borra lo antiguo |
 | **2** ✅ | `archivador-drive`, conectar, subir por trozos, borrar, visor, token recordado | **Funcionando** contra Drive real |
 | **2b** ✅ | Carpetas, renombrar, mover (arrastrando), cabecera con la cuenta, tira de fallos con reintento, iconos por tipo | **Funcionando** |
-| **3** | Selector de Google, miniaturas, orden a mano, búsqueda, reanudar una subida cortada | Adjuntar lo que ya esté en su Drive, y que la pantalla aguante doscientos apuntes |
+| **2c** ✅ | Borrar con confirmación y sin perder fichas, errores por razón de Drive con reintento, subida que reanuda, visor por flujo, carpetas en una consulta | **Funcionando**, verificado con Drive simulado (§ 10) |
+| **3** | Selector de Google, miniaturas, orden a mano, búsqueda | Adjuntar lo que ya esté en su Drive, y que la pantalla aguante doscientos apuntes |
 
 La fase 1 no fue relleno: es lo que permitió que el día que llegó el ID de cliente solo hubiera que
 enchufar una implementación detrás de un contrato ya probado. Y si Drive acaba no convenciendo, el
@@ -468,83 +522,128 @@ contrato sigue en pie con otro proveedor detrás.
 - **El nombre del fichero lo escribe quien sea.** Un apunte llamado `<img onerror=…>.pdf` se pinta
   como texto y nunca como HTML. Es la primera regla de [SEGURIDAD.md](../data/SEGURIDAD.md) y aquí
   entra contenido de fuera por primera vez desde que existe el proyecto.
-- **Borrar en Archicel manda el fichero a la papelera de Drive, no lo destruye.** Es lo correcto
-  —treinta días para arrepentirse— pero habría que decirlo en la interfaz, porque «eliminar»
-  sugiere otra cosa. **Hoy no se dice**: el aviso es «Apunte eliminado», y un apunte suelto se
-  borra sin pedir confirmación (una carpeta con cosas dentro sí pregunta).
+- **Borrar en Archicel manda el fichero a la papelera de Drive, no lo destruye**, y la interfaz lo
+  dice: siempre hay una pregunta —«Irá a la papelera de tu Drive, y desde allí se puede recuperar
+  durante 30 días»— y el aviso es «En la papelera de Drive». Una carpeta se pregunta una vez para
+  todo el árbol. La pregunta y el visor se pintan en `body` por un portal: el panel lleva
+  `backdrop-filter`, que encierra todo lo `fixed` de dentro.
 - **Si Celeste lo borra desde Drive, la ficha se queda huérfana.** La pantalla sobrevive: al
-  abrirlo, el visor dice «Ese apunte ya no está en tu Drive», y la papelera de la fila quita la
-  ficha. Lo que no hay es la marca previa: la fila no se enseña apagada hasta que se intenta abrir.
+  abrirlo, el visor dice «Ya no está en tu Drive» con el texto de Drive y dónde mirar, y borrar la
+  fila quita la ficha (un 404 al mandar a la papelera cuenta como hecho). Lo que no hay es la marca
+  previa: la fila no se enseña apagada hasta que se intenta abrir.
 
 ---
 
-## 10 · Lo que falta o está a medias
+## 10 · Lo que se arregló, cómo se comprobó y lo que queda
 
-Resultado de la auditoría del 24 de septiembre de 2026, contrastando este documento con el código.
-Lo marcado **(visto)** se reprodujo en el navegador contra `npm run build && npm start`, con Drive
-simulado (token falso y respuestas de Google interceptadas); lo demás sale de leer el código.
+La auditoría del 24 de septiembre de 2026 dejó aquí una lista de fallos con fichero y línea. La
+segunda pasada, ese mismo día, los arregló todos menos los que eran de otra tarea. **Todo lo
+marcado (visto) se reprodujo en el navegador** contra `npm run build && npm start`, a escritorio
+(1440×900), con Drive simulado: token falso, el cliente de Google sustituido, y cada respuesta de
+`googleapis.com` servida por un Drive falso en memoria que entiende las consultas, las carpetas, la
+papelera, las subidas `multipart` y las reanudables con su `Range`, y al que se le inyectan fallos
+con el cuerpo de error que manda Drive de verdad.
+
+### Arreglado
 
 **Riesgo de perder o descolocar apuntes**
 
-- **Borrar se traga el fallo de Drive (visto).** `Asignatura.tsx:517-523` y `:547-551` ignoran
-  cualquier error al mandar a la papelera —no solo «ya no está»— y borran la ficha igual. Con Drive
-  devolviendo 503, la carpeta desapareció de Archicel y seguiría viva en Drive, sin nada que la
-  enlace ya.
-- **La migración al entrar no se lleva apuntes ni carpetas.** `src/lib/data/index.ts:75-86` solo
-  sube eventos, tareas, ajustes y el layout. Lo organizado sin cuenta deja de verse al entrar
-  (los ficheros siguen en Drive, las fichas se quedan en el almacén local), y la marca de migración
-  es de una sola vez.
-- **Borrar una carpeta con subcarpetas llenas vuelve a preguntar por cada una**
-  (`Asignatura.tsx:541-546`). Si se cancela una de dentro, la de fuera se borra igual y la hija
-  queda con una `madre` que ya no existe: invisible en el árbol.
-- **Si el almacén rechaza la ficha después de subir** (`Asignatura.tsx:343`, por ejemplo un nombre
-  de más de 300 caracteres, que las reglas no aceptan), el fichero ya está en Drive pero la tira
-  dice que «no llegó a Drive», y reintentar lo sube otra vez.
+- **Borrar ya no se traga el fallo de Drive (visto).** La ficha solo se borra cuando Drive confirma
+  la papelera (o dice que ya no estaba). Con un 503 persistente: tres reintentos (1, 2, 4 s), la
+  fila apagada con «A la papelera…», y después la ficha **sigue**, el fichero sigue fuera de la
+  papelera y la tira dice «Drive no responde ahora mismo (503)» con el texto de Drive y
+  «Reintentar», que con Drive sano lo manda a la papelera y quita la ficha.
+- **Borrar pregunta siempre (visto)**, apunte o carpeta, y dice que va a la papelera de Drive y se
+  recupera durante 30 días. Cancelar y Escape no tocan nada (cero peticiones). Lo antiguo del
+  navegador dice que no tiene vuelta atrás y el foco empieza en «Cancelar».
+- **Una carpeta con subcarpetas se pregunta una vez (visto)** —«2 carpetas y 4 apuntes»— y va a la
+  papelera con **una** llamada: en Drive la carpeta se lleva todo lo de dentro. Si esa llamada
+  falla, no se borra ninguna ficha: ni la carpeta, ni las hijas, ni los apuntes. Nunca queda una
+  hija con una madre que ya no existe (`src/lib/archivo/arbol.ts`).
+- **La ficha rechazada después de subir ya no se confunde con una subida fallida.** La tira dice
+  «Está en tu Drive, pero Archicel no pudo apuntarlo», y reintentar solo vuelve a apuntarla. El caso
+  que la auditoría encontró —nombre de más de 300 caracteres— ya no llega ahí **(visto)**: la ficha
+  acorta el nombre por el medio conservando la extensión, y en Drive se queda entero. *La rama de
+  «ficha rechazada» en sí no se ha visto*: el almacén local nunca rechaza (se traga sus errores) y
+  sin sesión no hay Firestore que lo haga.
 
-**Errores que no dicen la verdad** — va contra la regla de que un error sin el texto de Drive no
-sirve de nada:
+**Errores que ahora dicen la verdad**
 
-- **Cualquier `sin-permiso` se presenta como sesión caducada (visto).** `Asignatura.tsx:362-374`.
-  Un 403 de «Google Drive API has not been used in project … or it is disabled» salió en la tira
-  como «La sesión de Drive ha caducado» con el botón «Reconectar y reintentar», que no lo arregla.
-  El texto de Drive solo queda en la consola.
-- **Un límite de peticiones se presenta como «No queda espacio» (visto).**
-  `archivador-drive.ts:72` busca `quota` en todo el cuerpo, y el 403 `userRateLimitExceeded` dice
-  «…exceed configured project quota». La tira pidió vaciar la papelera.
-- **Cualquier 404 dice «Ese apunte ya no está en tu Drive»** (`archivador-drive.ts:77`), también
-  cuando lo que falta es la carpeta de destino de una subida o de un movimiento.
-- **`demasiado-grande` ya no puede ocurrir** (solo lo lanza el archivador local, que no sube), y su
-  arreglo en `Asignatura.tsx:380` propone «enlázalo desde ahí», que no existe.
+- **Cada 403 con su diagnóstico (visto):** API apagada (con su texto «has not been used in
+  project…» y el paso de la consola), permiso sin Drive, fichero de otra cuenta, política de la
+  organización, cuota llena, límite diario. Cada uno con su arreglo; solo los que se arreglan
+  reconectando ofrecen «Reconectar y reintentar».
+- **El límite de peticiones ya no es «no queda espacio» (visto).** Se clasifica por la razón
+  (`userRateLimitExceeded`, `rateLimitExceeded`, 429), se reintenta solo con espera exponencial
+  (dos 429 seguidos y el tercero bien: sin tira, ~4 s) y, si no cede, «Drive está recibiendo
+  demasiadas peticiones… espera un minuto».
+- **401 = sesión caducada, y reconectar funciona (visto).** Se tira el token recordado; «Reconectar y
+  reintentar» pidió uno nuevo a Google una vez y la subida entró.
+- **Un 404 dice qué falta (visto).** Carpeta de la usuaria borrada desde Drive: «La carpeta «Tema 3»
+  ya no está en tu Drive». Carpeta de la asignatura borrada a mitad de sesión: se olvida el id
+  recordado, se busca, se crea la nueva y la subida entra en ella, **sin recargar y sin tira**.
+  Apunte que ya no existe: el visor lo dice con el texto de Drive.
+- **`demasiado-grande` ya no existe** como causa, ni su «enlázalo desde ahí».
 
-**Diferencias entre lo que se dice y lo que hace**
+**Lo que se decía y no se hacía**
 
-- **Crear carpeta exige Drive.** El botón se deshabilita sin conectar (`Asignatura.tsx:612`) y
-  `crearCarpeta` pasa por `asegurarDrive` (`index.ts:123`). Contradice «organizarse no puede
-  depender de la infraestructura» (CLAUDE.md, `archivador.ts:103-106`, `Asignatura.tsx:213-215`).
-  Renombrar y mover lo antiguo local sí funciona sin conectar.
-- **La subida «reanudable» no reanuda** (`archivador-drive.ts:323-330`): un corte vuelve a empezar
-  de cero. Además da por recibido el trozo entero con cada 308 sin leer la cabecera `Range`
-  (`:209`).
-- **Los ids de las carpetas fijas se recuerdan por pestaña** (`archivador-drive.ts:47`): si se
-  borran desde Drive a mitad de sesión, las subidas fallan con «ya no está» hasta recargar.
-
-**Piezas escritas y sin usar**
-
-- **No hay forma de desconectar Drive.** `soltarPermiso` (`google.ts:263`) está exportado pero
-  ninguna pantalla lo llama; `olvidarQuien` (`archivador-drive.ts:254`) y `seHaUsadoDrive`
-  (`google.ts:166`) no los usa nadie.
-- **`image/vnd.dwg` nunca llega a «Plano»** (`iconos.tsx:135`): `image/` se comprueba antes
-  (`:70`), así que un `.dwg` con ese MIME se enseña como imagen y el visor intenta pintarlo en un
-  `<img>`.
+- **Crear carpeta exige Drive**, y ahora es lo decidido, no una contradicción: una carpeta de
+  Archicel es una carpeta en Drive. Los comentarios que decían lo contrario se corrigieron.
+- **La subida reanudable reanuda (visto):** con Drive aceptando solo 5 de cada 8 MB, los trozos
+  siguieron desde el `Range` (0, 5, 10, 15 MB) sin un solo desfase; con un corte de red en el
+  segundo trozo, preguntó cuánto había llegado y siguió desde los 8 MB, una sola sesión; con un
+  503 en un trozo, igual. Con un corte largo se rindió, y «Reintentar» siguió en la **misma
+  sesión**: reenvió 12 MB de 20, no 20, y quedó una sola copia.
+- **Los ids de las carpetas fijas se recuperan sin recargar (visto)**: arriba.
 
 **Menores**
 
-- La barra de progreso y la tira identifican cada fichero por su nombre (`Asignatura.tsx:335`,
-  `:686`): dos ficheros con el mismo nombre en una tanda se pisan.
-- «Reintentar» sube a la carpeta en la que se está **ahora**, no a la de la subida original
-  (`Asignatura.tsx:418`).
-- El visor descarga el fichero entero a memoria antes de enseñarlo (`archivador-drive.ts:402-403`):
-  una lámina de 80 MB tarda en abrir sin decir cuánto le falta.
-- Comentarios del código que se quedaron atrás: `index.ts:12` («este equipo si no»),
-  `archivador.ts:8-12`, `archivador-local.ts:4-11`, `tipos.ts:177` («Drive mañana, el navegador
-  hoy»), `firestore.rules:125` y `iconos.tsx:12` (dice 16 %; el CSS usa 15 %).
+- **`.dwg` con `image/vnd.dwg` es un plano (visto):** «Plano · 5 kB», y el visor ofrece descargar
+  en vez de meterlo en un `<img>`. Una `.heic` tampoco se intenta pintar.
+- **Dos ficheros con el mismo nombre en una tanda (visto):** tres `igual.pdf`, tres barras, dos
+  filas y una línea en la tira para el que falló, sin avisos de claves repetidas de React.
+- **«Reintentar» va a la carpeta original (visto):** subida fallida dentro de «Tema X», reintento
+  desde la raíz, el fichero acabó en «Tema X» en Drive y en la ficha.
+- **El visor enseña lo antes posible:** lee el flujo, pinta la imagen con lo que ha llegado y
+  enseña cuánto lleva lo demás. Lo recordado en memoria y la precarga al posarse **(visto)**: la
+  segunda apertura de una imagen de 3 MB tardó 31 ms y no pidió nada. *El pintado progresivo y la
+  línea de progreso no se han visto*: el Drive falso entrega la respuesta de golpe, así que no hay
+  parciales que mirar.
+- **El visor se podía cerrar sin querer (visto, no estaba en la auditoría):** vivía dentro del panel,
+  cuyo `backdrop-filter` lo encerraba, y su telón le quedaba encima; cualquier clic dentro lo
+  cerraba. Ahora va a `body` por un portal y por encima del telón.
+- Comentarios desfasados corregidos en `index.ts`, `archivador.ts`, `archivador-local.ts`,
+  `tipos.ts`, `firestore.rules` e `iconos.tsx` (15 %, no 16 %).
+
+### Medido
+
+Drive simulado con 150 ms por petición y 20 MB/s de subida; mismo guion contra la construcción de
+antes y la de después:
+
+| | Antes | Después |
+|---|---|---|
+| Primera tanda (3 × 1 MB, sin carpetas en Drive) | 2246 ms · 10 peticiones | 1292 ms · 7 |
+| Segunda tanda (3 × 1 MB) | 1099 ms · 3 | 700 ms · 3 |
+| Primera subida con las carpetas ya en Drive | 1198 ms · 5 (4 búsquedas en serie) | 687 ms · 1 |
+| Un fichero de 20 MB | 3032 ms · 4 | 3227 ms · 4 (igual: los trozos van en serie por protocolo) |
+| Abrir una imagen de 6 MB, primera vez / segunda | 405 / 392 ms · 2 descargas | 422 / 32 ms · 1 |
+| Borrar carpeta con 2 subcarpetas y 5 apuntes | 8 peticiones · 3 preguntas | 1 petición · 1 pregunta |
+| Al abrir la página | `about` | `about` + 1 búsqueda (sin crear nada) |
+
+### Lo que queda
+
+- **La migración al entrar no se lleva apuntes ni carpetas.** `src/lib/data/index.ts` solo sube
+  eventos, tareas, ajustes y el layout. Lo lleva otra tarea.
+- **No hay forma de desconectar Drive.** `soltarPermiso` (`google.ts`) y `olvidarQuien`
+  (`archivador-drive.ts`) siguen sin pantalla que los llame. Lo lleva otra tarea.
+- **Recargar pasada la hora** vuelve a «Sin conectar» y pide pulsar Conectar Drive: es el precio de
+  no tener secreto de cliente (§ 4), no un fallo.
+- **Si el navegador no dejara leer `Range`**, tras un trozo se daría por recibido entero (§ 4). No
+  se ha podido comprobar contra Google de verdad qué cabeceras expone; el Drive falso las expone.
+- **Borrar una carpeta confía en que Drive refleja el árbol de Archicel.** Si alguien movió un
+  fichero fuera de su carpeta desde Drive, mandar la carpeta a la papelera no se lo lleva, y su
+  ficha se borra igual: el fichero queda vivo en Drive, fuera de Archicel.
+- **Un 404 al borrar quita la ficha.** Es lo correcto si se borró desde Drive; si algún día dos
+  personas comparten cuenta de Archicel, borrar un apunte fantasma del otro quitaría su ficha
+  (su fichero seguiría en su Drive). La pregunta de confirmación sale igual en los dos casos.
+- **La fila no se marca huérfana** hasta que se intenta abrir (§ 9).
