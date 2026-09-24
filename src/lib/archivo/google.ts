@@ -68,7 +68,7 @@ declare global {
             callback: (r: { access_token?: string; expires_in?: number; error?: string; error_description?: string }) => void;
             error_callback?: (e: { type?: string }) => void;
           }): ClienteToken;
-          revoke(token: string, hecho?: () => void): void;
+          revoke(token: string, hecho?: (r: { successful?: boolean; error?: string }) => void): void;
         };
       };
     };
@@ -109,6 +109,36 @@ let token: string | null = null;
 let caducaEn = 0;
 let leido = false;
 
+/* Conectar y desconectar se avisan con un evento del navegador, no con estado de React:
+   este fichero no sabe de componentes, y así cualquier pantalla —los ajustes, la página
+   de una asignatura— puede enterarse sin que la otra tenga que estar montada. */
+const CAMBIO = 'archicel:drive';
+const avisarCambio = () => window.dispatchEvent(new Event(CAMBIO));
+
+/**
+ * Avisa cada vez que Drive se conecta o se desconecta, en esta pestaña **o en otra**.
+ *
+ * Lo segundo importa: si se desconecta desde una ventana, la otra conservaba el token en
+ * memoria y seguía subiendo con un permiso que ya no existe.
+ */
+export function alCambiarDrive(fn: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const ajeno = (e: StorageEvent) => {
+    if (e.key !== GUARDADO && e.key !== USADO) return;
+    /* Lo que diga el almacenamiento manda: se vuelve a leer en la siguiente consulta. */
+    token = null;
+    caducaEn = 0;
+    leido = false;
+    fn();
+  };
+  window.addEventListener(CAMBIO, fn);
+  window.addEventListener('storage', ajeno);
+  return () => {
+    window.removeEventListener(CAMBIO, fn);
+    window.removeEventListener('storage', ajeno);
+  };
+}
+
 /**
  * Se lee de `localStorage` **la primera vez que hace falta**, no al cargar el módulo.
  *
@@ -144,6 +174,7 @@ function guardar(nuevo: string, dura: number): string {
     /* sin almacenamiento se pierde la comodidad, no la función: seguirá valiendo en esta
        pestaña hasta que caduque */
   }
+  avisarCambio();
   return nuevo;
 }
 
@@ -154,6 +185,7 @@ function olvidar(): void {
     localStorage.removeItem(GUARDADO);
     localStorage.removeItem(USADO);
   } catch {}
+  avisarCambio();
 }
 
 /**
@@ -276,9 +308,42 @@ export function yaEstaConectado(): boolean {
   return hayClienteConfigurado() && hayPermiso();
 }
 
-/** Corta la conexión: se la revoca a Google y se olvida el token. */
-export function soltarPermiso(): void {
-  const t = token;
+/* Lo que se espera a que Google conteste antes de dar la revocación por no confirmada. */
+const ESPERA_REVOCAR_MS = 8000;
+
+/**
+ * Corta la conexión: se olvida el token **y** se le pide a Google que retire el permiso.
+ *
+ * Olvidar va primero y no depende de nada. Aunque Google no conteste, desde ese momento
+ * Archicel no tiene con qué entrar en el Drive de nadie, que es lo que se ha pedido.
+ *
+ * Devuelve si Google **confirmó** la revocación. Puede no hacerlo por dos motivos que no
+ * son un fallo de Archicel: que el token ya hubiera caducado —pasada la hora no queda
+ * nada que revocar desde aquí— o que no haya red. Entonces el permiso sigue concedido en
+ * la cuenta de Google, sin ningún token que lo use, y se retira desde allí.
+ *
+ * El guion de Google se carga si hace falta. Al recargar, el token sale de `localStorage`
+ * y el guion no se ha pedido nunca, así que sin cargarlo `revoke` no existe: antes eso
+ * convertía la revocación en un no-op silencioso.
+ */
+export async function soltarPermiso(): Promise<boolean> {
+  recordar();
+  const t = hayPermiso() ? token : null;
   olvidar();
-  if (t) window.google?.accounts?.oauth2?.revoke(t);
+  if (!t) return false;
+
+  try {
+    await cargarGuion();
+    const oauth2 = window.google?.accounts?.oauth2;
+    if (!oauth2) return false;
+    return await new Promise<boolean>((resolver) => {
+      const plazo = window.setTimeout(() => resolver(false), ESPERA_REVOCAR_MS);
+      oauth2.revoke(t, (r) => {
+        window.clearTimeout(plazo);
+        resolver(r?.successful !== false && !r?.error);
+      });
+    });
+  } catch {
+    return false;
+  }
 }

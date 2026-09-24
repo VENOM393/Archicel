@@ -1,9 +1,9 @@
 # Graft — referencia
 
-Repo: [trailhq/Graft](https://github.com/trailhq/Graft) · paquete `@nanonets/graft` v0.18.0 · MIT ·
+Repo: [trailhq/Graft](https://github.com/trailhq/Graft) · paquete `@nanonets/graft` v0.19.0 (la instalada) · MIT ·
 requiere Node ≥ 20.
 
-Lo operativo (cuándo instalarlo, qué hacer antes y después, reglas de uso diario) está en
+Lo operativo (qué está instalado y con qué decisiones, los worktrees, reglas de uso diario) está en
 [CLAUDE.md](../../CLAUDE.md). Esto es la referencia larga: comandos, flags, qué corre dónde y qué
 hacer cuando algo no cuadra.
 
@@ -138,12 +138,12 @@ graft uninstall --keep-cache         # quita el cableado, deja graft/ y la entra
 graft init [dir]                     # pregunta qué agentes cablear; no escribe nada hasta que eliges
 graft init --dry-run                 # lista cada fichero que tocaría y sale
 graft init --agents claude           # solo Claude Code, sin preguntar
-graft init --no-global               # no escribe fuera del repo (~/.codex/)
+graft init --no-global               # no escribe fuera del repo (~/.codex/ y, desde 0.19, ~/.claude/)
 graft init --no-mcp                  # sin registrar el servidor MCP
 graft init --no-hooks                # sin hooks
 graft init --no-statusline           # sin statusline (= GRAFT_NO_STATUSLINE=1)
 graft init --no-build                # solo cablea, no construye el grafo
-graft init --list-agents             # ids conocidos: agents, cursor, gemini, grok, copilot, kiro, windsurf, adal, claude
+graft init --list-agents             # ids conocidos: agents, adal, cursor, gemini, grok, hermes, antigravity, copilot, kiro, windsurf, claude
 ```
 
 Sin terminal interactiva (CI, Dockerfile, shell con pipe) `init` **no escribe nada** e imprime el
@@ -161,6 +161,7 @@ comando a ejecutar. Hay que pasar `--agents <ids>` o `--yes` para que un script 
 | Statusline con tamaño del grafo, % enriquecido y aviso `⚠ N stale` | `.claude/settings.json` + `.claude/helpers/graft-statusline.cjs` |
 | Hooks de auto-sync y aviso de radio de impacto al editar | `.claude/settings.json` + `.claude/helpers/graft-hooks.cjs` |
 | Servidor MCP con 6 herramientas | `.mcp.json` — **requiere reiniciar Claude Code** |
+| Re-admisión de `graft/` en las búsquedas de ripgrep | `.ignore` |
 
 Herramientas MCP: `graft_find_code` (pregunta), `graft_file_api` (ruta de fichero),
 `graft_trace_calls` (símbolo, con `direction` y `depth`), `graft_find_all` (regex),
@@ -171,6 +172,24 @@ la superficie que esté disponible.
 `statusLine` que no sea el suyo (cualquiera cuyo comando no mencione `graft-statusline.cjs`) no lo
 toca. **Nunca toca `CLAUDE.md`.**
 
+Sin `--no-global`, 0.19 escribe además una copia a nivel de usuario —`~/.claude/helpers/graft-hooks.cjs`,
+hooks en `~/.claude/settings.json` y el MCP en `~/.claude.json`— que se aplica a **todos** los
+proyectos. Aquí no se quiere. Ojo: `--dry-run` las lista igual aunque se pase `--no-global`; es el
+listado el que no mira la flag, la ejecución real sí la respeta (comprobado: esos ficheros no cambian).
+
+El MCP queda como `npx -y @nanonets/graft mcp` y no como `graft mcp`: Graft comprueba si `graft` está
+en el PATH con un `spawnSync` sin shell, que en Windows no encuentra `graft.cmd`. Funciona igual —
+`npx` reutiliza la instalación global— y se deja tal cual: si se cambiara a mano, el siguiente
+re-cableado lo devolvería a `npx` y dejaría el árbol sucio.
+
+### El sello de cableado
+
+`graft/.cache/wiring-stamp.json` guarda con qué versión y qué flags se hizo el `init`. Al arrancar
+una sesión (hook `SessionStart`) y al arrancar el MCP, si el sello falta o es de otra versión, Graft
+re-cablea con las flags del sello. **Sin sello usa los valores por defecto, `global: true` incluido.**
+Como `graft/` no se versiona, eso pasa en cada worktree o clon nuevo; por eso se prepara con
+`graft init --agents claude --no-global --no-build` antes de la primera sesión (ver CLAUDE.md).
+
 El auto-sync es estructural y gratis: nunca lanza el LLM por su cuenta. Si se quiere la capa de
 resúmenes hay que pedir `graft build --deep` explícitamente.
 
@@ -179,7 +198,7 @@ resúmenes hay que pedir `graft build --deep` explícitamente.
 ## Limitaciones y cosas que sorprenden
 
 - **El grafo es caché local.** `graft/` está git-ignored; cada persona que clone el repo corre su
-  propio `graft build`. Lo que se comparte es el cableado de `.claude/`.
+  propio `graft build`. Lo que se comparte es el cableado de `.claude/`, `.mcp.json` y `.ignore`.
 - **Las fichas markdown bajo `graft/` van un paso por detrás.** Se regeneran al final del turno, no
   en cada consulta. Los *comandos* sí están siempre al día; si se hace `grep` directamente sobre los
   ficheros de `graft/`, hay que tratar como sospechosos los spans de un fichero editado en ese turno.

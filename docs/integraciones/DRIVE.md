@@ -18,6 +18,9 @@ de ser permanente. Dentro de la hora, recargar no pide nada. Pasada la hora, con
 la siguiente acción la renueva; si se recarga la página ya caducada, la pantalla vuelve a «Sin
 conectar» y hay que pulsar **Conectar Drive** (§ 4). El porqué está en CLAUDE.md.
 
+**Se desconecta desde Ajustes** (`/ajustes`, en el menú del avatar), que dice también con qué cuenta
+de Google está conectado. Desconectar no borra nada (§ 6).
+
 ---
 
 ## 1 · El permiso: lo que pides no existe, y lo que existe es mejor
@@ -140,9 +143,14 @@ carpeta, renombrar, mover). Al cargar, con Drive conectado, hay dos llamadas y n
 que la primera subida no tenga que esperarla (§ 3, «La carpeta, en Drive»).
 
 Sin sesión de Archicel las fichas viven en el almacén del navegador y los bytes siguen yendo a Drive.
-**Ojo:** al entrar con una cuenta, la migración a la nube **no se lleva ni apuntes ni carpetas**
-(§ 10).
+Al entrar con una cuenta, **la migración sube también apuntes y carpetas**, con sus mismos ids —así
+un apunte sigue dentro de su carpeta y una carpeta dentro de su madre—. Cada colección lleva su
+propia marca, de modo que quien ya había migrado antes de este cambio recibe las dos en su siguiente
+arranque sin repetir lo demás. El mecanismo está en [CUENTAS.md](../data/CUENTAS.md).
 
+Un apunte con `remoto.proveedor: 'local'` —de antes de que todo fuera a Drive— sube igual: su ficha
+llega a la nube, pero sus bytes siguen en el IndexedDB de **ese** navegador. Ahí se sigue abriendo;
+en otro dispositivo sale «ya no está», que es la verdad.
 ### El contrato: `Archivador`
 
 En `src/lib/archivo/archivador.ts`. Empezó con cuatro verbos, como el almacén, y creció con la
@@ -230,6 +238,10 @@ Consecuencias:
   identificador muerto (un 404 que nombra la carpeta de destino) lo olvida, busca o crea la ruta
   otra vez y **repite una vez**, sin recargar. Si la que falta es una carpeta de la usuaria no hay
   nada que recrear, y la tira dice «La carpeta «Tema 3» ya no está en tu Drive».
+- **Al desconectar** (§ 6, Ajustes) se olvidan los ids recordados, junto con todo lo demás de esa
+  cuenta: la búsqueda va por nombre y no por cuenta, así que conectar otra en la misma pestaña
+  subiría a carpetas que no son suyas. Si la cuenta cambia sin desconectar —caduca la hora y al
+  reconectar se elige otra—, el 404 del punto anterior hace de red de seguridad.
 
 ---
 
@@ -423,6 +435,54 @@ que es lo que hace que lleguen escalonadas sin tocar un número:
    progreso. Descargar solo aparece con el fichero entero. Lo abierto se recuerda en memoria (96 MB,
    32 por fichero), y **posarse 120 ms sobre una fila** precarga lo de hasta 8 MB con el token
    vigente. Va a `body` por un portal, igual que la pregunta de borrar (§ 9).
+4. **El visor.** Imágenes, PDF y vídeo se ven dentro; el resto (`.docx`, planos, modelos…) ofrece
+   **Descargar**, porque sin convertir nada no hay forma razonable de enseñarlo. El fichero se baja
+   entero y se envuelve en un `blob:`, porque un `<img>` o un `<iframe>` no saben mandar la cabecera
+   de autorización.
+
+### Ajustes: con qué cuenta, y cómo soltarla
+
+Ruta **`/ajustes`** (`src/app/ajustes/page.tsx`), enlazada desde el menú del avatar. Antes no había
+pantalla de ajustes: la cuenta vivía solo en ese menú, y la conexión con Google no vivía en ningún
+sitio. Es una pantalla y no un trozo más del menú porque desconectar pide confirmar y explicar qué
+pasa con los apuntes, y eso no cabe en una caja de 266 px.
+
+Una portada tipográfica —quién es y dónde se guardan sus cosas— y un solo panel de cristal, el de
+Drive, con cuatro estados:
+
+| Estado | Cuándo | Qué ofrece |
+|---|---|---|
+| **Conectado** | hay token válido | el correo de `drive/v3/about` en grande y **Desconectar Drive** (contorno) |
+| **Caducado** | se conectó pero pasó la hora | **Renovar ahora** (la acción sólida) y Desconectar |
+| **Sin conectar** | nunca, o se desconectó | **Conectar Drive** |
+| **No configurado** | falta `NEXT_PUBLIC_GOOGLE_CLIENT_ID` en el despliegue | nada que pulsar |
+
+**Desconectar pide confirmación**, y la pregunta sustituye a la fila de botones en el mismo sitio en
+vez de abrir una ventana. El foco va a «Cancelar», Escape la cierra, y al cerrarla el foco vuelve al
+botón que la abrió. Confirmar llama a `desconectarDrive()` (`src/lib/archivo/index.ts`), que:
+
+1. olvida **todo lo que el archivador recordaba de esa cuenta** (`olvidarQuien`): el correo, los
+   **ids de carpeta**, las subidas por trozos a medias y los ficheros abiertos. Las carpetas se
+   buscan por nombre y no por cuenta, así que conectando otra en la misma pestaña se subiría a las
+   de la anterior; y lo que estuviera en vuelo al desconectar ya no guarda lo que trae;
+2. olvida el token y la marca de «se ha usado Drive» en `localStorage`;
+3. **pide a Google que revoque el permiso**, cargando antes su guion si hace falta: tras recargar el
+   token sale de `localStorage` y el guion no se ha pedido nunca, y sin él la revocación era un no-op.
+
+La pantalla pasa a «Sin conectar» **sin recargar**: `google.ts` emite `archicel:drive` al conectar y
+al desconectar, y `alCambiarDrive(fn)` lo escucha —también el evento `storage`, así que otra pestaña
+abierta suelta su token en memoria en lugar de seguir usando uno revocado—. La página de una
+asignatura también lo escucha: abierta en otra pestaña, pasa a «Sin conectar» y ofrece Conectar
+Drive sin recargar, y al conectar busca la carpeta de la cuenta nueva.
+
+**Desconectar no borra nada.** Los ficheros siguen en Drive y sus fichas en Archicel; al volver a
+conectar la **misma** cuenta todo se abre como antes. Con otra cuenta, los apuntes anteriores salen
+«ya no está en tu Drive» —`drive.file` solo alcanza lo que se creó bajo su autorización—.
+
+**Si Google no confirma la revocación** —pasa cuando el token ya había caducado, porque sin token no
+hay nada que revocar desde el navegador, o sin red—, Archicel se desconecta igual y lo dice: el
+permiso queda concedido en la cuenta de Google, sin ningún token que lo use, y la pantalla enlaza a
+*Cuenta de Google → Conexiones* para retirarlo desde allí.
 
 ---
 
@@ -630,12 +690,30 @@ antes y la de después:
 | Borrar carpeta con 2 subcarpetas y 5 apuntes | 8 peticiones · 3 preguntas | 1 petición · 1 pregunta |
 | Al abrir la página | `about` | `about` + 1 búsqueda (sin crear nada) |
 
-### Lo que queda
+### Integrado con la otra tarea
 
-- **La migración al entrar no se lleva apuntes ni carpetas.** `src/lib/data/index.ts` solo sube
-  eventos, tareas, ajustes y el layout. Lo lleva otra tarea.
-- **No hay forma de desconectar Drive.** `soltarPermiso` (`google.ts`) y `olvidarQuien`
-  (`archivador-drive.ts`) siguen sin pantalla que los llame. Lo lleva otra tarea.
+La migración de apuntes y carpetas al entrar, **Desconectar Drive** en Ajustes y el arreglo de
+`guardar` en Firestore (un opcional ausente se borra con `deleteField()`) llegaron de la tarea
+paralela y se fusionaron aquí. Lo comprobado después de fusionar, con el Drive falso ya capaz de
+tener dos cuentas —cada una solo ve lo suyo, como con `drive.file`—:
+
+- **Desconectar desde Ajustes en otra pestaña (visto):** la página de la asignatura pasó a «Sin
+  conectar», con Conectar Drive como acción y Subir y Carpeta deshabilitados, **en 4 ms y sin
+  recargar**. La escucha `alCambiarDrive` y, en el archivador, una desconexión de verdad (se va la
+  marca de uso, no solo caduca el token) hace que **cada pestaña** olvide lo suyo: la memoria es
+  por pestaña y desconectar se pulsa en una sola.
+- **Conectar otra cuenta en esa misma pestaña (visto):** la cabecera dijo la cuenta nueva, y la
+  primera subida buscó y creó el árbol `Archicel/Asignaturas/…` **de la cuenta nueva** y subió
+  ahí a la primera, sin tropezar con los ids de la anterior. Un apunte de la cuenta anterior sale
+  «Ya no está en tu Drive», como se describe en § 6.
+- **Mover a la raíz (visto en el almacén local):** la ficha pierde `carpeta` y en Drive el fichero
+  pasa a la carpeta de la asignatura. *Contra Firestore no se ha visto*: sin sesión no hay nube;
+  el borrado del campo en la nube lo verificó la otra tarea.
+- Todas las llamadas a `guardar` de la página pasan el documento entero (las altas son nuevas; al
+  renombrar y mover se copia la ficha completa), así que el `deleteField()` solo borra lo que se
+  quita a propósito.
+
+### Lo que queda
 - **Recargar pasada la hora** vuelve a «Sin conectar» y pide pulsar Conectar Drive: es el precio de
   no tener secreto de cliente (§ 4), no un fallo.
 - **Si el navegador no dejara leer `Range`**, tras un trozo se daría por recibido entero (§ 4). No

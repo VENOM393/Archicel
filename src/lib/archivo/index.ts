@@ -17,9 +17,9 @@
  * pantalla tenga que saber que son dos.
  */
 
-import { crearArchivadorDrive } from './archivador-drive';
+import { crearArchivadorDrive, olvidarQuien } from './archivador-drive';
 import { crearArchivadorLocal } from './archivador-local';
-import { hayClienteConfigurado, hayPermiso, yaEstaConectado } from './google';
+import { hayClienteConfigurado, hayPermiso, seHaUsadoDrive, soltarPermiso, yaEstaConectado } from './google';
 import { FalloDeArchivo, type Archivador, type Remoto } from './archivador';
 
 let local: Archivador | null = null;
@@ -59,6 +59,31 @@ export function reconectarDriveEnSilencio(): Promise<boolean> {
 /** Si Drive está conectado **ahora**, en esta pestaña. */
 export function driveConectado(): boolean {
   return hayClienteConfigurado() && hayPermiso();
+}
+
+/**
+ * Si se conectó alguna vez en este navegador y no se ha desconectado, aunque el token
+ * haya caducado. Es lo que distingue «pasó la hora, la siguiente acción lo renueva» de
+ * «nunca se conectó» — dos pantallas distintas con el mismo `driveConectado() === false`.
+ */
+export function driveRecordado(): boolean {
+  return hayClienteConfigurado() && seHaUsadoDrive();
+}
+
+/**
+ * Desconecta Drive de este navegador.
+ *
+ * Retira el permiso en Google y olvida el token recordado y **todo lo que el archivador
+ * recordaba de esa cuenta** —quién es, los ids de carpeta, las subidas a medias, lo
+ * abierto—, que lo suelta él mismo en `olvidarQuien` porque es quien sabe cómo lo guarda.
+ * **No borra nada de Drive**: los ficheros siguen donde estaban y las fichas de Archicel
+ * también; al volver a conectar la misma cuenta, todo se abre como antes.
+ *
+ * Devuelve si Google confirmó la revocación (ver `soltarPermiso`).
+ */
+export async function desconectarDrive(): Promise<boolean> {
+  olvidarQuien();
+  return soltarPermiso();
 }
 
 /** Sin ID de cliente no hay a quién pedirle nada, y decirlo es mejor que fallar. */
@@ -126,5 +151,5 @@ export { deQuienEsElDrive, precargar, prepararCarpeta } from './archivador-drive
 export * from './iconos';
 export * from './archivador';
 export * from './explicar';
-export { soltarPermiso } from './google';
 export * from './arbol';
+export { alCambiarDrive } from './google';

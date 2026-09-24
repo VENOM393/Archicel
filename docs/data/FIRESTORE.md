@@ -178,12 +178,38 @@ verbos —`listar`, `guardar`, `borrar`, `escuchar`— y dos implementaciones:
 Cambiar de una a otra es una línea. La interfaz nunca sabe dónde viven los datos, y por eso se puede
 trabajar sin conexión, hacer pruebas sin tocar la base real y migrar sin reescribir pantallas.
 
+**Cómo escribe `guardar` en Firestore.** Con `setDoc(…, { merge: true })`, para no perder `creado`
+ni lo que otra versión de la aplicación haya añadido al documento. El precio de `merge` es que
+**conserva todo campo que no venga**, así que quitar un campo del objeto no lo quita de la nube:
+mover un apunte a la raíz (`delete a.carpeta`) lo dejaba dentro de la carpeta de antes. Por eso
+cada colección declara sus campos opcionales en `almacen-firestore.ts`:
+
+| Colección | Opcionales |
+|---|---|
+| `eventos` | `materia`, `nota` |
+| `tareas` | `asignatura`, `progreso` |
+| `apuntes` | `carpeta`, `orden` |
+| `carpetas` | `madre` |
+
+El opcional que no llega, o llega `undefined`, se manda como `deleteField()` y desaparece.
+`undefined` necesitaba ese trato de todas formas: Firestore rechaza la escritura entera si lo
+encuentra, y una tarea sin asignatura no se guardaba. Las reglas aceptan el resultado, porque
+todas escriben los opcionales como `!('campo' in request.resource.data) || …`.
+
+Dos condiciones para que esto siga siendo cierto: **`guardar` recibe siempre el documento
+completo** —el que se leyó, con lo que cambió—, nunca un trozo, porque un trozo borraría los
+opcionales que no trajera; y **un opcional nuevo en `tipos.ts` va también a esa lista**. El almacén
+local no lo necesita: reescribe el documento entero.
+
 El orden de trabajo cuando tengamos la configuración:
 
 1. Meter `firebaseConfig` en variables de entorno del proyecto Next.js (`NEXT_PUBLIC_FIREBASE_*`).
 2. Entrar con Google y comprobar que aparece el `uid`.
-3. Subir de una vez lo que haya en `localStorage` a Firestore (migración única). **Hoy se lleva
-   eventos, tareas, ajustes y el layout, pero no apuntes ni carpetas** (`migrarLocalANube`).
+3. Subir lo que haya en `localStorage` a Firestore al entrar (`migrarLocalANube`): eventos,
+   tareas, ajustes, el layout, carpetas y apuntes, con sus ids y **una marca por colección**, sin
+   pisar lo que ya esté en la nube. Las reglas aceptan lo que sube tal cual: la ficha local tiene la
+   misma forma que la de la nube, y `remoto.proveedor` puede ser `'local'` para lo anterior a
+   Drive. El detalle, en [CUENTAS.md](CUENTAS.md).
 4. Cambiar el almacén a Firestore y verificar que la app se comporta igual.
 5. Encender la escucha en tiempo real: marcar una tarea en el móvil y verla cambiar en el portátil.
 
