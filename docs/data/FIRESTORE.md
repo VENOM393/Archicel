@@ -49,9 +49,11 @@ Con Google basta: Celeste entra con su cuenta y sus datos quedan bajo su identif
 que entre sin cuenta, dímelo y lo montamos con *enlace por correo* o incluso anónimo, pero entonces
 pierde el acceso desde otro dispositivo.
 
-### 5. Storage (solo cuando subamos imágenes)
-**Compilación → Storage → Comenzar**, misma región. Es lo que usaremos para las fotos de maquetas,
-las láminas y el fondo personalizado.
+### 5. Storage (hoy no se usa)
+**Compilación → Storage → Comenzar**, misma región. Estaba pensado para las fotos de maquetas, las
+láminas y el fondo personalizado. **Los apuntes no van aquí sino a Google Drive** —el de cada
+persona, con `drive.file`—, y el porqué está en [DRIVE.md](../integraciones/DRIVE.md). Storage solo
+haría falta si algún día se sube el fondo personalizado.
 
 ---
 
@@ -93,6 +95,23 @@ users/{uid}
     prio: "baja" | "media" | "alta"
     hecha: false
     creado / actualizado: <timestamp>
+
+  users/{uid}/apuntes/{apunteId}   ← la FICHA de un fichero; los bytes están en Drive
+    asignatura: "geometria"        ← clave del catálogo del curso
+    nombre: "Tema 3 - diédrico.pdf"
+    tipo: "application/pdf"        ← MIME; vacío si el navegador no lo supo
+    tam: 2516582                   ← bytes, hasta 2 GB
+    remoto: { proveedor: "drive" | "local", id: "<id en Drive>" }
+    carpeta: "<carpetaId>"         ← opcional; sin él, la raíz de la asignatura
+    orden: 3                       ← opcional; hoy no hay interfaz que lo escriba
+    creado / actualizado: <timestamp>   ← se ordena por `creado`
+
+  users/{uid}/carpetas/{carpetaId} ← el árbol con el que se organiza cada asignatura
+    asignatura: "geometria"
+    nombre: "Tema 3"
+    madre: "<carpetaId>"           ← opcional; sin él, la raíz de la asignatura
+    remoto: { proveedor: "drive" | "local", id: "<id de la carpeta en Drive>" }
+    creado / actualizado: <timestamp>   ← se ordena por `nombre`
 
   users/{uid}/asignaturas/{id}     ← lo siguiente que toca
     nombre, color, profesor, progreso
@@ -159,11 +178,38 @@ verbos —`listar`, `guardar`, `borrar`, `escuchar`— y dos implementaciones:
 Cambiar de una a otra es una línea. La interfaz nunca sabe dónde viven los datos, y por eso se puede
 trabajar sin conexión, hacer pruebas sin tocar la base real y migrar sin reescribir pantallas.
 
+**Cómo escribe `guardar` en Firestore.** Con `setDoc(…, { merge: true })`, para no perder `creado`
+ni lo que otra versión de la aplicación haya añadido al documento. El precio de `merge` es que
+**conserva todo campo que no venga**, así que quitar un campo del objeto no lo quita de la nube:
+mover un apunte a la raíz (`delete a.carpeta`) lo dejaba dentro de la carpeta de antes. Por eso
+cada colección declara sus campos opcionales en `almacen-firestore.ts`:
+
+| Colección | Opcionales |
+|---|---|
+| `eventos` | `materia`, `nota` |
+| `tareas` | `asignatura`, `progreso` |
+| `apuntes` | `carpeta`, `orden` |
+| `carpetas` | `madre` |
+
+El opcional que no llega, o llega `undefined`, se manda como `deleteField()` y desaparece.
+`undefined` necesitaba ese trato de todas formas: Firestore rechaza la escritura entera si lo
+encuentra, y una tarea sin asignatura no se guardaba. Las reglas aceptan el resultado, porque
+todas escriben los opcionales como `!('campo' in request.resource.data) || …`.
+
+Dos condiciones para que esto siga siendo cierto: **`guardar` recibe siempre el documento
+completo** —el que se leyó, con lo que cambió—, nunca un trozo, porque un trozo borraría los
+opcionales que no trajera; y **un opcional nuevo en `tipos.ts` va también a esa lista**. El almacén
+local no lo necesita: reescribe el documento entero.
+
 El orden de trabajo cuando tengamos la configuración:
 
 1. Meter `firebaseConfig` en variables de entorno del proyecto Next.js (`NEXT_PUBLIC_FIREBASE_*`).
 2. Entrar con Google y comprobar que aparece el `uid`.
-3. Subir de una vez lo que haya en `localStorage` a Firestore (migración única).
+3. Subir lo que haya en `localStorage` a Firestore al entrar (`migrarLocalANube`): eventos,
+   tareas, ajustes, el layout, carpetas y apuntes, con sus ids y **una marca por colección**, sin
+   pisar lo que ya esté en la nube. Las reglas aceptan lo que sube tal cual: la ficha local tiene la
+   misma forma que la de la nube, y `remoto.proveedor` puede ser `'local'` para lo anterior a
+   Drive. El detalle, en [CUENTAS.md](CUENTAS.md).
 4. Cambiar el almacén a Firestore y verificar que la app se comporta igual.
 5. Encender la escucha en tiempo real: marcar una tarea en el móvil y verla cambiar en el portátil.
 

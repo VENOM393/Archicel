@@ -166,7 +166,7 @@ export interface Carpeta {
   madre?: ID;
   /** Lo escribe quien sea: se pinta como texto, nunca como HTML. */
   nombre: string;
-  remoto: { proveedor: 'local' | 'drive'; id: string };
+  remoto: { proveedor: 'local' | 'drive'; id: string; /** Qué cuenta de Google lo subió, si se supo. */ cuenta?: string };
   creado?: number;
   actualizado?: number;
 }
@@ -174,13 +174,14 @@ export interface Carpeta {
 /**
  * Un apunte: el material de estudio de una asignatura.
  *
- * Esto es una **ficha, no un fichero**. Los bytes viven en el archivador —Drive mañana, el
- * navegador hoy— y aquí solo está lo que hace falta para pintar la pantalla sin pedirle
- * nada al proveedor: cómo se llama, de qué tipo es, cuánto ocupa y dónde encontrarlo.
+ * Esto es una **ficha, no un fichero**. Los bytes viven en el archivador —en Drive todo lo
+ * nuevo; en el navegador, solo lo que se guardó ahí antes— y aquí solo está lo que hace
+ * falta para pintar la pantalla sin pedirle nada al proveedor: cómo se llama, de qué tipo
+ * es, cuánto ocupa y dónde encontrarlo.
  *
  * Esa separación es lo que hace que la página de una asignatura se dibuje entera sin una
- * sola llamada de red al almacenamiento. Al archivador solo se va al subir, al abrir y al
- * borrar.
+ * sola llamada de red al almacenamiento. Al archivador solo se va al subir, al abrir, al
+ * borrar y al organizar.
  */
 export interface Apunte {
   id: ID;
@@ -197,8 +198,8 @@ export interface Apunte {
   tipo: string;
   /** Bytes. Para poder decir «2,4 MB» sin preguntarle al proveedor. */
   tam: number;
-  /** Dónde están los bytes. El proveedor va dentro porque un día habrá dos a la vez. */
-  remoto: { proveedor: 'local' | 'drive'; id: string };
+  /** Dónde están los bytes. El proveedor va dentro porque conviven dos: Drive y lo antiguo del navegador. */
+  remoto: { proveedor: 'local' | 'drive'; id: string; /** Qué cuenta de Google lo subió, si se supo. */ cuenta?: string };
   /** En qué carpeta está. Vacío significa la raíz de la asignatura. */
   carpeta?: ID;
   /** Para ordenar a mano dentro de la asignatura. Sin él manda `creado`. */

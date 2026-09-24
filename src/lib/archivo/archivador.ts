@@ -2,14 +2,13 @@
  * El contrato del archivador.
  *
  * La misma idea que el almacén, aplicada a los bytes: **la interfaz no habla nunca con
- * Google Drive**. Habla con esto, que tiene cuatro verbos, y por debajo hay una
- * implementación u otra. Cambiar de una a otra es una línea y ninguna pantalla se entera.
+ * Google Drive**. Habla con esto, y por debajo hay una implementación u otra.
  *
- * Es lo que ha permitido que el almacén pasara de `localStorage` a Firestore sin
- * reescribir una sola vista, y es lo que va a permitir que los apuntes pasen del
- * navegador a Drive igual. También es lo que hace que la página de una asignatura se
- * pueda construir y probar **hoy**, sin que nadie haya concedido todavía un permiso de
- * Google.
+ * Es lo que permitió que el almacén pasara de `localStorage` a Firestore sin reescribir
+ * una sola vista, y lo que permitió que los apuntes pasaran del navegador a Drive igual.
+ * Hoy todo lo nuevo va a Drive; el archivador del navegador sigue existiendo solo para
+ * abrir y borrar lo que se guardó ahí antes. El día que Drive se sustituya por otra cosa,
+ * se escribe otro archivador y ninguna pantalla se entera.
  *
  * ## El reparto con el almacén
  *
@@ -24,12 +23,12 @@
  *
  * Por eso la pantalla se dibuja entera sin una sola llamada al archivador: los nombres,
  * los tipos y el orden salen del almacén, que ya es tiempo real y ya funciona sin
- * conexión. Al archivador solo se va al subir, al abrir y al borrar.
+ * conexión. Al archivador solo se va al subir, al abrir, al borrar y al organizar.
  */
 
 import type { Apunte } from '@/lib/data';
 
-/** Dónde encontrar los bytes. El proveedor va dentro porque un día habrá dos a la vez. */
+/** Dónde encontrar los bytes. El proveedor va dentro porque conviven dos. */
 export type Remoto = Apunte['remoto'];
 
 /** Dónde va un fichero, dicho en términos del producto y no del proveedor. */
@@ -50,25 +49,60 @@ export interface Destino {
  * Por qué falla, dicho con nombres que la interfaz pueda traducir.
  *
  * Un `Error` pelado obliga a cada pantalla a leer el mensaje del proveedor para decidir
- * qué enseñar, y ese mensaje cambia sin avisar. Un código no cambia.
+ * qué enseñar, y ese mensaje cambia sin avisar. Un código no cambia. Y cada código existe
+ * porque **su arreglo es distinto**: un 403 puede ser «vuelve a conectar», «activa la API»,
+ * «espera un minuto» o «vacía la papelera», y meterlos en el mismo saco es decirle a quien
+ * lo lee que haga lo que no lo arregla.
  */
 export type CausaFallo =
-  | 'sin-permiso' // todavía no se ha conectado, o se ha revocado
-  | 'sin-sitio' // no cabe: cuota llena
-  | 'demasiado-grande' // el fichero se pasa del tope
-  | 'no-esta' // se pidió algo que ya no existe
+  | 'sin-conexion' // no hay permiso utilizable y no se pudo conseguir: ventana cerrada, bloqueada…
+  | 'caducada' // el proveedor rechazó el permiso que había (revocado o caducado antes de hora)
+  | 'sin-permiso' // el permiso existe pero no alcanza: otro alcance, otro dueño, una política
+  | 'api-apagada' // la API del proveedor está desactivada en el proyecto
+  | 'limite' // demasiadas peticiones, y ya se reintentó
+  | 'sin-sitio' // no cabe: cuota de almacenamiento llena
+  | 'no-esta' // lo que se pidió ya no existe
+  | 'sin-carpeta' // la carpeta de destino ya no existe
   | 'red' // se cayó la conexión a mitad
+  | 'servidor' // el proveedor falló por su cuenta (5xx), y ya se reintentó
   | 'desconocida';
+
+/**
+ * Lo que dijo el proveedor, tal cual. La pantalla traduce la `causa`, pero enseña también
+ * esto: un «no se pudo» genérico escondió durante tres rondas que la API estaba apagada, y
+ * el texto de Drive lo decía con todas las letras.
+ */
+export interface DetalleFallo {
+  /** El código HTTP, si lo hubo. */
+  estado?: number;
+  /** La razón estructurada del proveedor: `storageQuotaExceeded`, `accessNotConfigured`… */
+  razon?: string;
+  /** Su mensaje, sin traducir. */
+  dijo?: string;
+}
 
 export class FalloDeArchivo extends Error {
   constructor(
     readonly causa: CausaFallo,
     mensaje: string,
     readonly original?: unknown,
+    readonly detalle: DetalleFallo = {},
   ) {
     super(mensaje);
     this.name = 'FalloDeArchivo';
   }
+}
+
+export interface OpcionesDeLectura {
+  /** El tipo MIME de la ficha, por si el proveedor no lo dice. */
+  tipo?: string;
+  /** El tamaño de la ficha, por si el proveedor no lo dice: sin él no hay fracción. */
+  tam?: number;
+  /**
+   * Lo que ha llegado hasta ahora —un `Blob` parcial— y la fracción de 0 a 1. Con eso una
+   * imagen se va pintando mientras baja en vez de esperar al último byte.
+   */
+  alAvanzar?: (hastaAhora: Blob, tanto: number) => void;
 }
 
 export interface Archivador {
@@ -92,17 +126,18 @@ export interface Archivador {
   /**
    * Sube un fichero y devuelve dónde ha quedado.
    *
-   * `alAvanzar` recibe de 0 a 1. Es opcional porque no todos los proveedores saben
-   * informar del progreso, y una barra que no se mueve es peor que no tener barra.
+   * `alAvanzar` recibe de 0 a 1. Si la misma subida (el mismo `File`) se vuelve a pedir
+   * después de un corte, el proveedor puede **seguir donde se quedó** en vez de empezar de
+   * cero, y al mismo destino que la primera vez.
    */
   subir(fichero: File, destino: Destino, alAvanzar?: (tanto: number) => void): Promise<Remoto>;
 
   /**
    * Crea una carpeta y devuelve dónde ha quedado.
    *
-   * Existe en el contrato —y no solo en el de Drive— porque la usuaria tiene que poder
-   * organizarse **también sin haber conectado nada**. Una carpeta que solo funciona con
-   * Drive puesto convierte una decisión de orden en una decisión de infraestructura.
+   * Una carpeta de Archicel es una carpeta de verdad en el proveedor, para que quien abra
+   * Drive vea el mismo árbol que ve en la aplicación. Por eso, igual que subir, exige Drive
+   * conectado: sin él la pantalla ofrece conectar, no organizar.
    */
   crearCarpeta(nombre: string, destino: Destino): Promise<Remoto>;
 
@@ -118,23 +153,26 @@ export interface Archivador {
    */
   mover(remoto: Remoto, desde: Remoto | null, hasta: Remoto | null, destino: Destino): Promise<void>;
 
-  /** Lo quita. Qué signifique «quitar» lo decide el proveedor: puede ser una papelera. */
-  borrar(remoto: Remoto): Promise<void>;
+  /**
+   * Lo quita. Qué signifique «quitar» lo decide el proveedor: en Drive, la papelera.
+   *
+   * `'hecho'` solo si el proveedor lo ha confirmado. `'no-estaba'` si no lo encuentra,
+   * que **no es lo mismo**: en Drive puede ser que se borrara desde allí o que lo subiera
+   * otra cuenta de Google y siga vivo en su Drive. Quien llama decide —preguntando— si quita
+   * la ficha igualmente. Cualquier otro fallo lanza, y la ficha se conserva: borrar la ficha
+   * de algo que sigue en Drive lo deja vivo y sin nada que lo enlace.
+   */
+  borrar(remoto: Remoto): Promise<'hecho' | 'no-estaba'>;
 
   /**
-   * Una dirección para ver o descargar.
+   * Los bytes, para ver o descargar.
    *
-   * **Caduca, y por eso no se guarda en el almacén.** Una URL guardada es un enlace roto
-   * dentro de una hora; y si no caducara sería peor, porque sería una dirección pública a
-   * un apunte guardada en un sitio donde nadie espera encontrarla.
-   *
-   * Quien la pide se encarga de soltarla con `soltar` cuando termine: en el archivador
-   * local es un objeto en memoria y no se libera solo.
+   * Devuelve un `Blob` y no una dirección: la dirección `blob:` la crea y la suelta quien
+   * pinta, que es quien sabe cuándo deja de hacer falta. **Nunca se guarda en el
+   * almacén**: una dirección guardada es un enlace roto al recargar, y si no caducara sería
+   * una puerta pública a un apunte.
    */
-  enlace(remoto: Remoto): Promise<string>;
-
-  /** Libera lo que `enlace` haya reservado. Sin esto, el navegador se queda los bytes. */
-  soltar(url: string): void;
+  leer(remoto: Remoto, opciones?: OpcionesDeLectura): Promise<Blob>;
 }
 
 /**

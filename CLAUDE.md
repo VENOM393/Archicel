@@ -212,10 +212,18 @@ Dos cosas que no hay que olvidar:
   Cambiar de una a otra es una línea y ninguna pantalla se entera.
 - **La clave de la app web es pública** y va en el cliente: lo que protege los datos son las
   reglas. Lo que nunca se comparte ni se sube al repositorio es el JSON de cuenta de servicio.
+- **Guardar en Firestore es con `merge`, y un opcional que falta se borra.** Cada colección de
+  `almacen-firestore.ts` nombra sus campos opcionales; el que no llega —o llega `undefined`— se
+  manda como `deleteField()`. Sin eso, mover un apunte a la raíz lo dejaba en la nube dentro de
+  la carpeta de antes, y un `undefined` hacía que Firestore rechazara la escritura entera. **Un
+  campo opcional nuevo en `tipos.ts` va también a esa lista**, y `guardar` recibe siempre el
+  documento completo, nunca un trozo.
 - **La cuenta es una invitación, no un muro.** Archicel abre y funciona sin sesión; entrar solo
-  hace que todo la siga a otro dispositivo, y lo guardado sin cuenta sube solo al entrar. El
-  acceso, las dos vías (Google y correo) y qué hay que activar en la consola están en
-  [docs/data/CUENTAS.md](docs/data/CUENTAS.md).
+  hace que todo la siga a otro dispositivo, y lo guardado sin cuenta sube solo al entrar,
+  apuntes y carpetas incluidos. **La migración lleva una marca por colección**: una colección
+  nueva que deba sobrevivir a entrar se añade a `PASOS` en `src/lib/data/index.ts` y llega
+  también a quien ya había migrado. El acceso, las dos vías (Google y correo), la migración y
+  qué hay que activar en la consola están en [docs/data/CUENTAS.md](docs/data/CUENTAS.md).
 
 ## El movimiento
 
@@ -333,11 +341,13 @@ Todo el detalle —endpoints, paginación, cuota, caché y qué está comprobado
 
 ## Apuntes: Google Drive
 
-Cada asignatura va a tener su página, y en ella los apuntes de Celeste —fotos, PDFs, `.docx`—.
+Cada asignatura tiene su página, y en ella los apuntes de Celeste —fotos, PDFs, `.docx`—.
 Los bytes van a **Google Drive**; Firestore guarda solo la ficha. El planteamiento entero, con los
 pasos de la consola, está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
 
-**Estado: funcionando.** Subida, visor, borrado, **carpetas, renombrar y mover** contra Drive real.
+**Estado: funcionando.** Subida (reanudable de verdad), visor, borrado con confirmación,
+**carpetas, renombrar y mover** contra Drive real, y **Desconectar Drive** en los ajustes. Lo que
+queda pendiente está en el § 10 de DRIVE.md.
 
 La ruta en Drive es `Archicel/Asignaturas/<nombre de la asignatura>`, y dentro el árbol que la
 usuaria haya montado. Se llamó `Apuntes` y **la aplicación renombra la vieja** la primera vez que
@@ -345,8 +355,9 @@ la encuentra: crear la nueva sin más habría dejado el trabajo repartido en dos
 nada explicara por qué.
 
 **`NEXT_PUBLIC_GOOGLE_CLIENT_ID` va también en las variables de Vercel**, o en producción la
-aplicación ni siquiera ofrece conectar: sin ID no tiene con qué pedirlo, y todo lo que suba Celeste
-se queda en su portátil sin que nada lo advierta.
+aplicación ni siquiera ofrece conectar: sin ID no tiene con qué pedirlo, la cabecera dice «Sin
+conectar», no aparece el botón de Conectar Drive y «Subir» y «Carpeta» quedan deshabilitados. No se
+pierde nada —ya no hay caída al disco—, pero tampoco se puede guardar ningún apunte.
 
 Vercel marca esa variable como si fuera una credencial por llevar el prefijo `NEXT_PUBLIC_`. Se
 resuelve con **«Change to Config»**, que es su etiqueta para «configuración pública»: un ID de
@@ -368,6 +379,14 @@ Google abiertas a la vez —lo normal— es fácil conceder con la que no era y 
 los apuntes no aparecen donde deberían. El correo sale de `drive/v3/about`, que funciona con
 `drive.file` sin pedir ningún permiso extra.
 
+**Se ve y se suelta en Ajustes** (`/ajustes`, desde el menú del avatar): con qué cuenta está
+conectado y **Desconectar Drive**, que pide confirmación, revoca el permiso en Google, olvida el
+token y el correo, y deja la pantalla en «Sin conectar» sin recargar. **No
+borra nada** de Drive ni de Archicel. Si el token ya había caducado, Google no puede confirmar la
+revocación y la pantalla lo dice, con el enlace para retirarla desde la cuenta de Google. Los
+avisos de conectar/desconectar viajan con `alCambiarDrive`, también entre pestañas. Detalle en
+DRIVE.md § 6.
+
 **La consecuencia si algún día comparten cuenta de Archicel:** las fichas viajan por Firestore y los
 ficheros no. Uno vería en la lista un apunte del otro y al abrirlo saldría «ese apunte ya no está en
 tu Drive», porque con `drive.file` un token solo alcanza lo que la app creó bajo **su**
@@ -386,9 +405,14 @@ Se puede montar de dos maneras y se eligió a conciencia:
 
 Se eligió lo segundo porque Archicel es de una persona y no debe pedirle que mantenga credenciales
 a mano. El precio está medido: **dentro de la hora, recargar no pide nada** (comprobado: conectar
-una vez y recargar tres veces pregunta a Google **una sola vez**); pasada la hora, la siguiente
-acción lo renueva sola, porque subir y arrastrar nacen de un gesto y desde ahí Google deja abrir su
-ventana — y si ya se concedió, se abre y se cierra sin enseñar nada.
+una vez y recargar tres veces pregunta a Google **una sola vez**); pasada la hora, **con la pestaña
+abierta**, la siguiente acción lo renueva sola, porque subir y arrastrar nacen de un gesto y desde
+ahí Google deja abrir su ventana — y si ya se concedió, se abre y se cierra sin enseñar nada.
+
+Lo que no renueva solo es **recargar pasada la hora**: el token recordado ya no vale, la pantalla
+vuelve a «Sin conectar» con «Subir» y «Carpeta» deshabilitados, y hay que pulsar **Conectar Drive**
+(comprobado en el navegador con un token caducado). Con el consentimiento dado es un clic y una
+ventana que se cierra sola, pero es un clic.
 
 Guardar el token es aceptable **por el mismo motivo por el que puede vivir en el navegador**: con
 `drive.file` no abre nada salvo lo que esta aplicación creó.
@@ -416,10 +440,62 @@ perder el tiempo a quien lo pulse.
 2. **Si aun así no se puede, se dice y no se guarda en otro sitio.** Sale una tira con el fichero,
    el motivo **y cómo se arregla** — que es la mitad que faltaba: saber que no queda espacio sin
    saber que hay que vaciar la papelera de Drive deja a quien lo lee igual de atascada. Cada causa
-   tiene su salida y la pantalla es el único sitio donde cabe decirla.
+   tiene su salida y la pantalla es el único sitio donde cabe decirla. La tira enseña además **lo
+   que dijo Drive, tal cual**.
+   Cada fallo se clasifica por la **razón estructurada** de Drive (`errors[].reason`,
+   `details[].reason`), nunca buscando palabras en su texto: el límite de peticiones dice «…exceed
+   configured project quota» y no es que falte espacio. Sesión caducada (401), permiso sin Drive,
+   API apagada, fichero de otra cuenta, cuota llena, límite diario y límite por minuto tienen cada
+   uno su frase y su arreglo (tabla en DRIVE.md § 4). Lo pasajero —429, límite por minuto, 5xx en
+   lo que se puede repetir— se reintenta solo con espera exponencial antes de llegar a la tira.
+   Un 401 **tira el token**: si no, «Reconectar» devolvía el mismo token muerto.
 3. **El fichero no se pierde de vista.** La tira guarda el `File`, así que reintentar es un botón y
-   no volver a buscarlo en el disco. Un aviso que se va en tres segundos es el peor sitio posible
-   para un fallo: de cinco ficheros arrastrados no dice cuál falló, ni por qué, ni deja repetirlo.
+   no volver a buscarlo en el disco — y va **a la carpeta de la primera vez**, no a la que se esté
+   mirando. Una subida por trozos cortada **sigue donde se quedó**: el archivador recuerda la sesión
+   de Drive por `File` y pregunta cuánto llegó. Un aviso que se va en tres segundos es el peor sitio
+   posible para un fallo: de cinco ficheros arrastrados no dice cuál falló, ni por qué, ni deja
+   repetirlo.
+4. **Si Drive lo tiene pero el almacén no aceptó la ficha**, la tira lo dice así («Está en tu
+   Drive, pero Archicel no pudo apuntarlo») y reintentar **solo vuelve a apuntarlo**: subirlo otra
+   vez dejaría dos copias. El caso típico —un nombre de más de 300 caracteres, que las reglas no
+   aceptan— ya no llega ahí: la ficha lo acorta por el medio y Drive se queda con el nombre entero.
+
+### Borrar pregunta siempre, y la ficha espera a Drive
+
+- **Siempre hay una pregunta**, apunte suelto o carpeta, y dice a dónde va: «Irá a la papelera de
+  tu Drive, y desde allí se puede recuperar durante 30 días». Lo antiguo del navegador dice que no
+  tiene vuelta atrás, y ahí el foco empieza en «Cancelar».
+- **Una carpeta se pregunta una vez para todo el árbol**, con la cuenta delante («2 carpetas y 4
+  apuntes»). En Drive, mandar la carpeta de arriba a la papelera se lleva todo lo de dentro —y
+  sacarla lo trae de vuelta—, así que es **una** llamada, no una por fichero. `src/lib/archivo/arbol.ts`
+  decide qué hay que mandar y qué fichas se pueden borrar.
+- **La ficha solo se borra cuando Drive lo confirma.** Si falla, la ficha se queda, la fila vuelve y
+  la tira dice por qué, con reintentar. Lo que falla dentro de una carpeta conserva su ficha y la de
+  cada carpeta del camino: nunca queda una hija con una madre que ya no existe. Las fichas se
+  borran en orden —apuntes, y después carpetas de la más honda a la de arriba— para que un corte
+  a mitad no deje nada invisible.
+- **Un 404 no es «ya no estaba».** Con `drive.file`, Drive contesta 404 también a lo que subió
+  **otra cuenta de Google**, que sigue vivo en su Drive. `borrar` devuelve `'no-estaba'` y la
+  pantalla pregunta si se quita solo de Archicel; una carpeta conserva todas sus fichas y la tira
+  ofrece hacerlo. La ficha guarda qué cuenta subió cada cosa (`remoto.cuenta`) para decirlo.
+- **Lo antiguo del navegador no va a ninguna papelera.** Si una carpeta de Drive lleva dentro
+  apuntes guardados en el equipo, la pregunta lo dice —«se borran sin vuelta atrás»— y el foco
+  va a Cancelar.
+- **La pregunta y el visor van a `body` por un portal.** El panel de los apuntes lleva
+  `backdrop-filter`, que lo convierte en el bloque contenedor de todo lo `fixed` de dentro: el
+  visor se quedaba encerrado en el panel y su telón le quedaba **encima**, así que cualquier clic
+  dentro lo cerraba.
+
+### Rápido
+
+- **Las tres carpetas fijas salen de una sola búsqueda** (antes, cuatro viajes seguidos), se
+  recuerdan **como promesa** —cinco subidas a la vez no crean cinco `Archicel`— y se buscan ya al
+  abrir la página, **sin crear nada**. Si Drive dice que la carpeta recordada ya no existe, se
+  olvida, se busca o crea otra vez y se repite, sin recargar.
+- **Una tanda sube de tres en tres**, cada fichero con su barra por identificador, no por nombre.
+- **El visor lee el flujo**: una imagen se pinta mientras baja y el resto dice cuánto lleva. Lo
+  abierto se recuerda en memoria (hasta 96 MB), y **posarse sobre una fila** precarga lo pequeño.
+- Medido con Drive simulado a 150 ms por petición, en DRIVE.md § 10.
 
 ### Un icono por tipo de fichero
 
@@ -451,9 +527,13 @@ Cuatro cosas más que no se deducen y que cuestan una tarde cada una:
   personal; la subida falla. La salida oficial es una unidad compartida, que es Workspace de pago.
 - **El navegador sube directo a Google, no por `/api`.** Vercel corta el cuerpo de una petición en
   4,5 MB y un PDF escaneado se pasa de ahí sin esfuerzo.
-- **`archivo/index.ts` es un encaminador, no un interruptor.** Al subir va siempre a Drive; al abrir
-  y al borrar manda el `proveedor` que lleve el propio apunte. Eso último no es nostalgia: es lo que
-  hace que lo guardado en el equipo antes de este cambio siga abriéndose.
+- **`archivo/index.ts` es un encaminador, no un interruptor.** Al subir y al crear carpeta va
+  siempre a Drive; al abrir, borrar, renombrar y mover manda el `proveedor` que lleve el propio
+  apunte. Eso último no es nostalgia: es lo que hace que lo guardado en el equipo antes de este
+  cambio siga abriéndose.
+- **Un `.dwg` puede llegar como `image/vnd.dwg`.** Por eso en `iconos.tsx` los planos y los
+  modelos se comprueban **antes** que `image/`: al revés salía como foto y el visor lo metía en un
+  `<img>`. Y no toda imagen se pinta: `.heic` y `.tif` ofrecen descargar.
 
 Y tres trampas de las que costó salir:
 
@@ -472,9 +552,11 @@ escribe quien sea**, así que se pinta como texto y nunca como HTML.
 
 ### Organizarse: carpetas, renombrar y mover
 
-La usuaria decide el árbol, con Drive conectado y sin conectarlo. **Organizarse no puede depender
-de la infraestructura**: una carpeta que solo funciona con Drive puesto convierte una decisión de
-orden en una decisión de configuración.
+La usuaria decide el árbol, **en Drive**: una carpeta de Archicel es una carpeta de verdad allí,
+para que quien abra Drive vea lo mismo que en la aplicación. Por eso crear carpeta exige Drive
+igual que subir —decidido por Cristian—, y sin conectar el botón «Carpeta» se deshabilita y la
+acción es **Conectar Drive**. Renombrar y mover lo antiguo guardado en el equipo sí funciona sin
+conectar.
 
 Cuatro cosas que no se deducen:
 
@@ -501,8 +583,11 @@ gesto de arrastre— y tapa el del DOM, que es el que lleva `dataTransfer`.
 horario o su chip en la leyenda, y es **una página compuesta, no un tablero de widgets**: la portada
 manda, y los apuntes son la superficie de trabajo.
 
-**Estado: terminada.** Los bytes van a Drive —y solo a Drive—, con carpetas, renombrar y mover. El
-planteamiento completo está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
+**Estado: terminada**, con los pendientes de DRIVE.md § 10. Los bytes van a Drive —y solo a
+Drive—, con carpetas, renombrar y mover. Es una lista, no una rejilla, y sin miniaturas; el visor
+enseña dentro imágenes que el navegador sabe pintar, PDF y vídeo, y el resto se descarga. El
+planteamiento completo está en
+[docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
 
 Lo que no se deduce leyendo el código:
 

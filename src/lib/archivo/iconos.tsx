@@ -9,7 +9,7 @@
  * trabajo de esta pantalla.
  *
  * La salida no es inventar colores: es **reutilizar la paleta de la casa**. Cada tipo toma
- * uno de los `--c-*` que ya usan las asignaturas, y lo usa al 16 % de relleno con el trazo
+ * uno de los `--c-*` que ya usan las asignaturas, y lo usa al 15 % de relleno con el trazo
  * a plena intensidad. Así no entra ni un tono nuevo en el sistema, y el color de la
  * asignatura —que es el que manda en la página— sigue siendo el único saturado de verdad.
  *
@@ -61,8 +61,40 @@ interface Tipo {
  * vacío más de lo que parece —pasa con `.heic`, con `.dwg` y con lo que venga de un disco
  * de red— y entonces el nombre es lo único que queda. Al revés se perdería información que
  * estaba delante.
+ *
+ * Y los planos van **antes** que las imágenes. Un `.dwg` llega a veces como
+ * `image/vnd.dwg` o `image/x-dwg`: si `image/` se comprobara primero, se enseñaría como
+ * una foto y el visor intentaría pintarlo en un `<img>`. Lo específico gana a lo genérico.
  */
 const CATALOGO: Tipo[] = [
+  /* Lo de una escuela de arquitectura, que es lo que de verdad va a llegar aquí. */
+  {
+    clase: 'plano',
+    nombre: 'Plano',
+    color: 'ambar',
+    mime: [
+      'application/acad',
+      'application/x-acad',
+      'application/autocad',
+      'application/x-autocad',
+      'application/dwg',
+      'application/x-dwg',
+      'image/vnd.dwg',
+      'image/x-dwg',
+      'application/dxf',
+      'image/vnd.dxf',
+      'image/x-dxf',
+      'model/vnd.dwf',
+    ],
+    ext: ['.dwg', '.dxf', '.dwf', '.rvt', '.rfa', '.pln'],
+  },
+  {
+    clase: 'modelo',
+    nombre: 'Modelo 3D',
+    color: 'menta',
+    mime: ['model/', 'application/vnd.sketchup'],
+    ext: ['.skp', '.3ds', '.obj', '.fbx', '.stl', '.blend', '.3dm', '.max'],
+  },
   {
     clase: 'imagen',
     nombre: 'Imagen',
@@ -127,21 +159,6 @@ const CATALOGO: Tipo[] = [
     mime: ['application/zip', 'application/x-rar', 'application/x-7z', 'application/gzip'],
     ext: ['.zip', '.rar', '.7z', '.tar', '.gz'],
   },
-  /* Lo de una escuela de arquitectura, que es lo que de verdad va a llegar aquí. */
-  {
-    clase: 'plano',
-    nombre: 'Plano',
-    color: 'ambar',
-    mime: ['application/acad', 'image/vnd.dwg', 'application/dxf'],
-    ext: ['.dwg', '.dxf', '.dwf', '.rvt', '.rfa', '.pln'],
-  },
-  {
-    clase: 'modelo',
-    nombre: 'Modelo 3D',
-    color: 'menta',
-    mime: ['model/'],
-    ext: ['.skp', '.3ds', '.obj', '.fbx', '.stl', '.blend', '.3dm', '.max'],
-  },
   {
     clase: 'codigo',
     nombre: 'Código',
@@ -171,10 +188,23 @@ export function nombreDeTipo(mime: string, nombre: string): string {
   return tipoDeFichero(mime, nombre).nombre;
 }
 
+/**
+ * Las imágenes que un navegador sabe pintar en un `<img>`. Una `.heic` del móvil o una
+ * `.tif` escaneada son imágenes, pero Chrome no las enseña: pintarlas daría un icono roto
+ * donde debería haber un botón de descargar.
+ */
+const SE_PINTAN = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif', 'image/bmp', 'image/svg+xml'];
+const SE_PINTAN_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif', '.bmp', '.svg'];
+
 /** Si se puede enseñar dentro de la página o hay que abrirlo fuera. */
 export function seVeDentro(mime: string, nombre: string): 'imagen' | 'pdf' | 'video' | 'no' {
   const { clase } = tipoDeFichero(mime, nombre);
-  if (clase === 'imagen') return 'imagen';
+  if (clase === 'imagen') {
+    const m = (mime || '').toLowerCase();
+    const i = nombre.lastIndexOf('.');
+    const ext = i > 0 ? nombre.slice(i).toLowerCase() : '';
+    return (m ? SE_PINTAN.includes(m) : SE_PINTAN_EXT.includes(ext)) ? 'imagen' : 'no';
+  }
   if (clase === 'pdf') return 'pdf';
   if (clase === 'video') return 'video';
   return 'no';

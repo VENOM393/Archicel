@@ -25,6 +25,7 @@ son el envoltorio, son el producto.
 | **Escritorio** | Widgets que se arrastran, se estiran y se quedan donde los dejas. Rejilla de 12 columnas, imantación a los vecinos, modo edición |
 | **Calendario** | Vista mensual y semanal. De la semana se entra al día |
 | **Horario** | Las clases del cuatrimestre, con la de ahora mismo señalada |
+| **Asignatura** | Una página por asignatura: portada con su semana, lo que viene, y sus apuntes en Google Drive con carpetas, renombrar y mover |
 | **Acceso** | Entrada con Google o con correo. La cuenta es opcional: sin ella la aplicación funciona igual |
 
 Además: se **instala como un programa** del ordenador (icono propio, ventana sin barra de
@@ -61,10 +62,18 @@ NEXT_PUBLIC_FIREBASE_APP_ID=...
 CANVAS_URL=https://canvas.ucam.edu
 CANVAS_TOKEN=...
 CANVAS_ZONA=Europe/Madrid
+
+# los apuntes — sin esto no se puede conectar Drive ni subir nada
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=...
 ```
 
 **Sin nada de esto la aplicación arranca igual**, guardando en el navegador. Es deliberado:
-un fallo de la nube no puede dejarla sin abrir.
+un fallo de la nube no puede dejarla sin abrir. Lo único que no funciona sin su variable son
+los apuntes, que solo se guardan en Drive.
+
+El ID de cliente de Google también es público por diseño: lo protege la lista de orígenes
+autorizados de la consola de Google, no un secreto. Los pasos, en
+[DRIVE.md](docs/integraciones/DRIVE.md).
 
 Las claves de Firebase llevan prefijo `NEXT_PUBLIC_` porque son públicas por diseño — lo
 que protege los datos son las reglas de [firestore.rules](firestore.rules). El token de
@@ -74,9 +83,11 @@ servidor.
 ## Cómo está hecho
 
 ```
-src/app/          las cuatro vistas y la única ruta de servidor (/api/canvas)
-src/components/   el marco, el fondo con shader, las hojas de edición
+src/app/          las vistas —escritorio, calendario, día, horario, asignatura, acceso— y
+                  la única ruta de servidor (/api/canvas)
+src/components/   el marco, el fondo con shader, las hojas de edición, la página de asignatura
 src/lib/data/     la capa de almacén: un contrato, dos implementaciones
+src/lib/archivo/  el archivador de apuntes: los bytes van a Google Drive
 src/lib/canvas/   el motor que lee del campus
 src/lib/widgets/  el registro de widgets del escritorio
 src/hooks/        el motor del escritorio y los datos vivos
@@ -99,7 +110,8 @@ Cuatro decisiones que explican el resto:
 ## Stack
 
 Next.js 16 (App Router) · React 19 · TypeScript en modo estricto · Tailwind 4 ·
-shadcn/ui sobre Radix · Firebase (Firestore + Auth) · WebGL a pelo para el fondo
+shadcn/ui sobre Radix · Motion 13 · Firebase (Firestore + Auth) · Google Drive API
+(`drive.file`, con Google Identity Services) · WebGL a pelo para el fondo
 
 ## La documentación
 
@@ -114,6 +126,8 @@ El porqué está escrito. Cada documento explica decisiones, no funciones:
 | [SEGURIDAD.md](docs/data/SEGURIDAD.md) | La revisión de seguridad y qué protege cada capa |
 | [CUENTAS.md](docs/data/CUENTAS.md) | Acceso, papeles y administrador |
 | [CANVAS.md](docs/integraciones/CANVAS.md) | La API del campus y el motor que la consume |
+| [DRIVE.md](docs/integraciones/DRIVE.md) | Dónde viven los apuntes, el permiso de Google y lo que falta |
+| [MOVIMIENTO.md](docs/frontend/MOVIMIENTO.md) | El sistema de animación: vocabulario, transiciones de página y trampas |
 | [INSTALACION.md](docs/frontend/INSTALACION.md) | Cómo se convierte en un programa del ordenador |
 | [DESPLIEGUE.md](docs/tooling/DESPLIEGUE.md) | Publicar en Vercel: variables y el dominio que autorizar |
 | [CLAUDE.md](CLAUDE.md) | Cómo se trabaja en este repositorio |

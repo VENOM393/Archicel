@@ -19,38 +19,50 @@
  *       separan con una línea de 1 px y un cambio de relleno, nunca con un segundo
  *       cristal. Cristal sobre cristal está prohibido y además se ve sucio.
  *
- * Una sola acción sólida en toda la pantalla, y es la que crea algo: subir. Abrir, borrar
- * y volver son contorno o fantasma.
+ * Una sola acción sólida en toda la pantalla, y es la que crea algo: subir —o, sin Drive,
+ * conectarlo—. Abrir, borrar y volver son contorno o fantasma.
  */
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as mo from 'motion/react-m';
 import { AnimatePresence } from 'motion/react';
 
-import { APARECER, ORQUESTA, PIEZA, VELO, MUELLE, CURVA, TIEMPO } from '@/lib/ui/movimiento';
+import { APARECER, ORQUESTA, PIEZA, VELO, HOJA, MUELLE, CURVA, TIEMPO } from '@/lib/ui/movimiento';
 import { Icono, TIPOS } from '@/lib/ui/catalogo';
 import { Button } from '@/components/ui/button';
 import { useAhora, useApuntes, useCarpetas, useEventos } from '@/hooks/useDatos';
+import { useDialogo } from '@/hooks/useDialogo';
 import { useUI } from '@/lib/ui/contexto';
 import { useArchicel } from '@/lib/firebase/sesion';
 import {
+  alCambiarDrive,
+  arbolDe,
   deQuienEsElDrive,
   driveConectado,
   elArchivador,
-  nombreDeTipo,
+  explicar,
   pesoLegible,
+  planDeBorrado,
+  precargar,
+  prepararCarpeta,
+  queSeBorra,
   reconectarDriveEnSilencio,
   sePuedeUsarDrive,
   seVeDentro,
   tipoDeFichero,
   IconoDeFichero,
   FalloDeArchivo,
+  type Destino,
+  type Explicacion,
   type Remoto,
 } from '@/lib/archivo';
 import {
   ASIGNATURAS,
   HORARIO,
+  TOPES,
+  acortar,
   aFecha,
   buscarAsignatura,
   deFecha,
@@ -210,9 +222,10 @@ function LoQueViene({ clave, ahora }: { clave: ClaveAsignatura; ahora: Date | nu
 /**
  * El sitio de trabajo: carpetas y apuntes de una asignatura.
  *
- * Aquí manda una idea: **organizarse no puede depender de la infraestructura.** Se pueden
- * crear carpetas, renombrar y mover con Drive conectado y sin conectarlo, porque decidir
- * dónde va cada cosa es del estudiante y no del proveedor de almacenamiento.
+ * **Todo esto vive en Drive.** Subir, crear carpetas, renombrar y mover escriben en el
+ * Drive de quien lo haya conectado, porque una carpeta de Archicel es una carpeta de verdad
+ * allí. Sin Drive conectado la pantalla no ofrece organizar: ofrece conectar. Lo antiguo
+ * que se guardó en el navegador se sigue pudiendo abrir, renombrar, mover y borrar.
  *
  * El árbol lo arma esta pantalla a partir de una lista plana de carpetas, cada una con su
  * `madre`. No se guarda ninguna ruta de texto, y eso es lo que hace que renombrar una
@@ -220,9 +233,46 @@ function LoQueViene({ clave, ahora }: { clave: ClaveAsignatura; ahora: Date | nu
  */
 
 interface Subiendo {
+  /** Por subida, no por nombre: dos `foto.jpg` en la misma tanda son dos barras. */
+  id: string;
   nombre: string;
   tanto: number;
 }
+
+/** A dónde iba una subida, fijado al empezar: reintentar va ahí, no a donde se esté ahora. */
+interface Donde {
+  carpeta: string | null;
+  destino: Destino;
+}
+
+type Objetivo = { tipo: 'apunte'; a: Apunte } | { tipo: 'carpeta'; c: Carpeta };
+
+/**
+ * Qué se pregunta antes de borrar.
+ *
+ *   · `borrar`: mandarlo a la papelera de Drive (y lo antiguo del navegador, borrarlo).
+ *   · `quitar`: Drive **no lo encuentra**, y la pregunta es si se quita solo la ficha. No es
+ *     lo mismo que borrarlo: con `drive.file`, «no lo encuentro» también es lo que contesta
+ *     Drive a un fichero que subió otra cuenta de Google y que sigue vivo en su Drive.
+ */
+interface Peticion {
+  objetivo: Objetivo;
+  modo: 'borrar' | 'quitar';
+}
+
+/**
+ * Lo que no salió bien, con todo lo necesario para reintentarlo sin pedir nada otra vez.
+ *
+ *   · `subida`: no llegó a Drive. Guarda el `File`, y reintentar sigue donde se quedó.
+ *   · `ficha`: **sí** llegó a Drive, pero el almacén no la aceptó. Reintentar solo vuelve a
+ *     apuntarla; subirla otra vez dejaría dos copias en Drive.
+ *   · `borrado`: Drive no confirmó la papelera, así que la ficha sigue ahí.
+ */
+type Problema = { id: string; nombre: string; ex: Explicacion } & (
+  | { tipo: 'subida'; fichero: File; donde: Donde }
+  | { tipo: 'ficha'; fichero: File; remoto: Remoto; donde: Donde }
+  | { tipo: 'borrado'; objetivo: Objetivo; noEncontrado?: boolean }
+);
 
 /** Lo que se está arrastrando dentro de la aplicación, para no confundirlo con el disco. */
 const TIPO_ARRASTRE = 'application/x-archicel';
@@ -230,19 +280,44 @@ const TIPO_ARRASTRE = 'application/x-archicel';
 /** Tope de profundidad al dibujar el camino: un ciclo no puede colgar la pantalla. */
 const HONDO = 24;
 
+/**
+ * Cuántos ficheros suben a la vez. Uno a uno, veinte fotos de pizarra esperan cada una a la
+ * anterior aunque la conexión dé para más; todos a la vez, Drive empieza a contestar que
+ * vaya más despacio. Tres es lo que recomienda su guía para un solo usuario.
+ */
+const A_LA_VEZ = 3;
+
+let serie = 0;
+const nuevaClave = () => `p${++serie}`;
+
+/** Hace `hacer` sobre la lista, `cuantos` a la vez. */
+async function enParalelo<T>(lista: T[], cuantos: number, hacer: (x: T) => Promise<void>): Promise<void> {
+  let i = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(cuantos, lista.length) }, async () => {
+      while (i < lista.length) await hacer(lista[i++]);
+    }),
+  );
+}
+
+
 function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[] }) {
   const { almacen } = useArchicel();
   const { avisar } = useUI();
-  const archivador = elArchivador();
+  const archivador = useMemo(() => elArchivador(), []);
   const carpetas = useCarpetas(clave);
   const entrada = useRef<HTMLInputElement>(null);
 
   const [aqui, setAqui] = useState<string | null>(null);
   const [encima, setEncima] = useState(false);
   const [subiendo, setSubiendo] = useState<Subiendo[]>([]);
+  const [problemas, setProblemas] = useState<Problema[]>([]);
   const [abierto, setAbierto] = useState<Apunte | null>(null);
   const [creando, setCreando] = useState(false);
   const [renombrando, setRenombrando] = useState<string | null>(null);
+  const [confirmando, setConfirmando] = useState<Peticion | null>(null);
+  /** Lo que se está mandando a la papelera ahora mismo: se apaga hasta que Drive conteste. */
+  const [yendo, setYendo] = useState<ReadonlySet<string>>(new Set());
   /** Sobre qué carpeta se está soltando algo, para marcarla. */
   const [sobre, setSobre] = useState<string | null>(null);
 
@@ -250,27 +325,47 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
   const [correo, setCorreo] = useState<string | null>(null);
   const [conectando, setConectando] = useState(false);
 
+  /*
+   * Al llegar, y cada vez que Drive se conecta o se desconecta —aquí, desde los ajustes o
+   * en otra pestaña—: de quién es el Drive y, sin crear nada, dónde está la carpeta de esta
+   * asignatura. Lo segundo es lo que hace que la primera subida no espere a buscarla.
+   *
+   * Sin escuchar el cambio, desconectar desde los ajustes dejaba esta página diciendo «En
+   * el Drive de …» y ofreciendo subir con un permiso que ya no existe.
+   */
   useEffect(() => {
-    void reconectarDriveEnSilencio().then((s) => {
-      const listo = s || driveConectado();
+    const mirar = () => {
+      const listo = driveConectado();
       setEnDrive(listo);
-      if (listo) void deQuienEsElDrive().then(setCorreo);
-    });
+      if (listo) {
+        void deQuienEsElDrive().then(setCorreo);
+        prepararCarpeta(clave);
+      } else {
+        setCorreo(null);
+      }
+    };
+    void reconectarDriveEnSilencio().then(mirar);
+    return alCambiarDrive(mirar);
+  }, [clave]);
+
+  const yaConectado = useCallback(() => {
+    setEnDrive(true);
+    void deQuienEsElDrive().then(setCorreo);
   }, []);
 
   const conectar = useCallback(async () => {
     setConectando(true);
     try {
       await archivador.conectar();
-      setEnDrive(true);
-      void deQuienEsElDrive().then(setCorreo);
+      yaConectado();
+      prepararCarpeta(clave);
       avisar('Drive conectado');
     } catch (e) {
-      avisar(e instanceof Error && e.message ? e.message : 'No se pudo conectar con Drive');
+      avisar(explicar(e).motivo);
     } finally {
       setConectando(false);
     }
-  }, [archivador, avisar]);
+  }, [archivador, avisar, clave, yaConectado]);
 
   /* ── el árbol ── */
 
@@ -302,121 +397,93 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
   /* Si la carpeta en la que estaba desaparece —la borró otro dispositivo— se vuelve a la
      raíz en vez de quedarse enseñando el vacío de un sitio que ya no existe. */
   useEffect(() => {
-    if (aqui && carpetas.length > 0 && !porId.has(aqui)) setAqui(null);
-  }, [aqui, porId, carpetas.length]);
+    if (aqui && !porId.has(aqui)) setAqui(null);
+  }, [aqui, porId]);
 
   const hijas = useMemo(() => carpetas.filter((c) => (c.madre ?? null) === aqui), [carpetas, aqui]);
   const suyos = useMemo(() => apuntes.filter((a) => (a.carpeta ?? null) === aqui), [apuntes, aqui]);
   const carpetaActual = aqui ? porId.get(aqui) : undefined;
-  const destino = useMemo(
+  const destino = useMemo<Destino>(
     () => ({ asignatura: clave, padre: carpetaActual?.remoto }),
     [clave, carpetaActual],
   );
 
+  const quejarse = useCallback((nuevos: Problema[]) => {
+    if (nuevos.length) setProblemas((p) => [...p, ...nuevos]);
+  }, []);
+
   /* ── subir ── */
 
   const cuenta = useRef(0);
-  const [fallidos, setFallidos] = useState<Array<{ f: File; motivo: string; arreglo: string; caducada: boolean }>>([]);
 
-  const subir = useCallback(
-    async (ficheros: FileList | File[]) => {
-      const lista = [...ficheros];
-      if (lista.length === 0) return;
-
-      setFallidos([]);
-      setSubiendo(lista.map((f) => ({ nombre: f.name, tanto: 0 })));
-      const arranque = Date.now();
-      let bien = 0;
-      const malos: Array<{ f: File; motivo: string; arreglo: string; caducada: boolean }> = [];
-
-      for (const fichero of lista) {
-        try {
-          const remoto = await archivador.subir(fichero, destino, (tanto) =>
-            setSubiendo((s) => s.map((x) => (x.nombre === fichero.name ? { ...x, tanto } : x))),
-          );
-
-          if (remoto.proveedor === 'drive' && !enDrive) {
-            setEnDrive(true);
-            void deQuienEsElDrive().then(setCorreo);
-          }
-
-          await almacen.apuntes.guardar({
-            asignatura: clave,
-            nombre: fichero.name,
-            tipo: fichero.type,
-            tam: fichero.size,
-            remoto,
-            ...(aqui ? { carpeta: aqui } : {}),
-            creado: Date.now(),
-          });
-          bien++;
-        } catch (e) {
-          /*
-           * El motivo **y cómo se arregla**, que es la mitad que faltaba.
-           *
-           * Saber que no queda sitio sin saber que hay que vaciar la papelera de Drive
-           * deja a quien lo lee igual de atascada. Cada causa tiene una salida distinta
-           * y la pantalla es el único sitio donde cabe decirla.
-           */
-          const f = e instanceof FalloDeArchivo ? e : null;
-          const bloqueada = e instanceof Error && /bloque|ventana/i.test(e.message);
-          const caducada = f?.causa === 'sin-permiso' || bloqueada;
-
-          const motivo =
-            f?.causa === 'sin-sitio'
-              ? 'No queda espacio en tu Drive.'
-              : f?.causa === 'demasiado-grande'
-                ? 'Es demasiado grande.'
-                : f?.causa === 'red'
-                  ? 'Se cortó la conexión.'
-                  : caducada
-                    ? 'La sesión de Drive ha caducado.'
-                    : (f?.message ?? (e instanceof Error ? e.message : 'Fallo desconocido.'));
-
-          const arreglo =
-            f?.causa === 'sin-sitio'
-              ? 'Vacía la papelera de Drive o haz sitio, y reintenta.'
-              : f?.causa === 'demasiado-grande'
-                ? 'Súbelo a Drive desde el navegador y enlázalo desde ahí.'
-                : f?.causa === 'red'
-                  ? 'Comprueba la conexión y vuelve a intentarlo.'
-                  : caducada
-                    ? 'Pulsa «Reconectar y reintentar»: Google pedirá permiso una vez.'
-                    : 'Reintenta; si vuelve a fallar, lo de arriba es lo que dice Drive.'
-;
-
-          malos.push({ f: fichero, motivo, arreglo, caducada });
-          console.error('[archicel] subida fallida', fichero.name, e);
-        }
-      }
-
-      const falta = MINIMO_VISIBLE - (Date.now() - arranque);
-      if (falta > 0) await new Promise((r) => setTimeout(r, falta));
-      setSubiendo([]);
-      setFallidos(malos);
-      if (bien > 0) avisar(bien === 1 ? 'Apunte guardado' : `${bien} apuntes guardados`);
-    },
-    [archivador, almacen, clave, avisar, destino, aqui, enDrive],
+  const apuntar = useCallback(
+    (fichero: File, remoto: Remoto, carpeta: string | null) =>
+      almacen.apuntes.guardar({
+        asignatura: clave,
+        nombre: acortar(fichero.name, TOPES.nombreApunte),
+        tipo: (fichero.type || '').slice(0, 120),
+        tam: fichero.size,
+        remoto,
+        ...(carpeta ? { carpeta } : {}),
+        creado: Date.now(),
+      }),
+    [almacen, clave],
   );
 
-  const reintentar = useCallback(async () => {
-    const pendientes = fallidos.map((x) => x.f);
-    if (pendientes.length === 0) return;
-    if (fallidos.some((x) => x.caducada)) {
-      setConectando(true);
-      try {
-        await archivador.conectar();
-        setEnDrive(true);
-        void deQuienEsElDrive().then(setCorreo);
-      } catch (e) {
-        avisar(e instanceof Error && e.message ? e.message : 'No se pudo reconectar');
-        return;
-      } finally {
-        setConectando(false);
-      }
-    }
-    await subir(pendientes);
-  }, [fallidos, archivador, avisar, subir]);
+  const noApuntado = (e: unknown): Explicacion => ({
+    motivo: 'Está en tu Drive, pero Archicel no pudo apuntarlo.',
+    arreglo: 'Pulsa «Reintentar»: solo se vuelve a apuntar, no se sube otra vez.',
+    reconectar: false,
+    ...(e instanceof Error && e.message ? { dijo: e.message } : {}),
+  });
+
+  const subir = useCallback(
+    async (ficheros: FileList | File[], donde: Donde = { carpeta: aqui, destino }) => {
+      const lote = [...ficheros].map((f) => ({ id: nuevaClave(), f }));
+      if (lote.length === 0) return;
+
+      setSubiendo((s) => [...s, ...lote.map(({ id, f }) => ({ id, nombre: f.name, tanto: 0 }))]);
+      const arranque = Date.now();
+      let bien = 0;
+      const malos: Problema[] = [];
+
+      await enParalelo(lote, A_LA_VEZ, async ({ id, f }) => {
+        let remoto: Remoto;
+        try {
+          remoto = await archivador.subir(f, donde.destino, (tanto) =>
+            setSubiendo((s) => s.map((x) => (x.id === id ? { ...x, tanto } : x))),
+          );
+        } catch (e) {
+          const ex = explicar(e);
+          /* Si lo que falta es la carpeta, se dice cuál: «la carpeta de destino» obliga a
+             adivinar a cuál se refiere. */
+          const nombre = donde.carpeta ? porId.get(donde.carpeta)?.nombre : undefined;
+          if (e instanceof FalloDeArchivo && e.causa === 'sin-carpeta' && nombre) {
+            ex.motivo = `La carpeta «${nombre}» ya no está en tu Drive.`;
+          }
+          malos.push({ id, nombre: f.name, tipo: 'subida', fichero: f, donde, ex });
+          console.error('[archicel] subida fallida', f.name, e);
+          return;
+        }
+        try {
+          await apuntar(f, remoto, donde.carpeta);
+          bien++;
+        } catch (e) {
+          malos.push({ id, nombre: f.name, tipo: 'ficha', fichero: f, remoto, donde, ex: noApuntado(e) });
+          console.error('[archicel] ficha rechazada tras subir', f.name, e);
+        }
+      });
+
+      if (bien > 0 && !enDrive) yaConectado();
+      const falta = MINIMO_VISIBLE - (Date.now() - arranque);
+      if (falta > 0) await new Promise((r) => setTimeout(r, falta));
+      const suyas = new Set(lote.map((x) => x.id));
+      setSubiendo((s) => s.filter((x) => !suyas.has(x.id)));
+      quejarse(malos);
+      if (bien > 0) avisar(bien === 1 ? 'Apunte guardado' : `${bien} apuntes guardados`);
+    },
+    [archivador, apuntar, avisar, destino, aqui, enDrive, yaConectado, quejarse, porId],
+  );
 
   /* ── organizar ── */
 
@@ -436,7 +503,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
         });
         avisar('Carpeta creada');
       } catch (e) {
-        avisar(e instanceof Error && e.message ? e.message : 'No se pudo crear la carpeta');
+        avisar(explicar(e).motivo);
       }
     },
     [archivador, almacen, clave, destino, aqui, avisar],
@@ -455,7 +522,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
         if (esCarpeta) await almacen.carpetas.guardar({ ...(que as Carpeta), nombre: limpio });
         else await almacen.apuntes.guardar({ ...(que as Apunte), nombre: limpio });
       } catch (e) {
-        avisar(e instanceof Error && e.message ? e.message : 'No se pudo renombrar');
+        avisar(explicar(e).motivo);
       }
     },
     [archivador, almacen, avisar],
@@ -506,56 +573,202 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
           await almacen.apuntes.guardar(a);
         }
       } catch (e) {
-        avisar(e instanceof Error && e.message ? e.message : 'No se pudo mover');
+        avisar(explicar(e).motivo);
       }
     },
     [archivador, almacen, apuntes, porId, clave, avisar],
   );
 
-  const borrar = useCallback(
-    async (a: Apunte) => {
-      try {
-        await archivador.borrar(a.remoto as Remoto);
-      } catch {
-        /* Si el byte ya no está, la ficha se quita igual: dejarla sería dejar en pantalla
-           un apunte que no se puede abrir. */
+  /* ── borrar ── */
+
+  const marcar = useCallback((ids: string[], si: boolean) => {
+    setYendo((s) => {
+      const n = new Set(s);
+      for (const id of ids) {
+        if (si) n.add(id);
+        else n.delete(id);
       }
-      await almacen.apuntes.borrar(a.id);
-      avisar('Apunte eliminado');
+      return n;
+    });
+  }, []);
+
+  /** Lo que dice la tira cuando Drive no encuentra algo que se quería borrar. */
+  const noLoEncuentra = useCallback(
+    (remoto: Remoto): Explicacion => {
+      const de = correo ?? 'la cuenta conectada';
+      const otra = remoto.cuenta && correo && remoto.cuenta !== correo ? remoto.cuenta : null;
+      return {
+        motivo: `El Drive de ${de} no lo encuentra, así que no se ha tocado nada.`,
+        arreglo: otra
+          ? `Lo subió ${otra}: conecta esa cuenta para mandarlo a su papelera. Si prefieres dejarlo, pulsa «Quitar solo de Archicel».`
+          : 'Puede que se borrara desde Drive o que lo subiera otra cuenta de Google. Si ya no lo quieres aquí, pulsa «Quitar solo de Archicel».',
+        reconectar: false,
+      };
     },
-    [archivador, almacen, avisar],
+    [correo],
   );
 
   /**
-   * Borrar una carpeta se lleva lo de dentro, y por eso pregunta.
+   * Un apunte a la papelera. **La ficha solo se borra cuando Drive lo ha confirmado.**
    *
-   * Es la única acción de esta pantalla que puede destruir algo que no se está mirando:
-   * una carpeta cerrada con veinte apuntes se ve igual que una vacía. Preguntar con la
-   * cuenta delante —«y 20 apuntes»— es lo que convierte un clic en una decisión.
+   * Antes se tragaba cualquier fallo y borraba la ficha igual: con Drive devolviendo 503,
+   * el apunte desaparecía de Archicel y seguía vivo en Drive sin nada que lo enlazara.
+   *
+   * Si Drive **no lo encuentra**, tampoco se borra la ficha sin más: se pregunta. Con
+   * `drive.file` eso es lo que contesta a un fichero que subió otra cuenta de Google, y
+   * quitar la ficha dejaría ese fichero vivo en su Drive sin nada en Archicel que lo enlace.
+   * `quitar` es la respuesta a esa pregunta: solo la ficha, sin tocar ningún Drive.
    */
-  const borrarCarpeta = useCallback(
-    async (c: Carpeta) => {
-      const dentroC = carpetas.filter((x) => x.madre === c.id);
-      const dentroA = apuntes.filter((a) => a.carpeta === c.id);
-      const cuantos = dentroC.length + dentroA.length;
-      if (cuantos > 0 && !window.confirm(`«${c.nombre}» tiene ${cuantos} cosa${cuantos === 1 ? '' : 's'} dentro. ¿Eliminarla con todo?`)) {
-        return;
-      }
-      /* De dentro hacia fuera, para no dejar huérfano nada por el camino. */
-      for (const a of dentroA) await borrar(a);
-      for (const x of dentroC) await borrarCarpeta(x);
+  const borrarApunte = useCallback(
+    async (a: Apunte, quitar = false) => {
+      marcar([a.id], true);
       try {
-        await archivador.borrar(c.remoto as Remoto);
-      } catch {
-        /* en Drive la carpeta ya podría no estar; la ficha se va igual */
+        if (!quitar && (await archivador.borrar(a.remoto)) === 'no-estaba') {
+          setConfirmando({ objetivo: { tipo: 'apunte', a }, modo: 'quitar' });
+          return;
+        }
+        await almacen.apuntes.borrar(a.id);
+        avisar(quitar ? 'Quitado de Archicel' : a.remoto.proveedor === 'drive' ? 'En la papelera de Drive' : 'Apunte eliminado');
+      } catch (e) {
+        quejarse([{ id: nuevaClave(), nombre: a.nombre, tipo: 'borrado', objetivo: { tipo: 'apunte', a }, ex: explicar(e) }]);
+        console.error('[archicel] borrado fallido', a.nombre, e);
+      } finally {
+        marcar([a.id], false);
       }
-      await almacen.carpetas.borrar(c.id);
-      avisar('Carpeta eliminada');
     },
-    [carpetas, apuntes, borrar, archivador, almacen, avisar],
+    [archivador, almacen, avisar, marcar, quejarse],
   );
 
-  const vacio = hijas.length === 0 && suyos.length === 0 && subiendo.length === 0 && fallidos.length === 0 && !creando;
+  /**
+   * Una carpeta a la papelera, con todo lo de dentro, **después de una sola pregunta**.
+   *
+   * Drive se lleva el árbol entero con la carpeta de arriba, así que casi siempre es una
+   * llamada. Lo que falle se queda —su ficha, lo que cuelga de ella y el camino hasta
+   * arriba— y la tira dice por qué. El detalle está en `arbol.ts`.
+   */
+  const borrarCarpeta = useCallback(
+    async (c: Carpeta, quitar = false) => {
+      const plan = planDeBorrado(c, carpetas, apuntes);
+      const todos = [...plan.arbol.carpetas.map((x) => x.id), ...plan.arbol.apuntes.map((x) => x.id)];
+      marcar(todos, true);
+      const fallidos = new Set<string>();
+      let primero: unknown = null;
+      /* Cuántos de los que fallaron es porque Drive no los encuentra, y no por otra cosa. */
+      let noEncontrados = 0;
+      const intentar = async (id: string, remoto: Remoto) => {
+        try {
+          /* Lo que Drive no encuentra no se da por borrado: se conserva, con todo lo que
+             cuelga de ello, y la tira pregunta. Solo con `quitar` —la respuesta a esa
+             pregunta— cuenta como hecho. */
+          if ((await archivador.borrar(remoto)) === 'no-estaba' && !quitar) {
+            fallidos.add(id);
+            noEncontrados++;
+          }
+        } catch (e) {
+          fallidos.add(id);
+          primero ??= e;
+          console.error('[archicel] borrado fallido', id, e);
+        }
+      };
+      try {
+        await enParalelo(plan.raices, 4, (p) => (p.tipo === 'carpeta' ? intentar(p.c.id, p.c.remoto) : intentar(p.a.id, p.a.remoto)));
+        await enParalelo(plan.locales, 4, (a) => intentar(a.id, a.remoto));
+        const fuera = queSeBorra(plan, fallidos);
+        /*
+         * Las fichas, en orden: **primero los apuntes, después las carpetas de la más honda
+         * a la de arriba**. Si la red se corta a mitad, lo que quede tiene siempre a su
+         * madre: nunca un apunte dentro de una carpeta que ya no existe, que sería
+         * invisible. Y reintentar vuelve a calcular el plan con lo que haya quedado.
+         */
+        await Promise.all(fuera.apuntes.map((a) => almacen.apuntes.borrar(a.id)));
+        const hondo = new Map(plan.arbol.carpetas.map((x) => [x.id, 0]));
+        for (const x of plan.arbol.carpetas) {
+          let d = 0;
+          for (let m = x.madre; m && hondo.has(m) && d < 64; m = plan.arbol.carpetas.find((y) => y.id === m)?.madre) d++;
+          hondo.set(x.id, d);
+        }
+        const niveles = [...new Set(fuera.carpetas.map((x) => hondo.get(x.id) ?? 0))].sort((p, q) => q - p);
+        for (const n of niveles) {
+          await Promise.all(fuera.carpetas.filter((x) => (hondo.get(x.id) ?? 0) === n).map((x) => almacen.carpetas.borrar(x.id)));
+        }
+      } catch (e) {
+        fallidos.add(c.id);
+        primero ??= e;
+      } finally {
+        marcar(todos, false);
+      }
+      if (fallidos.size === 0) {
+        avisar(quitar ? 'Carpeta quitada de Archicel' : c.remoto.proveedor === 'drive' ? 'Carpeta en la papelera de Drive' : 'Carpeta eliminada');
+        return;
+      }
+      const soloNoEncontrados = primero === null && noEncontrados > 0;
+      quejarse([
+        {
+          id: nuevaClave(),
+          nombre: c.nombre,
+          tipo: 'borrado',
+          objetivo: { tipo: 'carpeta', c },
+          noEncontrado: soloNoEncontrados,
+          ex: soloNoEncontrados ? noLoEncuentra(c.remoto) : explicar(primero),
+        },
+      ]);
+    },
+    [carpetas, apuntes, archivador, almacen, avisar, marcar, quejarse, noLoEncuentra],
+  );
+
+  const borrar = useCallback(
+    (o: Objetivo, quitar = false) => (o.tipo === 'apunte' ? borrarApunte(o.a, quitar) : borrarCarpeta(o.c, quitar)),
+    [borrarApunte, borrarCarpeta],
+  );
+
+  /* ── reintentar ── */
+
+  const reintentar = useCallback(async () => {
+    const lista = problemas;
+    if (lista.length === 0) return;
+    if (lista.some((p) => p.ex.reconectar)) {
+      setConectando(true);
+      try {
+        await archivador.conectar();
+        yaConectado();
+      } catch (e) {
+        avisar(explicar(e).motivo);
+        return;
+      } finally {
+        setConectando(false);
+      }
+    }
+    setProblemas([]);
+
+    /* Si la carpeta de destino ya no existe en Archicel, a la raíz: apuntar dentro de una
+       carpeta borrada dejaría el apunte invisible. */
+    const vigente = (d: Donde): Donde =>
+      d.carpeta && !porId.has(d.carpeta) ? { carpeta: null, destino: { asignatura: clave } } : d;
+
+    const grupos = new Map<Donde, File[]>();
+    for (const p of lista) if (p.tipo === 'subida') grupos.set(p.donde, [...(grupos.get(p.donde) ?? []), p.fichero]);
+
+    await Promise.all([
+      ...[...grupos].map(([d, fs]) => subir(fs, vigente(d))),
+      ...lista.map(async (p) => {
+        if (p.tipo === 'ficha') {
+          try {
+            await apuntar(p.fichero, p.remoto, vigente(p.donde).carpeta);
+            avisar('Apunte guardado');
+          } catch (e) {
+            quejarse([{ ...p, id: nuevaClave(), ex: noApuntado(e) }]);
+          }
+        }
+        if (p.tipo === 'borrado') {
+          const o = p.objetivo;
+          const sigue = o.tipo === 'apunte' ? apuntes.some((a) => a.id === o.a.id) : porId.has(o.c.id);
+          if (sigue) await borrar(o);
+        }
+      }),
+    ]);
+  }, [problemas, archivador, yaConectado, avisar, porId, clave, subir, apuntar, quejarse, apuntes, borrar]);
+
+  const vacio = hijas.length === 0 && suyos.length === 0 && subiendo.length === 0 && problemas.length === 0 && !creando;
 
   return (
     <mo.div
@@ -563,14 +776,15 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
       variants={PIEZA}
       onDragEnter={(e) => {
         /* Solo el disco resalta el panel entero: un arrastre de dentro se suelta sobre una
-           carpeta concreta, y marcar las dos cosas a la vez no dice dónde va a caer. */
-        if (!e.dataTransfer.types.includes('Files')) return;
+           carpeta concreta, y marcar las dos cosas a la vez no dice dónde va a caer. Sin
+           Drive no hay dónde soltarlo, así que tampoco se invita a hacerlo. */
+        if (!e.dataTransfer.types.includes('Files') || !enDrive) return;
         e.preventDefault();
         cuenta.current++;
         setEncima(true);
       }}
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+        if (e.dataTransfer.types.includes('Files') && enDrive) e.preventDefault();
       }}
       onDragLeave={() => {
         cuenta.current = Math.max(0, cuenta.current - 1);
@@ -581,7 +795,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
         e.preventDefault();
         cuenta.current = 0;
         setEncima(false);
-        void subir(e.dataTransfer.files);
+        if (enDrive) void subir(e.dataTransfer.files);
       }}
     >
       <div className="asig-cab">
@@ -641,7 +855,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
         {subiendo.length > 0 && (
           <mo.div className="asig-subiendo" key="subiendo" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}>
             {subiendo.map((s) => (
-              <span className="asig-barra" key={s.nombre}>
+              <span className="asig-barra" key={s.id}>
                 <span className="asig-barra-txt">{s.nombre}</span>
                 <span className="asig-barra-via" aria-hidden="true">
                   <mo.i animate={{ scaleX: s.tanto || 0.08 }} transition={MUELLE.normal} />
@@ -652,47 +866,13 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {fallidos.length > 0 && (
-          <mo.div
-            className="asig-fallos"
-            key="fallos"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}
-            role="status"
-          >
-            <div className="asig-fallos-cab">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 8v5" />
-                <path d="M12 16.5v.01" />
-                <path d="M10.3 4.3 2.8 17.2A1.6 1.6 0 0 0 4.2 19.6h15.6a1.6 1.6 0 0 0 1.4-2.4L13.7 4.3a1.6 1.6 0 0 0-2.8 0Z" />
-              </svg>
-              <span>
-                {fallidos.length === 1 ? '1 apunte no llegó a Drive' : `${fallidos.length} apuntes no llegaron a Drive`}
-              </span>
-              <Button type="button" variant="outline" size="sm" onClick={() => void reintentar()} disabled={conectando}>
-                {conectando ? 'Reconectando…' : fallidos.some((x) => x.caducada) ? 'Reconectar y reintentar' : 'Reintentar'}
-              </Button>
-              <button type="button" className="asig-fallos-x" onClick={() => setFallidos([])} aria-label="Descartar">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                  <path d="m6 6 12 12M18 6 6 18" />
-                </svg>
-              </button>
-            </div>
-            <ul>
-              {fallidos.map((x) => (
-                <li key={x.f.name}>
-                  <b>{x.f.name}</b>
-                  <span>{x.motivo}</span>
-                  <i>{x.arreglo}</i>
-                </li>
-              ))}
-            </ul>
-          </mo.div>
-        )}
-      </AnimatePresence>
+      <Tira
+        problemas={problemas}
+        conectando={conectando}
+        alReintentar={() => void reintentar()}
+        alDescartar={() => setProblemas([])}
+        alQuitar={(o) => setConfirmando({ objetivo: o, modo: 'quitar' })}
+      />
 
       {vacio ? (
         <div className="asig-vacio">
@@ -725,11 +905,12 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
                 carpeta={c}
                 editando={renombrando === c.id}
                 marcada={sobre === c.id}
+                yendo={yendo.has(c.id)}
                 alEntrar={() => setAqui(c.id)}
                 alRenombrar={() => setRenombrando(c.id)}
                 alBautizar={(n) => void renombrar(c, n)}
                 alCancelar={() => setRenombrando(null)}
-                alBorrar={() => void borrarCarpeta(c)}
+                alBorrar={() => setConfirmando({ objetivo: { tipo: 'carpeta', c }, modo: 'borrar' })}
                 alSoltar={(id, esC) => void mover(id, esC, c.id)}
                 setSobre={setSobre}
               />
@@ -740,11 +921,12 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
                 key={a.id}
                 apunte={a}
                 editando={renombrando === a.id}
+                yendo={yendo.has(a.id)}
                 alAbrir={() => setAbierto(a)}
                 alRenombrar={() => setRenombrando(a.id)}
                 alBautizar={(n) => void renombrar(a, n)}
                 alCancelar={() => setRenombrando(null)}
-                alBorrar={() => void borrar(a)}
+                alBorrar={() => setConfirmando({ objetivo: { tipo: 'apunte', a }, modo: 'borrar' })}
               />
             ))}
           </AnimatePresence>
@@ -759,9 +941,301 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
         )}
       </AnimatePresence>
 
+      <Confirmacion
+        peticion={confirmando}
+        carpetas={carpetas}
+        apuntes={apuntes}
+        correo={correo}
+        cerrar={() => setConfirmando(null)}
+        alConfirmar={({ objetivo, modo }) => {
+          setConfirmando(null);
+          if (modo === 'quitar') {
+            /* La línea de la tira que preguntaba por esto ya está contestada. */
+            const id = objetivo.tipo === 'apunte' ? objetivo.a.id : objetivo.c.id;
+            setProblemas((ps) =>
+              ps.filter((p) => !(p.tipo === 'borrado' && (p.objetivo.tipo === 'apunte' ? p.objetivo.a.id : p.objetivo.c.id) === id)),
+            );
+          }
+          void borrar(objetivo, modo === 'quitar');
+        }}
+      />
       <Visor apunte={abierto} cerrar={() => setAbierto(null)} />
     </mo.div>
   );
+}
+
+/* ───────────────────────── lo que no salió bien ───────────────────────── */
+
+function titular(ps: Problema[]): string {
+  const n = ps.length;
+  if (ps.every((p) => p.tipo === 'subida')) return n === 1 ? '1 apunte no llegó a Drive' : `${n} apuntes no llegaron a Drive`;
+  if (ps.every((p) => p.tipo === 'ficha')) {
+    return n === 1 ? '1 apunte está en Drive pero no en Archicel' : `${n} apuntes están en Drive pero no en Archicel`;
+  }
+  if (ps.every((p) => p.tipo === 'borrado')) return n === 1 ? `No se pudo eliminar «${ps[0].nombre}»` : `${n} cosas no se pudieron eliminar`;
+  return `${n} cosas no salieron bien`;
+}
+
+/**
+ * La tira de fallos: qué, por qué, **lo que dijo Drive** y cómo se arregla.
+ *
+ * Un aviso que se va en tres segundos es el peor sitio posible para un fallo: de cinco
+ * ficheros arrastrados no dice cuál falló, ni por qué, ni deja repetirlo. Esto se queda
+ * hasta que se reintenta o se descarta, y reintentar no pide volver a buscar nada.
+ */
+function Tira({
+  problemas,
+  conectando,
+  alReintentar,
+  alDescartar,
+  alQuitar,
+}: {
+  problemas: Problema[];
+  conectando: boolean;
+  alReintentar: () => void;
+  alDescartar: () => void;
+  /** Para lo que Drive no encuentra: preguntar si se quita solo de Archicel. */
+  alQuitar: (o: Objetivo) => void;
+}) {
+  const reconectar = problemas.some((p) => p.ex.reconectar);
+  return (
+    <AnimatePresence>
+      {problemas.length > 0 && (
+        <mo.div
+          className="asig-fallos"
+          key="fallos"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}
+          role="status"
+        >
+          <div className="asig-fallos-cab">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 8v5" />
+              <path d="M12 16.5v.01" />
+              <path d="M10.3 4.3 2.8 17.2A1.6 1.6 0 0 0 4.2 19.6h15.6a1.6 1.6 0 0 0 1.4-2.4L13.7 4.3a1.6 1.6 0 0 0-2.8 0Z" />
+            </svg>
+            <span title={titular(problemas)}>{titular(problemas)}</span>
+            <Button type="button" variant="outline" size="sm" onClick={alReintentar} disabled={conectando}>
+              {conectando ? 'Reconectando…' : reconectar ? 'Reconectar y reintentar' : 'Reintentar'}
+            </Button>
+            <button type="button" className="asig-fallos-x" onClick={alDescartar} aria-label="Descartar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
+          <ul>
+            {problemas.map((p) => (
+              <li key={p.id}>
+                <b title={p.nombre}>{p.nombre}</b>
+                <span>{p.ex.motivo}</span>
+                {p.ex.dijo && (
+                  <small title={p.ex.dijo}>
+                    <em>Drive:</em> {p.ex.dijo}
+                  </small>
+                )}
+                <i>{p.ex.arreglo}</i>
+                {p.tipo === 'borrado' && p.noEncontrado && (
+                  <Button type="button" variant="ghost" size="sm" className="asig-fallos-quitar" onClick={() => alQuitar(p.objetivo)}>
+                    Quitar solo de Archicel…
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </mo.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/* ───────────────────────── la pregunta antes de borrar ───────────────────────── */
+
+/**
+ * Se pregunta **siempre** antes de borrar, y se dice a dónde va.
+ *
+ * «Eliminar» sugiere que desaparece; en Drive va a la papelera, con treinta días para
+ * sacarlo. Decirlo convierte un clic nervioso en una decisión tranquila. Y una carpeta con
+ * cosas dentro se pregunta **una vez** para todo el árbol, con la cuenta delante: una
+ * carpeta cerrada con veinte apuntes se ve igual que una vacía.
+ *
+ * Va a `body` por un portal: el panel de los apuntes lleva `backdrop-filter`, que convierte
+ * al panel en el bloque contenedor de todo lo `fixed` de dentro — el telón y la hoja se
+ * quedarían encerrados en él en vez de cubrir la ventana.
+ */
+function Confirmacion({
+  peticion,
+  carpetas,
+  apuntes,
+  correo,
+  cerrar,
+  alConfirmar,
+}: {
+  peticion: Peticion | null;
+  carpetas: Carpeta[];
+  apuntes: Apunte[];
+  correo: string | null;
+  cerrar: () => void;
+  alConfirmar: (p: Peticion) => void;
+}) {
+  return (
+    <AlCuerpo>
+      <AnimatePresence>
+        {peticion && (
+          <Pregunta
+            key={`${peticion.modo}-${peticion.objetivo.tipo === 'apunte' ? peticion.objetivo.a.id : peticion.objetivo.c.id}`}
+            peticion={peticion}
+            carpetas={carpetas}
+            apuntes={apuntes}
+            correo={correo}
+            cerrar={cerrar}
+            alConfirmar={alConfirmar}
+          />
+        )}
+      </AnimatePresence>
+    </AlCuerpo>
+  );
+}
+
+function cuantas(n: number, una: string, varias: string) {
+  return `${n} ${n === 1 ? una : varias}`;
+}
+
+function Pregunta({
+  peticion,
+  carpetas,
+  apuntes,
+  correo,
+  cerrar,
+  alConfirmar,
+}: {
+  peticion: Peticion;
+  carpetas: Carpeta[];
+  apuntes: Apunte[];
+  correo: string | null;
+  cerrar: () => void;
+  alConfirmar: (p: Peticion) => void;
+}) {
+  const caja = useDialogo<HTMLElement>(true, cerrar);
+  const si = useRef<HTMLButtonElement>(null);
+  const no = useRef<HTMLButtonElement>(null);
+
+  const { objetivo, modo } = peticion;
+  const quitar = modo === 'quitar';
+  const nombre = objetivo.tipo === 'apunte' ? objetivo.a.nombre : objetivo.c.nombre;
+  const remoto = objetivo.tipo === 'apunte' ? objetivo.a.remoto : objetivo.c.remoto;
+  const enDrive = remoto.proveedor === 'drive';
+
+  let dentro = '';
+  /* Los apuntes antiguos del navegador que hay dentro: esos no van a ninguna papelera. */
+  let locales = 0;
+  if (objetivo.tipo === 'carpeta') {
+    const { carpetas: cs, apuntes: as } = arbolDe(objetivo.c, carpetas, apuntes);
+    const nc = cs.length - 1;
+    const partes = [nc > 0 ? cuantas(nc, 'carpeta', 'carpetas') : '', as.length > 0 ? cuantas(as.length, 'apunte', 'apuntes') : '']
+      .filter(Boolean);
+    dentro = partes.join(' y ');
+    locales = as.filter((a) => a.remoto.proveedor !== 'drive').length;
+  }
+
+  /* Si algo de lo que se va no tiene vuelta atrás —lo antiguo del navegador—, o si se trata
+     de quitar algo que Drive no encuentra, la acción deja de ser «a la papelera». */
+  const irreversible = !enDrive || locales > 0;
+  const de = correo ?? 'la cuenta conectada';
+  const otra = remoto.cuenta && correo && remoto.cuenta !== correo ? remoto.cuenta : null;
+  const lo = objetivo.tipo === 'carpeta' ? 'la' : 'lo';
+
+  /* El foco va a la acción solo si todo se puede recuperar desde la papelera, y a
+     «Cancelar» en cualquier otro caso: Intro no debería destruir nada sin vuelta atrás.
+     Va después de `useDialogo`, que pone el foco en la hoja al montarse. */
+  useEffect(() => {
+    (!quitar && !irreversible ? si : no).current?.focus({ preventScroll: true });
+  }, [quitar, irreversible]);
+
+  return (
+    <>
+      <mo.div className="telon" variants={VELO} initial="fuera" animate="dentro" exit="saliendo" onClick={cerrar} />
+      <mo.aside
+        ref={caja}
+        tabIndex={-1}
+        className="hoja confirmar"
+        variants={HOJA}
+        initial="fuera"
+        animate="dentro"
+        exit="saliendo"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirmar-titulo"
+        aria-describedby="confirmar-texto"
+      >
+        <h3 id="confirmar-titulo">
+          {quitar
+            ? `¿Quitar${lo} solo de Archicel?`
+            : !enDrive
+              ? '¿Eliminar de este equipo?'
+              : locales > 0
+                ? '¿Eliminar la carpeta?'
+                : '¿Mover a la papelera?'}
+        </h3>
+        <p className="confirmar-que" title={nombre}>
+          {objetivo.tipo === 'carpeta' && <IconoCarpeta />}
+          <span>{nombre}</span>
+        </p>
+        {quitar ? (
+          <p id="confirmar-texto" className="confirmar-texto">
+            El Drive de <b>{de}</b> no {lo} encuentra.{' '}
+            {otra
+              ? <>{objetivo.tipo === 'carpeta' ? 'La' : 'Lo'} subió <b>{otra}</b>: conectando esa cuenta se podría mandar a su papelera. </>
+              : 'Puede que se borrara desde Drive, o que lo subiera otra cuenta de Google y siga en su Drive. '}
+            Quitar{lo} de Archicel solo borra {objetivo.tipo === 'carpeta' ? 'las fichas' : 'la ficha'}: no toca ningún Drive.
+            {locales > 0 && (
+              <>
+                {' '}Dentro hay <b>{cuantas(locales, 'apunte guardado', 'apuntes guardados')} en este equipo</b>, y esos se borran sin vuelta atrás.
+              </>
+            )}
+          </p>
+        ) : (
+          <p id="confirmar-texto" className="confirmar-texto">
+            {objetivo.tipo === 'carpeta' && dentro ? (
+              <>
+                Se va con todo lo que tiene dentro: <b>{dentro}</b>.{' '}
+              </>
+            ) : null}
+            {enDrive
+              ? `${locales > 0 ? 'Lo de Drive irá' : 'Irá'} a la papelera de tu Drive, y desde allí se puede recuperar durante 30 días.`
+              : 'Se guardó en este ordenador antes de que los apuntes fueran a Drive. Borrarlo no tiene vuelta atrás.'}
+            {enDrive && locales > 0 && (
+              <>
+                {' '}Pero <b>{cuantas(locales, 'apunte se guardó', 'apuntes se guardaron')} en este equipo</b> antes de que todo fuera a
+                Drive, y {locales === 1 ? 'ese se borra' : 'esos se borran'} sin vuelta atrás.
+              </>
+            )}
+          </p>
+        )}
+        <div className="confirmar-pie">
+          <Button ref={no} type="button" variant="outline" onClick={cerrar}>
+            Cancelar
+          </Button>
+          <Button ref={si} type="button" variant="destructive" data-confirmar onClick={() => alConfirmar(peticion)}>
+            {quitar ? 'Quitar de Archicel' : irreversible ? 'Eliminar' : 'Mover a la papelera'}
+          </Button>
+        </div>
+      </mo.aside>
+    </>
+  );
+}
+
+/**
+ * Lo pinta en `body`, fuera del panel.
+ *
+ * Solo después de montar: la página se prerrenderiza y en el servidor no hay `document`.
+ */
+function AlCuerpo({ children }: { children: React.ReactNode }) {
+  const [listo, setListo] = useState(false);
+  useEffect(() => setListo(true), []);
+  return listo ? createPortal(children, document.body) : null;
 }
 
 /* ───────────────────────── el camino ───────────────────────── */
@@ -906,6 +1380,7 @@ function FilaCarpeta({
   carpeta,
   editando,
   marcada,
+  yendo,
   alEntrar,
   alRenombrar,
   alBautizar,
@@ -917,6 +1392,7 @@ function FilaCarpeta({
   carpeta: Carpeta;
   editando: boolean;
   marcada: boolean;
+  yendo: boolean;
   alEntrar: () => void;
   alRenombrar: () => void;
   alBautizar: (n: string) => void;
@@ -927,13 +1403,14 @@ function FilaCarpeta({
 }) {
   return (
     <mo.li
-      className={`asig-fila carp${marcada ? ' diana' : ''}`}
+      className={`asig-fila carp${marcada ? ' diana' : ''}${yendo ? ' yendo' : ''}`}
       layout
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: 'auto' }}
       exit={{ opacity: 0, height: 0 }}
       transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}
-      draggable={!editando}
+      draggable={!editando && !yendo}
+      aria-busy={yendo || undefined}
       /* `Capture` porque Motion declara su propio `onDragStart` —el de su gesto de
          arrastre— y tapa el del DOM, que es el que lleva `dataTransfer`. En el elemento
          que origina el arrastre las dos fases son la misma cosa. */
@@ -964,12 +1441,12 @@ function FilaCarpeta({
         </>
       ) : (
         <>
-          <button type="button" className="asig-abrir" onClick={alEntrar} title={carpeta.nombre}>
+          <button type="button" className="asig-abrir" onClick={alEntrar} title={carpeta.nombre} disabled={yendo}>
             <span className="asig-ico carp" aria-hidden="true">
               <IconoCarpeta />
             </span>
             <span className="asig-nombre">{carpeta.nombre}</span>
-            <span className="asig-meta">Carpeta</span>
+            <span className="asig-meta">{yendo ? 'A la papelera…' : 'Carpeta'}</span>
           </button>
           <BotonesDeFila alRenombrar={alRenombrar} alBorrar={alBorrar} que={carpeta.nombre} />
         </>
@@ -981,6 +1458,7 @@ function FilaCarpeta({
 function Fila({
   apunte,
   editando,
+  yendo,
   alAbrir,
   alRenombrar,
   alBautizar,
@@ -989,6 +1467,7 @@ function Fila({
 }: {
   apunte: Apunte;
   editando: boolean;
+  yendo: boolean;
   alAbrir: () => void;
   alRenombrar: () => void;
   alBautizar: (n: string) => void;
@@ -997,16 +1476,29 @@ function Fila({
 }) {
   const tipo = tipoDeFichero(apunte.tipo, apunte.nombre);
   const enDrive = apunte.remoto.proveedor === 'drive';
+  /* Posarse un momento sobre la fila ya empieza a bajarlo: cuando llega el clic, está. */
+  const pausa = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const posarse = () => {
+    if (!enDrive || pausa.current) return;
+    pausa.current = setTimeout(() => precargar(apunte.remoto, { tipo: apunte.tipo, tam: apunte.tam }), 120);
+  };
+  const irse = () => {
+    if (pausa.current) clearTimeout(pausa.current);
+    pausa.current = null;
+  };
   return (
     <mo.li
-      className="asig-fila"
+      className={`asig-fila${yendo ? ' yendo' : ''}`}
       layout
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: 'auto' }}
       exit={{ opacity: 0, height: 0 }}
       transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}
-      draggable={!editando}
+      draggable={!editando && !yendo}
+      aria-busy={yendo || undefined}
       onDragStartCapture={(e) => e.dataTransfer.setData(TIPO_ARRASTRE, `a:${apunte.id}`)}
+      onPointerEnter={posarse}
+      onPointerLeave={irse}
     >
       {editando ? (
         <>
@@ -1017,13 +1509,13 @@ function Fila({
         </>
       ) : (
         <>
-          <button type="button" className="asig-abrir" onClick={alAbrir} title={apunte.nombre}>
+          <button type="button" className="asig-abrir" onClick={alAbrir} onFocus={posarse} title={apunte.nombre} disabled={yendo}>
             <span className="asig-ico" style={{ ['--tc' as string]: `var(--c-${tipo.color})` }} aria-hidden="true">
               <IconoDeFichero clase={tipo.clase} />
             </span>
             <span className="asig-nombre">{apunte.nombre}</span>
             <span className="asig-meta">
-              {tipo.nombre} · {pesoLegible(apunte.tam)}
+              {yendo ? 'A la papelera…' : `${tipo.nombre} · ${pesoLegible(apunte.tam)}`}
             </span>
           </button>
           {enDrive && (
@@ -1055,45 +1547,86 @@ function Fila({
  * Se separa en presencia y contenido por lo mismo que las hojas modales: React no sabe
  * animar antes de desmontar, y `AnimatePresence` solo puede vigilar a un hijo que aparece
  * y desaparece — no a uno montado devolviendo `null`.
+ *
+ * Y va a `body`, como la pregunta de borrar: dentro del panel, su `backdrop-filter` lo
+ * encerraba en el panel y el telón le quedaba por encima, así que cualquier clic dentro
+ * del visor lo cerraba.
  */
 function Visor({ apunte, cerrar }: { apunte: Apunte | null; cerrar: () => void }) {
-  return <AnimatePresence>{apunte && <Contenido key="visor" apunte={apunte} cerrar={cerrar} />}</AnimatePresence>;
+  return (
+    <AlCuerpo>
+      <AnimatePresence>{apunte && <Contenido key="visor" apunte={apunte} cerrar={cerrar} />}</AnimatePresence>
+    </AlCuerpo>
+  );
 }
 
+/**
+ * El visor enseña **lo antes posible**, no cuando ha llegado el último byte.
+ *
+ * Una imagen se pinta con lo que va llegando —un JPEG o un PNG a medias se dibuja de
+ * arriba abajo— y el resto enseña cuánto lleva. Un PDF no se puede pintar a medias, pero
+ * «Abriendo… 12 de 40 MB» dice que avanza, que es lo que faltaba. Descargar solo se ofrece
+ * con el fichero entero: un enlace a medio fichero bajaría un fichero roto.
+ */
 function Contenido({ apunte, cerrar }: { apunte: Apunte; cerrar: () => void }) {
-  const archivador = elArchivador();
+  const archivador = useMemo(() => elArchivador(), []);
   const [url, setUrl] = useState<string | null>(null);
-  const [fallo, setFallo] = useState<string | null>(null);
+  const [entero, setEntero] = useState(false);
+  const [tanto, setTanto] = useState(0);
+  const [fallo, setFallo] = useState<Explicacion | null>(null);
   const clase = seVeDentro(apunte.tipo, apunte.nombre);
+  /* Las direcciones `blob:` que se han dado, para soltarlas: la vigente y las parciales. */
+  const dadas = useRef<string[]>([]);
 
   useEffect(() => {
     let vivo = true;
-    let mio: string | null = null;
+    const dar = (b: Blob) => {
+      const u = URL.createObjectURL(b);
+      dadas.current.push(u);
+      setUrl(u);
+    };
     archivador
-      .enlace(apunte.remoto as Remoto)
-      .then((u) => {
-        if (!vivo) {
-          /* llegó después de cerrar: se suelta en el acto o se queda en memoria */
-          archivador.soltar(u);
-          return;
-        }
-        mio = u;
-        setUrl(u);
+      .leer(apunte.remoto as Remoto, {
+        tipo: apunte.tipo,
+        tam: apunte.tam,
+        alAvanzar: (parcial, t) => {
+          if (!vivo || t >= 1) return;
+          setTanto(t);
+          if (clase === 'imagen') dar(parcial);
+        },
+      })
+      .then((b) => {
+        if (!vivo) return;
+        dar(b);
+        setTanto(1);
+        setEntero(true);
       })
       .catch((e) => {
-        if (vivo) setFallo(e instanceof FalloDeArchivo ? e.message : 'No se pudo abrir este apunte.');
+        if (vivo) setFallo(explicar(e));
       });
     return () => {
       vivo = false;
-      if (mio) archivador.soltar(mio);
+      for (const u of dadas.current) URL.revokeObjectURL(u);
+      dadas.current = [];
     };
-  }, [apunte, archivador]);
+  }, [apunte, archivador, clase]);
+
+  /* Una parcial se suelta cuando la siguiente ya se ha pintado, no antes: soltarla antes
+     dejaría un hueco en blanco entre las dos. */
+  const pintada = useCallback((u: string) => {
+    const viejas = dadas.current.filter((x) => x !== u && dadas.current.indexOf(x) < dadas.current.indexOf(u));
+    for (const v of viejas) URL.revokeObjectURL(v);
+    dadas.current = dadas.current.filter((x) => !viejas.includes(x));
+  }, []);
 
   useEffect(() => {
     const alPulsar = (e: KeyboardEvent) => e.key === 'Escape' && cerrar();
     window.addEventListener('keydown', alPulsar);
     return () => window.removeEventListener('keydown', alPulsar);
   }, [cerrar]);
+
+  const abriendo = !fallo && (!url || (!entero && clase !== 'imagen'));
+  const recibido = pesoLegible(Math.round(apunte.tam * tanto));
 
   return (
     <>
@@ -1111,7 +1644,7 @@ function Contenido({ apunte, cerrar }: { apunte: Apunte; cerrar: () => void }) {
         <div className="visor-cab">
           <span className="visor-nombre">{apunte.nombre}</span>
           <span className="visor-meta">{pesoLegible(apunte.tam)}</span>
-          {url && (
+          {url && entero && (
             <a className="visor-fuera" href={url} download={apunte.nombre} aria-label="Descargar">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 4v11" />
@@ -1127,24 +1660,37 @@ function Contenido({ apunte, cerrar }: { apunte: Apunte; cerrar: () => void }) {
           </button>
         </div>
 
+        {/* Mientras baja, una línea de progreso bajo la cabecera: mide bytes de verdad. */}
+        {!entero && !fallo && (
+          <span className="visor-via" aria-hidden="true">
+            <mo.i animate={{ scaleX: tanto || 0.04 }} transition={MUELLE.normal} />
+          </span>
+        )}
+
         <div className="visor-cuerpo">
           {fallo ? (
-            <p className="visor-aviso">{fallo}</p>
-          ) : !url ? (
-            <p className="visor-aviso">Abriendo…</p>
+            <div className="visor-nada">
+              <p>{fallo.motivo}</p>
+              {fallo.dijo && <small className="visor-dijo">Drive: {fallo.dijo}</small>}
+              <p className="visor-arreglo">{fallo.arreglo}</p>
+            </div>
+          ) : abriendo ? (
+            <p className="visor-aviso" role="status">
+              {tanto > 0 ? `Abriendo… ${recibido} de ${pesoLegible(apunte.tam)}` : 'Abriendo…'}
+            </p>
           ) : clase === 'imagen' ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={url} alt={apunte.nombre} />
+            <img src={url ?? undefined} alt={apunte.nombre} onLoad={() => url && pintada(url)} />
           ) : clase === 'video' ? (
             /* Con controles y sin reproducción automática: un vídeo que arranca solo al
                abrirlo asusta más que ayuda, sobre todo con auriculares puestos. */
-            <video src={url} controls playsInline />
+            <video src={url ?? undefined} controls playsInline />
           ) : clase === 'pdf' ? (
-            <iframe src={url} title={apunte.nombre} />
+            <iframe src={url ?? undefined} title={apunte.nombre} />
           ) : (
             <div className="visor-nada">
               <p>Este formato no se puede ver aquí dentro.</p>
-              <a className="visor-descargar" href={url} download={apunte.nombre}>
+              <a className="visor-descargar" href={url ?? undefined} download={apunte.nombre}>
                 Descargar
               </a>
             </div>
