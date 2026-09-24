@@ -6,6 +6,9 @@ Cómo está montado y, sobre todo, **dónde se toca cada cosa** cuando el proyec
 
 ```
 src/lib/data      el modelo y el almacén — no sabe que existe React
+src/lib/archivo   el archivador: los bytes de los apuntes (Drive), el permiso de Google y los
+                  iconos por tipo de fichero
+src/lib/canvas    el motor del campus; solo lo importa /api/canvas (server-only)
 src/lib/ui        catálogo visual: iconos, tipos de evento, prioridades
 src/lib/firebase  la sesión y el arranque de Firebase
 src/hooks         el puente entre el almacén y los componentes
@@ -48,7 +51,23 @@ sesión y de que migrar a la nube al entrar sea una línea.
 4. sus reglas en `firestore.rules` — **y su nombre en `estaValidada`**, o el comodín de
    las reglas dejará entrar cualquier cosa;
 5. su hook en `useDatos.ts`, apoyado en `useLista`, que ya trae orden estable y
-   deduplicación.
+   deduplicación;
+6. si tiene que sobrevivir a entrar con una cuenta, **su línea en `migrarLocalANube`**
+   (`lib/data/index.ts`). La migración nombra cada colección a mano, y ese paso se olvidó
+   con apuntes y carpetas.
+
+## El archivador: los bytes, con el mismo patrón
+
+Los apuntes tienen ficha y fichero, y cada uno va por su lado: la ficha por el almacén, los
+bytes por `lib/archivo`. Allí `archivador.ts` es el contrato (subir, crear carpeta,
+renombrar, mover, borrar, enlace), `archivador-drive.ts` la implementación de verdad y
+`archivador-local.ts` la antigua de IndexedDB, que hoy solo abre y borra lo guardado antes.
+`index.ts` **encamina**: lo nuevo va siempre a Drive, y lo existente al proveedor que diga su
+propio `remoto`.
+
+`google.ts` es el único fichero que sabe de OAuth. Ninguna pantalla importa
+`archivador-drive` ni `google` directamente: todo pasa por `@/lib/archivo`. El detalle está
+en [DRIVE.md](../integraciones/DRIVE.md).
 
 ## Los hooks, y por qué no son un envoltorio tonto
 
@@ -95,5 +114,8 @@ Sinceridad sobre el estado real:
   tarea cambia, porque ya no guardan el suyo.
 - **No hay pruebas automatizadas.** Todo se verifica midiendo en el navegador. Para el
   tamaño actual funciona; en cuanto haya más de una persona tocando, hará falta.
+- **La migración al entrar no se lleva apuntes ni carpetas.** Lo que se organizó sin
+  cuenta deja de verse al entrar; los ficheros siguen en Drive. Ver DRIVE.md § 10, donde
+  están también el resto de pendientes de los apuntes.
 - **`hecha` y `progreso` conviven** en las tareas. `hecha` es el campo antiguo y se sigue
   escribiendo para no romper lo guardado. Cuando no queden tareas viejas, se retira.

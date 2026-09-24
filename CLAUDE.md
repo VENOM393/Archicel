@@ -197,7 +197,8 @@ Dos cosas que no hay que olvidar:
 - **La clave de la app web es pública** y va en el cliente: lo que protege los datos son las
   reglas. Lo que nunca se comparte ni se sube al repositorio es el JSON de cuenta de servicio.
 - **La cuenta es una invitación, no un muro.** Archicel abre y funciona sin sesión; entrar solo
-  hace que todo la siga a otro dispositivo, y lo guardado sin cuenta sube solo al entrar. El
+  hace que todo la siga a otro dispositivo, y lo guardado sin cuenta sube solo al entrar —salvo,
+  hoy, las fichas de apuntes y carpetas, que la migración no incluye (DRIVE.md § 10)—. El
   acceso, las dos vías (Google y correo) y qué hay que activar en la consola están en
   [docs/data/CUENTAS.md](docs/data/CUENTAS.md).
 
@@ -317,11 +318,14 @@ Todo el detalle —endpoints, paginación, cuota, caché y qué está comprobado
 
 ## Apuntes: Google Drive
 
-Cada asignatura va a tener su página, y en ella los apuntes de Celeste —fotos, PDFs, `.docx`—.
+Cada asignatura tiene su página, y en ella los apuntes de Celeste —fotos, PDFs, `.docx`—.
 Los bytes van a **Google Drive**; Firestore guarda solo la ficha. El planteamiento entero, con los
 pasos de la consola, está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
 
 **Estado: funcionando.** Subida, visor, borrado, **carpetas, renombrar y mover** contra Drive real.
+Lo que falta o está a medias —con fichero y línea— está en el § 10 de DRIVE.md; lo más serio: borrar
+se traga los fallos de Drive, la tira presenta cualquier `sin-permiso` como sesión caducada, y la
+migración al entrar con cuenta no se lleva apuntes ni carpetas.
 
 La ruta en Drive es `Archicel/Asignaturas/<nombre de la asignatura>`, y dentro el árbol que la
 usuaria haya montado. Se llamó `Apuntes` y **la aplicación renombra la vieja** la primera vez que
@@ -329,8 +333,9 @@ la encuentra: crear la nueva sin más habría dejado el trabajo repartido en dos
 nada explicara por qué.
 
 **`NEXT_PUBLIC_GOOGLE_CLIENT_ID` va también en las variables de Vercel**, o en producción la
-aplicación ni siquiera ofrece conectar: sin ID no tiene con qué pedirlo, y todo lo que suba Celeste
-se queda en su portátil sin que nada lo advierta.
+aplicación ni siquiera ofrece conectar: sin ID no tiene con qué pedirlo, la cabecera dice «Sin
+conectar», no aparece el botón de Conectar Drive y «Subir» y «Carpeta» quedan deshabilitados. No se
+pierde nada —ya no hay caída al disco—, pero tampoco se puede guardar ningún apunte.
 
 Vercel marca esa variable como si fuera una credencial por llevar el prefijo `NEXT_PUBLIC_`. Se
 resuelve con **«Change to Config»**, que es su etiqueta para «configuración pública»: un ID de
@@ -370,9 +375,14 @@ Se puede montar de dos maneras y se eligió a conciencia:
 
 Se eligió lo segundo porque Archicel es de una persona y no debe pedirle que mantenga credenciales
 a mano. El precio está medido: **dentro de la hora, recargar no pide nada** (comprobado: conectar
-una vez y recargar tres veces pregunta a Google **una sola vez**); pasada la hora, la siguiente
-acción lo renueva sola, porque subir y arrastrar nacen de un gesto y desde ahí Google deja abrir su
-ventana — y si ya se concedió, se abre y se cierra sin enseñar nada.
+una vez y recargar tres veces pregunta a Google **una sola vez**); pasada la hora, **con la pestaña
+abierta**, la siguiente acción lo renueva sola, porque subir y arrastrar nacen de un gesto y desde
+ahí Google deja abrir su ventana — y si ya se concedió, se abre y se cierra sin enseñar nada.
+
+Lo que no renueva solo es **recargar pasada la hora**: el token recordado ya no vale, la pantalla
+vuelve a «Sin conectar» con «Subir» y «Carpeta» deshabilitados, y hay que pulsar **Conectar Drive**
+(comprobado en el navegador con un token caducado). Con el consentimiento dado es un clic y una
+ventana que se cierra sola, pero es un clic.
 
 Guardar el token es aceptable **por el mismo motivo por el que puede vivir en el navegador**: con
 `drive.file` no abre nada salvo lo que esta aplicación creó.
@@ -400,7 +410,10 @@ perder el tiempo a quien lo pulse.
 2. **Si aun así no se puede, se dice y no se guarda en otro sitio.** Sale una tira con el fichero,
    el motivo **y cómo se arregla** — que es la mitad que faltaba: saber que no queda espacio sin
    saber que hay que vaciar la papelera de Drive deja a quien lo lee igual de atascada. Cada causa
-   tiene su salida y la pantalla es el único sitio donde cabe decirla.
+   tiene su salida y la pantalla es el único sitio donde cabe decirla. **Hoy la traducción se
+   equivoca en dos casos** (comprobados con Drive simulado): cualquier `sin-permiso` —también una
+   API deshabilitada— sale como «La sesión de Drive ha caducado» y el texto de Drive no llega a la
+   tira; y un límite de peticiones sale como «No queda espacio». Detalle en DRIVE.md § 10.
 3. **El fichero no se pierde de vista.** La tira guarda el `File`, así que reintentar es un botón y
    no volver a buscarlo en el disco. Un aviso que se va en tres segundos es el peor sitio posible
    para un fallo: de cinco ficheros arrastrados no dice cuál falló, ni por qué, ni deja repetirlo.
@@ -435,9 +448,10 @@ Cuatro cosas más que no se deducen y que cuestan una tarde cada una:
   personal; la subida falla. La salida oficial es una unidad compartida, que es Workspace de pago.
 - **El navegador sube directo a Google, no por `/api`.** Vercel corta el cuerpo de una petición en
   4,5 MB y un PDF escaneado se pasa de ahí sin esfuerzo.
-- **`archivo/index.ts` es un encaminador, no un interruptor.** Al subir va siempre a Drive; al abrir
-  y al borrar manda el `proveedor` que lleve el propio apunte. Eso último no es nostalgia: es lo que
-  hace que lo guardado en el equipo antes de este cambio siga abriéndose.
+- **`archivo/index.ts` es un encaminador, no un interruptor.** Al subir y al crear carpeta va
+  siempre a Drive; al abrir, borrar, renombrar y mover manda el `proveedor` que lleve el propio
+  apunte. Eso último no es nostalgia: es lo que hace que lo guardado en el equipo antes de este
+  cambio siga abriéndose.
 
 Y tres trampas de las que costó salir:
 
@@ -456,9 +470,12 @@ escribe quien sea**, así que se pinta como texto y nunca como HTML.
 
 ### Organizarse: carpetas, renombrar y mover
 
-La usuaria decide el árbol, con Drive conectado y sin conectarlo. **Organizarse no puede depender
-de la infraestructura**: una carpeta que solo funciona con Drive puesto convierte una decisión de
-orden en una decisión de configuración.
+La usuaria decide el árbol. La intención era que pudiera hacerlo **con Drive conectado y sin
+conectarlo** —organizarse no debería depender de la infraestructura—, pero **hoy crear una carpeta
+exige Drive**: desde que las subidas son solo Drive, `crearCarpeta` pasa por la misma comprobación
+y el botón «Carpeta» se deshabilita sin conectar. Renombrar y mover lo antiguo guardado en el equipo
+sí funciona sin conectar. Queda por decidir si se vuelve a la intención o se da por buena la
+realidad (DRIVE.md § 10).
 
 Cuatro cosas que no se deducen:
 
@@ -485,8 +502,10 @@ gesto de arrastre— y tapa el del DOM, que es el que lleva `dataTransfer`.
 horario o su chip en la leyenda, y es **una página compuesta, no un tablero de widgets**: la portada
 manda, y los apuntes son la superficie de trabajo.
 
-**Estado: terminada.** Los bytes van a Drive —y solo a Drive—, con carpetas, renombrar y mover. El
-planteamiento completo está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
+**Estado: terminada**, con los pendientes de DRIVE.md § 10. Los bytes van a Drive —y solo a
+Drive—, con carpetas, renombrar y mover. Es una lista, no una rejilla, y sin miniaturas; el visor
+enseña dentro imágenes, PDF y vídeo, y el resto se descarga. El planteamiento completo está en
+[docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
 
 Lo que no se deduce leyendo el código:
 
