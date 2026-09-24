@@ -401,8 +401,10 @@ Drive, con cuatro estados:
 vez de abrir una ventana. El foco va a «Cancelar», Escape la cierra, y al cerrarla el foco vuelve al
 botón que la abrió. Confirmar llama a `desconectarDrive()` (`src/lib/archivo/index.ts`), que:
 
-1. olvida el correo y los **ids de carpeta** recordados en la pestaña —se buscaron con esa cuenta, y
-   conectando otra en la misma pestaña `drive.file` no los alcanzaría—;
+1. olvida el correo de la cuenta (`olvidarQuien`). Los **ids de carpeta** que el archivador recuerda
+   por pestaña se buscaron con esa cuenta y, conectando otra en la misma pestaña, `drive.file` no
+   los alcanzaría: soltarlos al desconectar es cosa de `archivador-drive.ts`, que está rehaciendo
+   esa memoria (idealmente por cuenta) — hasta entonces, cambiar de cuenta pide recargar;
 2. olvida el token y la marca de «se ha usado Drive» en `localStorage`;
 3. **pide a Google que revoque el permiso**, cargando antes su guion si hace falta: tras recargar el
    token sale de `localStorage` y el guion no se ha pedido nunca, y sin él la revocación era un no-op.
@@ -534,8 +536,11 @@ Resultado de la auditoría del 24 de septiembre de 2026, contrastando este docum
 Lo marcado **(visto)** se reprodujo en el navegador contra `npm run build && npm start`, con Drive
 simulado (token falso y respuestas de Google interceptadas); lo demás sale de leer el código.
 
-**Resuelto después:** la migración al entrar ya se lleva apuntes y carpetas (§ 3 y CUENTAS.md), y
-Drive se desconecta desde Ajustes (§ 6). Lo que queda de aquella lista sigue abajo.
+**Resuelto después:** la migración al entrar ya se lleva apuntes y carpetas (§ 3 y CUENTAS.md),
+Drive se desconecta desde Ajustes (§ 6), y **mover a la raíz ya llega a la nube**: `guardar` escribía
+con `merge: true`, que conserva los campos que no vienen, así que `delete a.carpeta` dejaba el
+apunte en Firestore dentro de la carpeta de antes. Ahora cada colección nombra sus opcionales y el
+que falta se borra con `deleteField()` (ver FIRESTORE.md § 5). Lo que queda sigue abajo.
 
 **Riesgo de perder o descolocar apuntes**
 
@@ -543,10 +548,6 @@ Drive se desconecta desde Ajustes (§ 6). Lo que queda de aquella lista sigue ab
   cualquier error al mandar a la papelera —no solo «ya no está»— y borran la ficha igual. Con Drive
   devolviendo 503, la carpeta desapareció de Archicel y seguiría viva en Drive, sin nada que la
   enlace ya.
-- **Mover a la raíz no llega a la nube.** `Asignatura.tsx:499-506` borra `madre` o `carpeta` del
-  objeto y lo guarda, pero `almacen-firestore.ts` escribe con `merge: true`, que **conserva** los
-  campos que no vienen: en Firestore el apunte o la carpeta sigue dentro de la carpeta de antes. En
-  el almacén local sí funciona, porque reescribe el documento entero. Hace falta `deleteField()`.
 - **Borrar una carpeta con subcarpetas llenas vuelve a preguntar por cada una**
   (`Asignatura.tsx:541-546`). Si se cancela una de dentro, la de fuera se borra igual y la hija
   queda con una `madre` que ya no existe: invisible en el árbol.

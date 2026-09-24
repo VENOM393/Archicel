@@ -198,6 +198,12 @@ Dos cosas que no hay que olvidar:
   Cambiar de una a otra es una línea y ninguna pantalla se entera.
 - **La clave de la app web es pública** y va en el cliente: lo que protege los datos son las
   reglas. Lo que nunca se comparte ni se sube al repositorio es el JSON de cuenta de servicio.
+- **Guardar en Firestore es con `merge`, y un opcional que falta se borra.** Cada colección de
+  `almacen-firestore.ts` nombra sus campos opcionales; el que no llega —o llega `undefined`— se
+  manda como `deleteField()`. Sin eso, mover un apunte a la raíz lo dejaba en la nube dentro de
+  la carpeta de antes, y un `undefined` hacía que Firestore rechazara la escritura entera. **Un
+  campo opcional nuevo en `tipos.ts` va también a esa lista**, y `guardar` recibe siempre el
+  documento completo, nunca un trozo.
 - **La cuenta es una invitación, no un muro.** Archicel abre y funciona sin sesión; entrar solo
   hace que todo la siga a otro dispositivo, y lo guardado sin cuenta sube solo al entrar,
   apuntes y carpetas incluidos. **La migración lleva una marca por colección**: una colección
@@ -327,8 +333,7 @@ pasos de la consola, está en [docs/integraciones/DRIVE.md](docs/integraciones/D
 
 **Estado: funcionando.** Subida, visor, borrado, **carpetas, renombrar y mover** contra Drive real.
 Lo que falta o está a medias —con fichero y línea— está en el § 10 de DRIVE.md; lo más serio: borrar
-se traga los fallos de Drive, la tira presenta cualquier `sin-permiso` como sesión caducada, y
-mover a la raíz no llega a Firestore (`merge: true` conserva el campo `madre`/`carpeta`).
+se traga los fallos de Drive, y la tira presenta cualquier `sin-permiso` como sesión caducada.
 
 La ruta en Drive es `Archicel/Asignaturas/<nombre de la asignatura>`, y dentro el árbol que la
 usuaria haya montado. Se llamó `Apuntes` y **la aplicación renombra la vieja** la primera vez que
@@ -362,7 +367,7 @@ los apuntes no aparecen donde deberían. El correo sale de `drive/v3/about`, que
 
 **Se ve y se suelta en Ajustes** (`/ajustes`, desde el menú del avatar): con qué cuenta está
 conectado y **Desconectar Drive**, que pide confirmación, revoca el permiso en Google, olvida el
-token, el correo y los ids de carpeta, y deja la pantalla en «Sin conectar» sin recargar. **No
+token y el correo, y deja la pantalla en «Sin conectar» sin recargar. **No
 borra nada** de Drive ni de Archicel. Si el token ya había caducado, Google no puede confirmar la
 revocación y la pantalla lo dice, con el enlace para retirarla desde la cuenta de Google. Los
 avisos de conectar/desconectar viajan con `alCambiarDrive`, también entre pestañas. Detalle en

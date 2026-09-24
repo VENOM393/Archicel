@@ -178,6 +178,29 @@ verbos —`listar`, `guardar`, `borrar`, `escuchar`— y dos implementaciones:
 Cambiar de una a otra es una línea. La interfaz nunca sabe dónde viven los datos, y por eso se puede
 trabajar sin conexión, hacer pruebas sin tocar la base real y migrar sin reescribir pantallas.
 
+**Cómo escribe `guardar` en Firestore.** Con `setDoc(…, { merge: true })`, para no perder `creado`
+ni lo que otra versión de la aplicación haya añadido al documento. El precio de `merge` es que
+**conserva todo campo que no venga**, así que quitar un campo del objeto no lo quita de la nube:
+mover un apunte a la raíz (`delete a.carpeta`) lo dejaba dentro de la carpeta de antes. Por eso
+cada colección declara sus campos opcionales en `almacen-firestore.ts`:
+
+| Colección | Opcionales |
+|---|---|
+| `eventos` | `materia`, `nota` |
+| `tareas` | `asignatura`, `progreso` |
+| `apuntes` | `carpeta`, `orden` |
+| `carpetas` | `madre` |
+
+El opcional que no llega, o llega `undefined`, se manda como `deleteField()` y desaparece.
+`undefined` necesitaba ese trato de todas formas: Firestore rechaza la escritura entera si lo
+encuentra, y una tarea sin asignatura no se guardaba. Las reglas aceptan el resultado, porque
+todas escriben los opcionales como `!('campo' in request.resource.data) || …`.
+
+Dos condiciones para que esto siga siendo cierto: **`guardar` recibe siempre el documento
+completo** —el que se leyó, con lo que cambió—, nunca un trozo, porque un trozo borraría los
+opcionales que no trajera; y **un opcional nuevo en `tipos.ts` va también a esa lista**. El almacén
+local no lo necesita: reescribe el documento entero.
+
 El orden de trabajo cuando tengamos la configuración:
 
 1. Meter `firebaseConfig` en variables de entorno del proyecto Next.js (`NEXT_PUBLIC_FIREBASE_*`).
