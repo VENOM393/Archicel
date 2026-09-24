@@ -122,8 +122,9 @@ service cloud.firestore {
 
       // apuntes: la FICHA de un fichero, nunca el fichero.
       //
-      // Los bytes viven en el archivador (Drive, o el navegador mientras no lo haya) y
-      // aquí solo está lo que hace falta para pintar la pantalla. De ahí el tope de
+      // Los bytes viven en el archivador —Drive para todo lo nuevo; el navegador solo para
+      // lo que se guardó ahí antes— y aquí solo está lo que hace falta para pintar la
+      // pantalla. De ahí el tope de
       // tamaño: si alguna vez alguien intentara meter el contenido en base64 dentro de
       // `nombre`, no cabría.
       match /apuntes/{apunteId} {

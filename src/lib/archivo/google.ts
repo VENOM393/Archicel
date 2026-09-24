@@ -157,6 +157,23 @@ function olvidar(): void {
 }
 
 /**
+ * Drive ha rechazado este token: se tira para que la siguiente petición pida otro.
+ *
+ * Sin esto, un token revocado o caducado antes de hora seguiría pareciendo válido hasta su
+ * fecha, y «Reconectar y reintentar» devolvería el mismo token muerto sin abrir nada. Solo
+ * se tira si sigue siendo el recordado: si otra petición ya consiguió uno nuevo, ese vale.
+ * La marca de uso se queda, porque quererlo no ha cambiado.
+ */
+export function caducarToken(rechazado: string): void {
+  if (token !== rechazado) return;
+  token = null;
+  caducaEn = 0;
+  try {
+    localStorage.removeItem(GUARDADO);
+  } catch {}
+}
+
+/**
  * Si esta persona ya ha conectado Drive alguna vez en este navegador.
  *
  * Distinto de `hayPermiso`: eso es «puedo usarlo ahora», esto es «lo quiere». Pasada la

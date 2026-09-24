@@ -1532,6 +1532,12 @@
   .asig-fila[draggable='true']:active{cursor:grabbing}
   /* La carpeta que va a recibir lo que sueltas: anillo y un punto de relleno, sin tapar
      su nombre — hay que poder comprobar que es la que se quería. */
+  /* Mientras Drive confirma la papelera, la fila se apaga y no se deja tocar. La opacidad
+     va en los hijos y no en la fila: la de la fila la lleva Motion, y una propiedad la
+     controla Motion o la controla el CSS, nunca los dos. */
+  .asig-fila > *{transition:opacity 220ms var(--ease-soft)}
+  .asig-fila.yendo{pointer-events:none}
+  .asig-fila.yendo > *{opacity:.42}
   .asig-fila.carp.diana{
     background:color-mix(in srgb,var(--accent) 16%,transparent);
     box-shadow:inset 0 0 0 1px var(--accent-linea);
@@ -1647,7 +1653,10 @@
     font-size:13px;color:var(--ink)
   }
   .asig-fallos-cab > svg{flex:none;color:var(--late)}
-  .asig-fallos-cab > span{margin-right:auto;font-weight:500}
+  .asig-fallos-cab > span{
+    margin-right:auto;font-weight:500;min-width:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+  }
   .asig-fallos-x{
     flex:none;width:28px;height:28px;border-radius:var(--r-sm);display:grid;place-items:center;
     border:0;background:none;color:var(--ink-subtle);cursor:pointer;
@@ -1662,7 +1671,16 @@
     font-weight:500;color:var(--ink-muted);min-width:0;flex:0 1 auto;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis
   }
-  .asig-fallos li span{color:var(--late);flex:none}
+  .asig-fallos li span{color:var(--late);flex:0 1 auto;min-width:0}
+  /* Lo que dijo Drive, tal cual y en la letra de los datos: no es una frase de la casa,
+     es el texto de otro sistema, y tiene que leerse como una cita y no como el motivo.
+     Dos líneas como mucho; el entero está en el `title`. */
+  .asig-fallos li small{
+    flex:1 1 100%;min-width:0;font-family:var(--data);font-size:10.5px;line-height:1.5;
+    color:var(--ink-subtle);overflow-wrap:anywhere;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden
+  }
+  .asig-fallos li small em{font-style:normal;opacity:.7}
   /* La salida, en su propia línea y en cursiva: es una instrucción, no un dato más de la
      fila. Puesta al lado del motivo se lee como parte del error y se salta. */
   .asig-fallos li i{
@@ -1685,8 +1703,10 @@
   /* ── el visor ──
      A pantalla casi completa: lo que se abre es una lámina o un PDF, y verlo pequeño
      dentro de un panel no sirve para estudiar. */
+  /* Por encima de su telón (70) y de las hojas (75): antes quedaba debajo del telón, y
+     cualquier clic dentro del visor lo cerraba. */
   .visor{
-    position:fixed;z-index:60;inset:3vh 3vw;display:flex;flex-direction:column;
+    position:fixed;z-index:76;inset:3vh 3vw;display:flex;flex-direction:column;
     border-radius:var(--r-xl);overflow:hidden;
     background:color-mix(in srgb,var(--panel-strong) 94%,var(--canvas));
     border:1px solid var(--hairline-lit);
@@ -1711,6 +1731,12 @@
   }
   .visor-fuera:hover,.visor-cerrar:hover{color:var(--ink);border-color:var(--hairline-lit);background:rgba(255,255,255,.06)}
 
+  /* Lo que lleva bajado. Una línea de 2 px bajo la cabecera, como la de las subidas: mide
+     bytes de verdad, no un giro que no dice cuánto falta. */
+  .visor-via{height:2px;flex:none;background:var(--hairline);overflow:hidden;display:block}
+  .visor-via i{
+    display:block;height:100%;width:100%;background:var(--accent-linea);transform-origin:left center
+  }
   .visor-cuerpo{
     flex:1 1 auto;min-height:0;display:grid;place-items:center;overflow:auto;
     background:rgba(0,0,0,.35)
@@ -1721,6 +1747,28 @@
   .visor-aviso{margin:0;font-size:13px;color:var(--ink-subtle)}
   .visor-nada{display:flex;flex-direction:column;align-items:center;gap:14px;padding:28px}
   .visor-nada p{margin:0;font-size:13px;color:var(--ink-subtle)}
+  .visor-nada{max-width:60ch;text-align:center}
+  .visor-nada p:first-child{color:var(--ink)}
+  .visor-dijo{font-family:var(--data);font-size:11px;color:var(--ink-muted);overflow-wrap:anywhere}
+  .visor-nada .visor-arreglo{font-style:italic;font-size:12px}
+
+  /* ── la pregunta antes de borrar ──
+     La misma hoja de cristal que editar una tarea, más estrecha: es una frase y dos
+     botones. Lo que se va a borrar va en su propia caja, con su nombre entero a la vista,
+     porque lo primero que hay que poder comprobar es que es eso y no lo de al lado. */
+  .hoja.confirmar{width:min(92vw,440px);padding:22px 24px 20px}
+  .hoja.confirmar h3{margin:0 0 14px;font-size:18px}
+  .confirmar-que{
+    display:flex;align-items:center;gap:9px;margin:0 0 12px;min-width:0;
+    padding:9px 11px;border-radius:var(--r-sm);
+    background:rgba(255,255,255,.045);border:1px solid var(--hairline);
+    font-size:13.5px;font-weight:500;color:var(--ink)
+  }
+  .confirmar-que svg{flex:none;color:var(--accent-linea)}
+  .confirmar-que span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .confirmar-texto{margin:0;font-size:13px;line-height:1.55;color:var(--ink-muted)}
+  .confirmar-texto b{font-weight:500;color:var(--ink)}
+  .confirmar-pie{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
   .visor-descargar{
     padding:8px 16px;border-radius:var(--r-sm);font-size:13px;text-decoration:none;
     color:var(--ink);border:1px solid var(--hairline-lit);
