@@ -61,6 +61,8 @@ import {
 import {
   ASIGNATURAS,
   HORARIO,
+  TOPES,
+  acortar,
   aFecha,
   buscarAsignatura,
   deFecha,
@@ -246,6 +248,19 @@ interface Donde {
 type Objetivo = { tipo: 'apunte'; a: Apunte } | { tipo: 'carpeta'; c: Carpeta };
 
 /**
+ * Qué se pregunta antes de borrar.
+ *
+ *   · `borrar`: mandarlo a la papelera de Drive (y lo antiguo del navegador, borrarlo).
+ *   · `quitar`: Drive **no lo encuentra**, y la pregunta es si se quita solo la ficha. No es
+ *     lo mismo que borrarlo: con `drive.file`, «no lo encuentro» también es lo que contesta
+ *     Drive a un fichero que subió otra cuenta de Google y que sigue vivo en su Drive.
+ */
+interface Peticion {
+  objetivo: Objetivo;
+  modo: 'borrar' | 'quitar';
+}
+
+/**
  * Lo que no salió bien, con todo lo necesario para reintentarlo sin pedir nada otra vez.
  *
  *   · `subida`: no llegó a Drive. Guarda el `File`, y reintentar sigue donde se quedó.
@@ -256,7 +271,7 @@ type Objetivo = { tipo: 'apunte'; a: Apunte } | { tipo: 'carpeta'; c: Carpeta };
 type Problema = { id: string; nombre: string; ex: Explicacion } & (
   | { tipo: 'subida'; fichero: File; donde: Donde }
   | { tipo: 'ficha'; fichero: File; remoto: Remoto; donde: Donde }
-  | { tipo: 'borrado'; objetivo: Objetivo }
+  | { tipo: 'borrado'; objetivo: Objetivo; noEncontrado?: boolean }
 );
 
 /** Lo que se está arrastrando dentro de la aplicación, para no confundirlo con el disco. */
@@ -285,19 +300,6 @@ async function enParalelo<T>(lista: T[], cuantos: number, hacer: (x: T) => Promi
   );
 }
 
-/**
- * El nombre de la ficha, dentro del tope de las reglas (300).
- *
- * Un nombre más largo lo rechazaba el almacén **después** de haber subido el fichero, y la
- * tira decía que no había llegado a Drive cuando sí. Se acorta por el medio y se conserva
- * la extensión; en Drive el fichero se queda con su nombre entero.
- */
-function acortar(nombre: string, tope = 300): string {
-  if (nombre.length <= tope) return nombre;
-  const i = nombre.lastIndexOf('.');
-  const ext = i > 0 && nombre.length - i <= 16 ? nombre.slice(i) : '';
-  return `${nombre.slice(0, tope - ext.length - 1)}…${ext}`;
-}
 
 function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[] }) {
   const { almacen } = useArchicel();
@@ -313,7 +315,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
   const [abierto, setAbierto] = useState<Apunte | null>(null);
   const [creando, setCreando] = useState(false);
   const [renombrando, setRenombrando] = useState<string | null>(null);
-  const [confirmando, setConfirmando] = useState<Objetivo | null>(null);
+  const [confirmando, setConfirmando] = useState<Peticion | null>(null);
   /** Lo que se está mandando a la papelera ahora mismo: se apaga hasta que Drive conteste. */
   const [yendo, setYendo] = useState<ReadonlySet<string>>(new Set());
   /** Sobre qué carpeta se está soltando algo, para marcarla. */
@@ -418,7 +420,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
     (fichero: File, remoto: Remoto, carpeta: string | null) =>
       almacen.apuntes.guardar({
         asignatura: clave,
-        nombre: acortar(fichero.name),
+        nombre: acortar(fichero.name, TOPES.nombreApunte),
         tipo: (fichero.type || '').slice(0, 120),
         tam: fichero.size,
         remoto,
@@ -590,20 +592,43 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
     });
   }, []);
 
+  /** Lo que dice la tira cuando Drive no encuentra algo que se quería borrar. */
+  const noLoEncuentra = useCallback(
+    (remoto: Remoto): Explicacion => {
+      const de = correo ?? 'la cuenta conectada';
+      const otra = remoto.cuenta && correo && remoto.cuenta !== correo ? remoto.cuenta : null;
+      return {
+        motivo: `El Drive de ${de} no lo encuentra, así que no se ha tocado nada.`,
+        arreglo: otra
+          ? `Lo subió ${otra}: conecta esa cuenta para mandarlo a su papelera. Si prefieres dejarlo, pulsa «Quitar solo de Archicel».`
+          : 'Puede que se borrara desde Drive o que lo subiera otra cuenta de Google. Si ya no lo quieres aquí, pulsa «Quitar solo de Archicel».',
+        reconectar: false,
+      };
+    },
+    [correo],
+  );
+
   /**
    * Un apunte a la papelera. **La ficha solo se borra cuando Drive lo ha confirmado.**
    *
    * Antes se tragaba cualquier fallo y borraba la ficha igual: con Drive devolviendo 503,
-   * el apunte desaparecía de Archicel y seguía vivo en Drive sin nada que lo enlazara. Si
-   * Drive dice que ya no estaba, eso sí es confirmación, y el archivador lo da por hecho.
+   * el apunte desaparecía de Archicel y seguía vivo en Drive sin nada que lo enlazara.
+   *
+   * Si Drive **no lo encuentra**, tampoco se borra la ficha sin más: se pregunta. Con
+   * `drive.file` eso es lo que contesta a un fichero que subió otra cuenta de Google, y
+   * quitar la ficha dejaría ese fichero vivo en su Drive sin nada en Archicel que lo enlace.
+   * `quitar` es la respuesta a esa pregunta: solo la ficha, sin tocar ningún Drive.
    */
   const borrarApunte = useCallback(
-    async (a: Apunte) => {
+    async (a: Apunte, quitar = false) => {
       marcar([a.id], true);
       try {
-        await archivador.borrar(a.remoto);
+        if (!quitar && (await archivador.borrar(a.remoto)) === 'no-estaba') {
+          setConfirmando({ objetivo: { tipo: 'apunte', a }, modo: 'quitar' });
+          return;
+        }
         await almacen.apuntes.borrar(a.id);
-        avisar(a.remoto.proveedor === 'drive' ? 'En la papelera de Drive' : 'Apunte eliminado');
+        avisar(quitar ? 'Quitado de Archicel' : a.remoto.proveedor === 'drive' ? 'En la papelera de Drive' : 'Apunte eliminado');
       } catch (e) {
         quejarse([{ id: nuevaClave(), nombre: a.nombre, tipo: 'borrado', objetivo: { tipo: 'apunte', a }, ex: explicar(e) }]);
         console.error('[archicel] borrado fallido', a.nombre, e);
@@ -622,15 +647,23 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
    * arriba— y la tira dice por qué. El detalle está en `arbol.ts`.
    */
   const borrarCarpeta = useCallback(
-    async (c: Carpeta) => {
+    async (c: Carpeta, quitar = false) => {
       const plan = planDeBorrado(c, carpetas, apuntes);
       const todos = [...plan.arbol.carpetas.map((x) => x.id), ...plan.arbol.apuntes.map((x) => x.id)];
       marcar(todos, true);
       const fallidos = new Set<string>();
       let primero: unknown = null;
+      /* Cuántos de los que fallaron es porque Drive no los encuentra, y no por otra cosa. */
+      let noEncontrados = 0;
       const intentar = async (id: string, remoto: Remoto) => {
         try {
-          await archivador.borrar(remoto);
+          /* Lo que Drive no encuentra no se da por borrado: se conserva, con todo lo que
+             cuelga de ello, y la tira pregunta. Solo con `quitar` —la respuesta a esa
+             pregunta— cuenta como hecho. */
+          if ((await archivador.borrar(remoto)) === 'no-estaba' && !quitar) {
+            fallidos.add(id);
+            noEncontrados++;
+          }
         } catch (e) {
           fallidos.add(id);
           primero ??= e;
@@ -641,27 +674,50 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
         await enParalelo(plan.raices, 4, (p) => (p.tipo === 'carpeta' ? intentar(p.c.id, p.c.remoto) : intentar(p.a.id, p.a.remoto)));
         await enParalelo(plan.locales, 4, (a) => intentar(a.id, a.remoto));
         const fuera = queSeBorra(plan, fallidos);
-        await Promise.all([
-          ...fuera.apuntes.map((a) => almacen.apuntes.borrar(a.id)),
-          ...fuera.carpetas.map((x) => almacen.carpetas.borrar(x.id)),
-        ]);
+        /*
+         * Las fichas, en orden: **primero los apuntes, después las carpetas de la más honda
+         * a la de arriba**. Si la red se corta a mitad, lo que quede tiene siempre a su
+         * madre: nunca un apunte dentro de una carpeta que ya no existe, que sería
+         * invisible. Y reintentar vuelve a calcular el plan con lo que haya quedado.
+         */
+        await Promise.all(fuera.apuntes.map((a) => almacen.apuntes.borrar(a.id)));
+        const hondo = new Map(plan.arbol.carpetas.map((x) => [x.id, 0]));
+        for (const x of plan.arbol.carpetas) {
+          let d = 0;
+          for (let m = x.madre; m && hondo.has(m) && d < 64; m = plan.arbol.carpetas.find((y) => y.id === m)?.madre) d++;
+          hondo.set(x.id, d);
+        }
+        const niveles = [...new Set(fuera.carpetas.map((x) => hondo.get(x.id) ?? 0))].sort((p, q) => q - p);
+        for (const n of niveles) {
+          await Promise.all(fuera.carpetas.filter((x) => (hondo.get(x.id) ?? 0) === n).map((x) => almacen.carpetas.borrar(x.id)));
+        }
       } catch (e) {
         fallidos.add(c.id);
         primero ??= e;
       } finally {
         marcar(todos, false);
       }
-      if (fallidos.size > 0) {
-        quejarse([{ id: nuevaClave(), nombre: c.nombre, tipo: 'borrado', objetivo: { tipo: 'carpeta', c }, ex: explicar(primero) }]);
-      } else {
-        avisar(c.remoto.proveedor === 'drive' ? 'Carpeta en la papelera de Drive' : 'Carpeta eliminada');
+      if (fallidos.size === 0) {
+        avisar(quitar ? 'Carpeta quitada de Archicel' : c.remoto.proveedor === 'drive' ? 'Carpeta en la papelera de Drive' : 'Carpeta eliminada');
+        return;
       }
+      const soloNoEncontrados = primero === null && noEncontrados > 0;
+      quejarse([
+        {
+          id: nuevaClave(),
+          nombre: c.nombre,
+          tipo: 'borrado',
+          objetivo: { tipo: 'carpeta', c },
+          noEncontrado: soloNoEncontrados,
+          ex: soloNoEncontrados ? noLoEncuentra(c.remoto) : explicar(primero),
+        },
+      ]);
     },
-    [carpetas, apuntes, archivador, almacen, avisar, marcar, quejarse],
+    [carpetas, apuntes, archivador, almacen, avisar, marcar, quejarse, noLoEncuentra],
   );
 
   const borrar = useCallback(
-    (o: Objetivo) => (o.tipo === 'apunte' ? borrarApunte(o.a) : borrarCarpeta(o.c)),
+    (o: Objetivo, quitar = false) => (o.tipo === 'apunte' ? borrarApunte(o.a, quitar) : borrarCarpeta(o.c, quitar)),
     [borrarApunte, borrarCarpeta],
   );
 
@@ -815,6 +871,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
         conectando={conectando}
         alReintentar={() => void reintentar()}
         alDescartar={() => setProblemas([])}
+        alQuitar={(o) => setConfirmando({ objetivo: o, modo: 'quitar' })}
       />
 
       {vacio ? (
@@ -853,7 +910,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
                 alRenombrar={() => setRenombrando(c.id)}
                 alBautizar={(n) => void renombrar(c, n)}
                 alCancelar={() => setRenombrando(null)}
-                alBorrar={() => setConfirmando({ tipo: 'carpeta', c })}
+                alBorrar={() => setConfirmando({ objetivo: { tipo: 'carpeta', c }, modo: 'borrar' })}
                 alSoltar={(id, esC) => void mover(id, esC, c.id)}
                 setSobre={setSobre}
               />
@@ -869,7 +926,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
                 alRenombrar={() => setRenombrando(a.id)}
                 alBautizar={(n) => void renombrar(a, n)}
                 alCancelar={() => setRenombrando(null)}
-                alBorrar={() => setConfirmando({ tipo: 'apunte', a })}
+                alBorrar={() => setConfirmando({ objetivo: { tipo: 'apunte', a }, modo: 'borrar' })}
               />
             ))}
           </AnimatePresence>
@@ -885,13 +942,21 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
       </AnimatePresence>
 
       <Confirmacion
-        objetivo={confirmando}
+        peticion={confirmando}
         carpetas={carpetas}
         apuntes={apuntes}
+        correo={correo}
         cerrar={() => setConfirmando(null)}
-        alConfirmar={(o) => {
+        alConfirmar={({ objetivo, modo }) => {
           setConfirmando(null);
-          void borrar(o);
+          if (modo === 'quitar') {
+            /* La línea de la tira que preguntaba por esto ya está contestada. */
+            const id = objetivo.tipo === 'apunte' ? objetivo.a.id : objetivo.c.id;
+            setProblemas((ps) =>
+              ps.filter((p) => !(p.tipo === 'borrado' && (p.objetivo.tipo === 'apunte' ? p.objetivo.a.id : p.objetivo.c.id) === id)),
+            );
+          }
+          void borrar(objetivo, modo === 'quitar');
         }}
       />
       <Visor apunte={abierto} cerrar={() => setAbierto(null)} />
@@ -923,11 +988,14 @@ function Tira({
   conectando,
   alReintentar,
   alDescartar,
+  alQuitar,
 }: {
   problemas: Problema[];
   conectando: boolean;
   alReintentar: () => void;
   alDescartar: () => void;
+  /** Para lo que Drive no encuentra: preguntar si se quita solo de Archicel. */
+  alQuitar: (o: Objetivo) => void;
 }) {
   const reconectar = problemas.some((p) => p.ex.reconectar);
   return (
@@ -969,6 +1037,11 @@ function Tira({
                   </small>
                 )}
                 <i>{p.ex.arreglo}</i>
+                {p.tipo === 'borrado' && p.noEncontrado && (
+                  <Button type="button" variant="ghost" size="sm" className="asig-fallos-quitar" onClick={() => alQuitar(p.objetivo)}>
+                    Quitar solo de Archicel…
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
@@ -993,23 +1066,33 @@ function Tira({
  * quedarían encerrados en él en vez de cubrir la ventana.
  */
 function Confirmacion({
-  objetivo,
+  peticion,
   carpetas,
   apuntes,
+  correo,
   cerrar,
   alConfirmar,
 }: {
-  objetivo: Objetivo | null;
+  peticion: Peticion | null;
   carpetas: Carpeta[];
   apuntes: Apunte[];
+  correo: string | null;
   cerrar: () => void;
-  alConfirmar: (o: Objetivo) => void;
+  alConfirmar: (p: Peticion) => void;
 }) {
   return (
     <AlCuerpo>
       <AnimatePresence>
-        {objetivo && (
-          <Pregunta key="pregunta" objetivo={objetivo} carpetas={carpetas} apuntes={apuntes} cerrar={cerrar} alConfirmar={alConfirmar} />
+        {peticion && (
+          <Pregunta
+            key={`${peticion.modo}-${peticion.objetivo.tipo === 'apunte' ? peticion.objetivo.a.id : peticion.objetivo.c.id}`}
+            peticion={peticion}
+            carpetas={carpetas}
+            apuntes={apuntes}
+            correo={correo}
+            cerrar={cerrar}
+            alConfirmar={alConfirmar}
+          />
         )}
       </AnimatePresence>
     </AlCuerpo>
@@ -1021,41 +1104,55 @@ function cuantas(n: number, una: string, varias: string) {
 }
 
 function Pregunta({
-  objetivo,
+  peticion,
   carpetas,
   apuntes,
+  correo,
   cerrar,
   alConfirmar,
 }: {
-  objetivo: Objetivo;
+  peticion: Peticion;
   carpetas: Carpeta[];
   apuntes: Apunte[];
+  correo: string | null;
   cerrar: () => void;
-  alConfirmar: (o: Objetivo) => void;
+  alConfirmar: (p: Peticion) => void;
 }) {
   const caja = useDialogo<HTMLElement>(true, cerrar);
   const si = useRef<HTMLButtonElement>(null);
   const no = useRef<HTMLButtonElement>(null);
 
+  const { objetivo, modo } = peticion;
+  const quitar = modo === 'quitar';
   const nombre = objetivo.tipo === 'apunte' ? objetivo.a.nombre : objetivo.c.nombre;
   const remoto = objetivo.tipo === 'apunte' ? objetivo.a.remoto : objetivo.c.remoto;
   const enDrive = remoto.proveedor === 'drive';
 
   let dentro = '';
+  /* Los apuntes antiguos del navegador que hay dentro: esos no van a ninguna papelera. */
+  let locales = 0;
   if (objetivo.tipo === 'carpeta') {
     const { carpetas: cs, apuntes: as } = arbolDe(objetivo.c, carpetas, apuntes);
     const nc = cs.length - 1;
     const partes = [nc > 0 ? cuantas(nc, 'carpeta', 'carpetas') : '', as.length > 0 ? cuantas(as.length, 'apunte', 'apuntes') : '']
       .filter(Boolean);
     dentro = partes.join(' y ');
+    locales = as.filter((a) => a.remoto.proveedor !== 'drive').length;
   }
 
-  /* El foco va a la acción si se puede deshacer desde la papelera, y a «Cancelar» si no:
-     Intro no debería destruir nada sin vuelta atrás. Va después de `useDialogo`, que
-     pone el foco en la hoja al montarse. */
+  /* Si algo de lo que se va no tiene vuelta atrás —lo antiguo del navegador—, o si se trata
+     de quitar algo que Drive no encuentra, la acción deja de ser «a la papelera». */
+  const irreversible = !enDrive || locales > 0;
+  const de = correo ?? 'la cuenta conectada';
+  const otra = remoto.cuenta && correo && remoto.cuenta !== correo ? remoto.cuenta : null;
+  const lo = objetivo.tipo === 'carpeta' ? 'la' : 'lo';
+
+  /* El foco va a la acción solo si todo se puede recuperar desde la papelera, y a
+     «Cancelar» en cualquier otro caso: Intro no debería destruir nada sin vuelta atrás.
+     Va después de `useDialogo`, que pone el foco en la hoja al montarse. */
   useEffect(() => {
-    (enDrive ? si : no).current?.focus({ preventScroll: true });
-  }, [enDrive]);
+    (!quitar && !irreversible ? si : no).current?.focus({ preventScroll: true });
+  }, [quitar, irreversible]);
 
   return (
     <>
@@ -1074,28 +1171,55 @@ function Pregunta({
         aria-describedby="confirmar-texto"
       >
         <h3 id="confirmar-titulo">
-          {enDrive ? '¿Mover a la papelera?' : '¿Eliminar de este equipo?'}
+          {quitar
+            ? `¿Quitar${lo} solo de Archicel?`
+            : !enDrive
+              ? '¿Eliminar de este equipo?'
+              : locales > 0
+                ? '¿Eliminar la carpeta?'
+                : '¿Mover a la papelera?'}
         </h3>
         <p className="confirmar-que" title={nombre}>
           {objetivo.tipo === 'carpeta' && <IconoCarpeta />}
           <span>{nombre}</span>
         </p>
-        <p id="confirmar-texto" className="confirmar-texto">
-          {objetivo.tipo === 'carpeta' && dentro ? (
-            <>
-              Se va con todo lo que tiene dentro: <b>{dentro}</b>.{' '}
-            </>
-          ) : null}
-          {enDrive
-            ? 'Irá a la papelera de tu Drive, y desde allí se puede recuperar durante 30 días.'
-            : 'Se guardó en este ordenador antes de que los apuntes fueran a Drive. Borrarlo no tiene vuelta atrás.'}
-        </p>
+        {quitar ? (
+          <p id="confirmar-texto" className="confirmar-texto">
+            El Drive de <b>{de}</b> no {lo} encuentra.{' '}
+            {otra
+              ? <>{objetivo.tipo === 'carpeta' ? 'La' : 'Lo'} subió <b>{otra}</b>: conectando esa cuenta se podría mandar a su papelera. </>
+              : 'Puede que se borrara desde Drive, o que lo subiera otra cuenta de Google y siga en su Drive. '}
+            Quitar{lo} de Archicel solo borra {objetivo.tipo === 'carpeta' ? 'las fichas' : 'la ficha'}: no toca ningún Drive.
+            {locales > 0 && (
+              <>
+                {' '}Dentro hay <b>{cuantas(locales, 'apunte guardado', 'apuntes guardados')} en este equipo</b>, y esos se borran sin vuelta atrás.
+              </>
+            )}
+          </p>
+        ) : (
+          <p id="confirmar-texto" className="confirmar-texto">
+            {objetivo.tipo === 'carpeta' && dentro ? (
+              <>
+                Se va con todo lo que tiene dentro: <b>{dentro}</b>.{' '}
+              </>
+            ) : null}
+            {enDrive
+              ? `${locales > 0 ? 'Lo de Drive irá' : 'Irá'} a la papelera de tu Drive, y desde allí se puede recuperar durante 30 días.`
+              : 'Se guardó en este ordenador antes de que los apuntes fueran a Drive. Borrarlo no tiene vuelta atrás.'}
+            {enDrive && locales > 0 && (
+              <>
+                {' '}Pero <b>{cuantas(locales, 'apunte se guardó', 'apuntes se guardaron')} en este equipo</b> antes de que todo fuera a
+                Drive, y {locales === 1 ? 'ese se borra' : 'esos se borran'} sin vuelta atrás.
+              </>
+            )}
+          </p>
+        )}
         <div className="confirmar-pie">
           <Button ref={no} type="button" variant="outline" onClick={cerrar}>
             Cancelar
           </Button>
-          <Button ref={si} type="button" variant="destructive" data-confirmar onClick={() => alConfirmar(objetivo)}>
-            {enDrive ? 'Mover a la papelera' : 'Eliminar'}
+          <Button ref={si} type="button" variant="destructive" data-confirmar onClick={() => alConfirmar(peticion)}>
+            {quitar ? 'Quitar de Archicel' : irreversible ? 'Eliminar' : 'Mover a la papelera'}
           </Button>
         </div>
       </mo.aside>

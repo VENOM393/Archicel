@@ -166,7 +166,7 @@ export interface Carpeta {
   madre?: ID;
   /** Lo escribe quien sea: se pinta como texto, nunca como HTML. */
   nombre: string;
-  remoto: { proveedor: 'local' | 'drive'; id: string };
+  remoto: { proveedor: 'local' | 'drive'; id: string; /** Qué cuenta de Google lo subió, si se supo. */ cuenta?: string };
   creado?: number;
   actualizado?: number;
 }
@@ -199,7 +199,7 @@ export interface Apunte {
   /** Bytes. Para poder decir «2,4 MB» sin preguntarle al proveedor. */
   tam: number;
   /** Dónde están los bytes. El proveedor va dentro porque conviven dos: Drive y lo antiguo del navegador. */
-  remoto: { proveedor: 'local' | 'drive'; id: string };
+  remoto: { proveedor: 'local' | 'drive'; id: string; /** Qué cuenta de Google lo subió, si se supo. */ cuenta?: string };
   /** En qué carpeta está. Vacío significa la raíz de la asignatura. */
   carpeta?: ID;
   /** Para ordenar a mano dentro de la asignatura. Sin él manda `creado`. */

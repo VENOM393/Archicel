@@ -1688,6 +1688,9 @@
     padding-left:1px
   }
   .asig-fallos li{flex-wrap:wrap;row-gap:2px}
+  /* La salida de «Drive no lo encuentra»: una acción de la línea, no de la tira entera, y
+     fantasma — quitar una ficha es lo último que se quiere hacer sin pensarlo. */
+  .asig-fallos li .asig-fallos-quitar{flex:none;margin:4px 0 0 -8px;color:var(--ink-muted)}
 
   /* ── «suéltalo aquí» ──
      Relleno y filete, no un segundo cristal. Ocupa el panel entero porque lo que hay

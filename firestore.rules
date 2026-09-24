@@ -142,6 +142,8 @@ service cloud.firestore {
           && request.resource.data.remoto is map
           && request.resource.data.remoto.proveedor in ['local', 'drive']
           && textoCorto(request.resource.data.remoto.id, 300)
+          // qué cuenta de Google lo subió, para poder decirlo si otra no lo encuentra
+          && (!('cuenta' in request.resource.data.remoto) || textoCorto(request.resource.data.remoto.cuenta, 320))
           && (!('carpeta' in request.resource.data) || textoCorto(request.resource.data.carpeta, 200))
           && (!('orden' in request.resource.data) || request.resource.data.orden is number);
       }
@@ -161,7 +163,8 @@ service cloud.firestore {
           && (!('madre' in request.resource.data) || textoCorto(request.resource.data.madre, 200))
           && request.resource.data.remoto is map
           && request.resource.data.remoto.proveedor in ['local', 'drive']
-          && textoCorto(request.resource.data.remoto.id, 300);
+          && textoCorto(request.resource.data.remoto.id, 300)
+          && (!('cuenta' in request.resource.data.remoto) || textoCorto(request.resource.data.remoto.cuenta, 320));
       }
 
       // lo que venga después (asignaturas, proyectos, referencias…): mismo dueño y

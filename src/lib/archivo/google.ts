@@ -69,6 +69,7 @@ declare global {
             error_callback?: (e: { type?: string }) => void;
           }): ClienteToken;
           revoke(token: string, hecho?: (r: { successful?: boolean; error?: string }) => void): void;
+          hasGrantedAllScopes?(respuesta: object, primero: string, ...resto: string[]): boolean;
         };
       };
     };
@@ -153,7 +154,10 @@ function recordar(): void {
     const crudo = localStorage.getItem(GUARDADO);
     if (!crudo) return;
     const { t, hasta } = JSON.parse(crudo) as { t?: string; hasta?: number };
-    if (t && typeof hasta === 'number' && Date.now() < hasta - MARGEN_MS) {
+    /* Se recuerda hasta que caduca **de verdad**, no hasta el margen: ya no se usa para
+       subir (eso lo decide `hayPermiso`), pero mientras valga se puede revocar al
+       desconectar. Tirarlo en el margen dejaba el permiso sin retirar. */
+    if (t && typeof hasta === 'number' && Date.now() < hasta) {
       token = t;
       caducaEn = hasta;
     } else {
@@ -256,6 +260,18 @@ async function pedir(): Promise<string> {
         client_id: id,
         scope: PERMISO,
         callback: (r) => {
+          /*
+           * Un token **sin** el permiso de Drive no vale, aunque Google lo entregue.
+           *
+           * La ventana de Google deja desmarcar la casilla de Drive y aun así devuelve un
+           * token; guardarlo haría que cada llamada contestara 403 «insufficientPermissions»
+           * y que «Reconectar» devolviera ese mismo token sin volver a preguntar. Se rechaza
+           * aquí, con el porqué, y la siguiente vez Google vuelve a enseñar la casilla.
+           */
+          if (r.access_token && typeof oauth2.hasGrantedAllScopes === 'function' && !oauth2.hasGrantedAllScopes(r, PERMISO)) {
+            rechazar(new Error('No se concedió el permiso de Drive: al conectar, deja marcada su casilla.'));
+            return;
+          }
           if (r.access_token) resolver(guardar(r.access_token, r.expires_in ?? 3600));
           else rechazar(new Error(r.error_description ?? r.error ?? 'Permiso no concedido.'));
         },
@@ -328,7 +344,9 @@ const ESPERA_REVOCAR_MS = 8000;
  */
 export async function soltarPermiso(): Promise<boolean> {
   recordar();
-  const t = hayPermiso() ? token : null;
+  /* Mientras no haya caducado de verdad se puede revocar, aunque esté en los dos minutos de
+     margen en que ya no se usa para subir: con `hayPermiso()` esos dos minutos no revocaban. */
+  const t = token && Date.now() < caducaEn ? token : null;
   olvidar();
   if (!t) return false;
 

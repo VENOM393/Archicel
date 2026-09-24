@@ -156,11 +156,13 @@ export interface Archivador {
   /**
    * Lo quita. Qué signifique «quitar» lo decide el proveedor: en Drive, la papelera.
    *
-   * **Solo resuelve si el proveedor lo ha confirmado.** Si falla, lanza, y quien llama
-   * conserva la ficha: borrar la ficha de algo que sigue en Drive lo deja vivo y sin nada
-   * que lo enlace. Un `no-esta` sí cuenta como confirmación: ya no estaba.
+   * `'hecho'` solo si el proveedor lo ha confirmado. `'no-estaba'` si no lo encuentra,
+   * que **no es lo mismo**: en Drive puede ser que se borrara desde allí o que lo subiera
+   * otra cuenta de Google y siga vivo en su Drive. Quien llama decide —preguntando— si quita
+   * la ficha igualmente. Cualquier otro fallo lanza, y la ficha se conserva: borrar la ficha
+   * de algo que sigue en Drive lo deja vivo y sin nada que lo enlace.
    */
-  borrar(remoto: Remoto): Promise<void>;
+  borrar(remoto: Remoto): Promise<'hecho' | 'no-estaba'>;
 
   /**
    * Los bytes, para ver o descargar.

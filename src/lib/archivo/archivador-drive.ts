@@ -170,6 +170,19 @@ function sePuedeReintentar(f: FalloDeArchivo, idempotente: boolean): boolean {
   return false;
 }
 
+/**
+ * Si este fallo significa que el token que se usó no sirve y hay que pedir otro.
+ *
+ * Un 401, claro. Pero también un 403 porque el permiso concedido no incluye Drive (se
+ * desmarcó la casilla) o porque la organización no lo deja: con ese token nada va a
+ * funcionar, y si se queda guardado, «Reconectar y reintentar» lo devuelve tal cual sin
+ * abrir la ventana de Google — que es justo lo que lo arreglaría.
+ */
+function tokenInservible(f: FalloDeArchivo): boolean {
+  if (f.causa === 'caducada') return true;
+  return f.causa === 'sin-permiso' && [...ALCANCE, ...DOMINIO].includes(f.detalle.razon ?? '');
+}
+
 /** Si el 404 de Drive habla de este identificador («File not found: …»). */
 function falta(e: unknown, id: string): boolean {
   return e instanceof FalloDeArchivo && e.detalle.estado === 404 && (e.detalle.dijo ?? '').includes(id);
@@ -222,7 +235,7 @@ async function llamar(url: string, init: RequestInit = {}, op: OpcionesDeLlamada
     } catch (e) {
       fallo = e instanceof FalloDeArchivo ? e : new FalloDeArchivo('red', 'Se cortó la conexión con Drive.', e);
     }
-    if (fallo.causa === 'caducada') caducarToken(t);
+    if (tokenInservible(fallo)) caducarToken(t);
     if (intento < REINTENTOS && sePuedeReintentar(fallo, idempotente)) {
       await esperar(espera(intento, retryAfter));
       continue;
@@ -482,7 +495,7 @@ async function subirDeUnaVez(fichero: File, meta: object, alAvanzar?: (tanto: nu
       return idDe(r.texto);
     }
     const fallo = traducir(r.estado, r.texto, 'destino');
-    if (fallo.causa === 'caducada') caducarToken(t);
+    if (tokenInservible(fallo)) caducarToken(t);
     if (intento < REINTENTOS && sePuedeReintentar(fallo, false)) {
       await esperar(espera(intento, r.cabecera('Retry-After')));
       continue;
@@ -732,6 +745,13 @@ let quienEs: string | null = null;
 /** La pregunta en vuelo: dos pantallas que la hacen a la vez esperan a la misma respuesta. */
 let preguntando: Promise<string | null> | null = null;
 
+/**
+ * La última cuenta que contestó `about`. Si la siguiente es otra —se reconectó con otra
+ * cuenta sin desconectar, por ejemplo al caducar la hora—, lo recordado de la anterior
+ * (ids de carpeta, subidas a medias, ficheros abiertos) deja de valer y se suelta.
+ */
+let ultimaCuenta: string | null = null;
+
 export function deQuienEsElDrive(): Promise<string | null> {
   if (quienEs) return Promise.resolve(quienEs);
   if (!hayPermiso()) return Promise.resolve(null);
@@ -742,8 +762,10 @@ export function deQuienEsElDrive(): Promise<string | null> {
       const r = await llamar(`${API}/about?fields=user(emailAddress,displayName)`, {}, { interactivo: false });
       const { user } = (await r.json()) as { user?: { emailAddress?: string; displayName?: string } };
       const quien = user?.emailAddress ?? user?.displayName ?? null;
-      /* Si se desconectó mientras tanto, la respuesta es de la cuenta anterior. */
+      /* Si se desconectó o cambió el token mientras tanto, la respuesta es de antes. */
       if (conexion !== mia) return null;
+      if (quien && ultimaCuenta && quien !== ultimaCuenta) olvidarLoDeLaCuenta();
+      if (quien) ultimaCuenta = quien;
       quienEs = quien;
       return quien;
     } catch {
@@ -771,7 +793,13 @@ export function deQuienEsElDrive(): Promise<string | null> {
 export function olvidarQuien(): void {
   quienEs = null;
   preguntando = null;
+  ultimaCuenta = null;
   conexion++;
+  olvidarLoDeLaCuenta();
+}
+
+/** Lo que se buscó o se abrió con una cuenta concreta y no vale para otra. */
+function olvidarLoDeLaCuenta(): void {
   rutas.clear();
   turno = Promise.resolve();
   aMedias = new WeakMap();
@@ -789,7 +817,17 @@ export function olvidarQuien(): void {
  */
 if (typeof window !== 'undefined') {
   alCambiarDrive(() => {
-    if (!seHaUsadoDrive()) olvidarQuien();
+    if (!seHaUsadoDrive()) {
+      olvidarQuien();
+      return;
+    }
+    /* Un token nuevo puede ser de otra cuenta: Google deja elegir en su ventana. El correo
+       se vuelve a preguntar —si no, la cabecera diría el de antes mientras se sube al
+       Drive de otra persona— y, si resulta ser otra cuenta, `deQuienEsElDrive` suelta lo
+       de la anterior. */
+    quienEs = null;
+    preguntando = null;
+    conexion++;
   });
 }
 
@@ -817,13 +855,22 @@ export function crearArchivadorDrive(): Archivador {
        */
       await token(true);
 
+      /* Quién lo sube, apuntado en la ficha: si algún día otra cuenta no lo encuentra, la
+         pantalla puede decir de quién es en vez de solo «no está». Se pregunta a la vez que
+         se sube, y casi siempre ya se sabe. */
+      const cuenta = deQuienEsElDrive();
+      const conCuenta = async (id: string): Promise<Remoto> => {
+        const c = await cuenta;
+        return { proveedor: 'drive', id, ...(c ? { cuenta: c } : {}) };
+      };
+
       /* Una subida por trozos que se cortó: se sigue, a la carpeta de la primera vez. */
       const pendiente = aMedias.get(fichero);
       if (pendiente) {
         try {
           const id = await enviarPorTrozos(pendiente, fichero, alAvanzar, true);
           aMedias.delete(fichero);
-          return { proveedor: 'drive', id };
+          return conCuenta(id);
         } catch (e) {
           if (!(e instanceof SesionPerdida)) throw e;
           aMedias.delete(fichero);
@@ -845,13 +892,13 @@ export function crearArchivadorDrive(): Archivador {
         aMedias.delete(fichero);
         return hecho;
       });
-      return { proveedor: 'drive', id };
+      return conCuenta(id);
     },
 
     async crearCarpeta(nombre, destino: Destino) {
       await token(true);
-      const id = await enCarpeta(destino, (padre) => crearCarpetaEn(nombre, padre));
-      return { proveedor: 'drive' as const, id };
+      const [id, cuenta] = await Promise.all([enCarpeta(destino, (padre) => crearCarpetaEn(nombre, padre)), deQuienEsElDrive()]);
+      return { proveedor: 'drive' as const, id, ...(cuenta ? { cuenta } : {}) };
     },
 
     async renombrar(remoto: Remoto, nombre: string) {
@@ -863,24 +910,31 @@ export function crearArchivadorDrive(): Archivador {
       });
     },
 
-    async mover(remoto: Remoto, desde: Remoto | null, hasta: Remoto | null, destino: Destino) {
+    async mover(remoto: Remoto, _desde: Remoto | null, hasta: Remoto | null, destino: Destino) {
       if (remoto.proveedor !== 'drive') return;
       /*
        * Drive no tiene «mover»: tiene **padres**, y mover es quitar uno y poner otro en la
        * misma llamada. Si se hiciera en dos, un fallo entre medias dejaría el fichero en
        * los dos sitios o en ninguno.
        *
+       * Los padres que se quitan son **los que Drive dice que tiene**, no los que cree la
+       * ficha: si alguien lo movió desde Drive, o la ficha se quedó atrás, quitar el de la
+       * ficha no quitaba nada y el fichero acababa en dos carpetas a la vez. Cuesta una
+       * lectura más, y a cambio el sitio donde queda es exactamente uno.
+       *
        * La raíz de la asignatura es un destino como otro cualquiera, solo que hay que
-       * preguntársela a Drive — y solo si hace falta: entre dos carpetas de la usuaria no
-       * se busca nada.
+       * preguntársela a Drive — y solo si el destino es la raíz.
        */
+      const id = encodeURIComponent(remoto.id);
+      const lee = await llamar(`${API}/files/${id}?fields=parents`);
+      const { parents = [] } = (await lee.json()) as { parents?: string[] };
       const deDrive = (r: Remoto | null) => (r?.proveedor === 'drive' ? r.id : null);
       const hacer = async (raiz: string | null) => {
         const nuevo = deDrive(hasta) ?? (raiz as string);
-        const viejo = deDrive(desde) ?? (raiz as string);
-        if (nuevo === viejo) return;
+        const quitar = parents.filter((p) => p !== nuevo);
+        if (quitar.length === 0 && parents.includes(nuevo)) return;
         await llamar(
-          `${API}/files/${encodeURIComponent(remoto.id)}?addParents=${nuevo}&removeParents=${viejo}&fields=id`,
+          `${API}/files/${id}?addParents=${nuevo}${quitar.length ? `&removeParents=${quitar.join(',')}` : ''}&fields=id`,
           { method: 'PATCH' },
         );
       };
@@ -893,7 +947,7 @@ export function crearArchivadorDrive(): Archivador {
         throw e;
       };
 
-      if (deDrive(hasta) && deDrive(desde)) return hacer(null).catch(nombrar);
+      if (deDrive(hasta)) return hacer(null).catch(nombrar);
       const raiz = await carpetaDeAsignatura(destino.asignatura);
       try {
         await hacer(raiz);
@@ -915,8 +969,11 @@ export function crearArchivadorDrive(): Archivador {
        * sistema significa «se puede recuperar». Mandar una carpeta a la papelera se lleva
        * todo lo que tiene dentro, y sacarla de allí lo trae todo de vuelta.
        *
-       * Si ya no estaba, está hecho: es la única respuesta de error que confirma lo que se
-       * pedía. Cualquier otra se lanza, y quien llama conserva la ficha.
+       * Un 404 **no es lo mismo que hecho**. Con `drive.file`, Drive contesta 404 tanto a un
+       * fichero que se borró desde Drive como a uno que subió **otra cuenta de Google**, y
+       * en el segundo caso el fichero sigue vivo en el Drive de esa otra persona. Por eso
+       * vuelve `'no-estaba'` y es quien llama —que puede preguntar— quien decide si quita la
+       * ficha. Cualquier otro fallo se lanza, y la ficha se conserva.
        */
       try {
         await llamar(`${API}/files/${encodeURIComponent(remoto.id)}?fields=id`, {
@@ -924,8 +981,9 @@ export function crearArchivadorDrive(): Archivador {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ trashed: true }),
         });
+        return 'hecho';
       } catch (e) {
-        if (e instanceof FalloDeArchivo && e.causa === 'no-esta') return;
+        if (e instanceof FalloDeArchivo && e.causa === 'no-esta') return 'no-estaba';
         throw e;
       }
     },

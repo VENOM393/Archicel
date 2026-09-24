@@ -79,9 +79,11 @@ export function crearArchivadorLocal(): Archivador {
       if (remoto.proveedor !== 'local') {
         throw new FalloDeArchivo('no-esta', 'Ese apunte no está guardado en este equipo.');
       }
-      /* Una carpeta local nunca tuvo bytes, y borrar una clave que no existe no falla. */
+      /* Una carpeta local nunca tuvo bytes, y borrar una clave que no existe no falla. Aquí
+         no hay otra cuenta que pueda tenerlo: si no está en este navegador, no está. */
       try {
         await conAlmacen('readwrite', (s) => s.delete(remoto.id));
+        return 'hecho' as const;
       } catch (e) {
         throw new FalloDeArchivo('desconocida', 'No se pudo borrar del archivo de este equipo.', e);
       }
