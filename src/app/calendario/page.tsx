@@ -19,18 +19,15 @@ import { AnimatePresence } from 'motion/react';
 import { MUELLE, ORQUESTA, PIEZA, RELEVO } from '@/lib/ui/movimiento';
 
 import { HojaEvento, type PeticionEvento } from '@/components/HojaEvento';
+import { MesDeEventos, mesEntero } from '@/components/MesDeEventos';
 import { HojaTarea, type PeticionTarea } from '@/components/HojaTarea';
 import { Button } from '@/components/ui/button';
 import { useEventos, useTareas } from '@/hooks/useDatos';
 import { useArchicel } from '@/lib/firebase/sesion';
-import { NOMBRE_PROGRESO, aFecha, hhmm, progresoDe, type Evento, type Tarea } from '@/lib/data';
-import { Icono, Nivel, TIPOS } from '@/lib/ui/catalogo';
+import { NOMBRE_PROGRESO, aFecha, hhmm, progresoDe, type Tarea } from '@/lib/data';
+import { Icono, Nivel } from '@/lib/ui/catalogo';
 
 type Modo = 'mes' | 'semana';
-
-function pad(n: number) {
-  return String(n).padStart(2, '0');
-}
 
 export default function Calendario() {
   const [modo, setModo] = useState<Modo>('mes');
@@ -139,6 +136,13 @@ export default function Calendario() {
 
 /* ═══════════════════ MES · solo eventos ═══════════════════ */
 
+/**
+ * El mes de esta pantalla.
+ *
+ * La rejilla vive ahora en `MesDeEventos`, porque la usa también la columna derecha de una
+ * asignatura. Aquí solo queda lo que es de esta pantalla y de ninguna otra: que los eventos
+ * son **todos** los del mes, y que pulsar un día abre su agenda.
+ */
 function VistaMes({
   ref_,
   setRef,
@@ -149,138 +153,19 @@ function VistaMes({
   abrirEvento: (p: PeticionEvento) => void;
 }) {
   const router = useRouter();
-  const anio = ref_.getFullYear();
-  const mes = ref_.getMonth();
-  const primero = `${anio}-${pad(mes + 1)}-01`;
-  const ultimo = `${anio}-${pad(mes + 1)}-${pad(new Date(anio, mes + 1, 0).getDate())}`;
-  const eventos = useEventos({ desde: primero, hasta: ultimo });
-
-  const porDia = useMemo(() => {
-    const mapa: Record<string, Evento[]> = {};
-    eventos.forEach((e) => (mapa[e.fecha] = [...(mapa[e.fecha] ?? []), e]));
-    Object.values(mapa).forEach((l) => l.sort((x, y) => (x.hora ?? -1) - (y.hora ?? -1)));
-    return mapa;
-  }, [eventos]);
-
-  const offset = (new Date(anio, mes, 1).getDay() + 6) % 7;
-  const total = new Date(anio, mes + 1, 0).getDate();
-  const filas = Math.ceil((offset + total) / 7);
-  const primeraCelda = new Date(anio, mes, 1 - offset);
-  const hoyClave = aFecha(new Date());
-  const nombreMes = ref_.toLocaleDateString('es-ES', { month: 'long' });
+  const { desde, hasta } = mesEntero(ref_);
+  const eventos = useEventos({ desde, hasta });
 
   return (
-    <>
-      <div className="cal-cab">
-        <h1 className="sem-titulo">
-          <span className="rango">{nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1)}</span>{' '}
-          <span className="anio">{anio}</span>
-        </h1>
-        <div className="dia-nav">
-          <Button variant="outline" size="icon-sm" type="button" aria-label="Mes anterior" onClick={() => setRef(new Date(anio, mes - 1, 1))}>
-            <Flecha dir="izq" />
-          </Button>
-          <Button variant="outline" size="sm" type="button" onClick={() => setRef(new Date())}>
-            Este mes
-          </Button>
-          <Button variant="outline" size="icon-sm" type="button" aria-label="Mes siguiente" onClick={() => setRef(new Date(anio, mes + 1, 1))}>
-            <Flecha dir="der" />
-          </Button>
-          <Button type="button" style={{ marginLeft: 8 }} onClick={() => abrirEvento({ evento: null, fecha: hoyClave })}>
-            <Mas />
-            Nuevo evento
-          </Button>
-        </div>
-      </div>
-
-      <div className="mes-rejilla" role="grid" style={{ ['--filas' as string]: filas }}>
-        {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => (
-          <span className="dow-mes" role="columnheader" key={d}>
-            {d}
-          </span>
-        ))}
-
-        {Array.from({ length: filas * 7 }, (_, i) => {
-          const d = new Date(primeraCelda);
-          d.setDate(primeraCelda.getDate() + i);
-          const clave = aFecha(d);
-          const fuera = d.getMonth() !== mes;
-          const evs = porDia[clave] ?? [];
-          return (
-            <div
-              key={clave}
-              role="gridcell"
-              className={`celda${fuera ? ' fuera' : ''}${clave === hoyClave ? ' hoy' : ''}${[0, 6].includes(d.getDay()) ? ' finde' : ''}`}
-              onClick={() => router.push(`/dia?f=${clave}`)}
-            >
-              <span className="celda-top">
-                <span className="dia-num">{d.getDate()}</span>
-                <button
-                  className="mas-ev"
-                  type="button"
-                  aria-label="Nuevo evento este día"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    abrirEvento({ evento: null, fecha: clave });
-                  }}
-                >
-                  +
-                </button>
-              </span>
-
-              {/* Los chips van en su propia caja con overflow: si no caben, se recorta la
-                  caja y no el chip, que antes se aplastaba hasta ser ilegible. */}
-              <span className="chips-ev">
-                {evs.slice(0, 3).map((ev) => (
-                <button
-                  key={ev.id}
-                  type="button"
-                  className="chip-ev"
-                  title={`${TIPOS[ev.tipo].n} · ${ev.titulo}${ev.materia ? ` · ${ev.materia}` : ''}`}
-                  style={{ ['--tc' as string]: `var(--c-${TIPOS[ev.tipo].color})` }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    abrirEvento({ evento: ev, fecha: clave });
-                  }}
-                >
-                  <span className="pt" />
-                  <span className="txt">
-                    {ev.hora !== null && <b>{hhmm(ev.hora)} </b>}
-                    {ev.titulo}
-                  </span>
-                  </button>
-                ))}
-              </span>
-              {evs.length > 3 && <span className="mas-chips">+{evs.length - 3} más</span>}
-
-              {/* El plan B cuando la celda es baja: un punto por evento. Nunca se corta,
-                  cabe siempre y sigue diciendo cuántas cosas hay y de qué tipo. Antes,
-                  a esa altura, los eventos simplemente desaparecían sin dejar rastro. */}
-              <span className="puntos-ev" aria-hidden="true">
-                {evs.slice(0, 6).map((ev) => (
-                  <i key={ev.id} style={{ background: `var(--c-${TIPOS[ev.tipo].color})` }} />
-                ))}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="leyenda-tipos">
-        {(['entrega', 'examen', 'presentacion', 'correccion', 'visita'] as const).map((t) => (
-          <span key={t}>
-            <i style={{ background: `var(--c-${TIPOS[t].color})` }} />
-            {TIPOS[t].n}
-          </span>
-        ))}
-        <span style={{ marginLeft: 'auto' }}>
-          Toca un día para abrir su agenda · el <b>+</b> añade un evento
-        </span>
-      </div>
-    </>
+    <MesDeEventos
+      ref_={ref_}
+      setRef={setRef}
+      eventos={eventos}
+      abrirEvento={abrirEvento}
+      alPulsarDia={(clave) => router.push(`/dia?f=${clave}`)}
+    />
   );
 }
-
 
 /* ═══════════════════ SEMANA · solo tareas ═══════════════════ */
 
@@ -461,10 +346,3 @@ function Flecha({ dir }: { dir: 'izq' | 'der' }) {
 }
 
 /** El signo de añadir, con el mismo trazo que el resto del chrome. */
-function Mas() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}

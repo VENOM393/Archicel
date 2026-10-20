@@ -433,6 +433,35 @@ export const CELDA: Variants = {
   saliendo: { opacity: 0, scale: 0.95, transition: { duration: TIEMPO.roce, ease: CURVA.fuera } },
 };
 
+/**
+ * El mes del calendario cambiando.
+ *
+ * No existía: `setRef` volvía a renderizar y la rejilla se sustituía de golpe, al lado de
+ * un dock y unas páginas que sí se mueven. Era el único sitio de la aplicación donde algo
+ * cambiaba sin moverse.
+ *
+ * Viaja en la dirección en que se navega —adelante a la izquierda, atrás a la derecha—,
+ * que es el mismo idioma que el agua del dock y la transición de página: si lo que se pide
+ * es «el mes siguiente», lo que se ve es el mes siguiente **llegando** por donde estaba.
+ *
+ * Poco recorrido a propósito. Esto se pulsa muchas veces seguidas buscando una fecha, y un
+ * mes que cruza media columna convierte buscar en esperar. La salida es más corta que la
+ * entrada: lo que se va ya no le interesa a nadie.
+ */
+export const MES: Variants = {
+  fuera: (sentido: 1 | -1 = 1) => ({ opacity: 0, x: sentido * 24 }),
+  dentro: {
+    opacity: 1,
+    x: 0,
+    transition: { x: MUELLE.normal, opacity: { duration: TIEMPO.roce, ease: CURVA.salida } },
+  },
+  saliendo: (sentido: 1 | -1 = 1) => ({
+    opacity: 0,
+    x: -sentido * 18,
+    transition: { duration: 0.14, ease: CURVA.fuera },
+  }),
+};
+
 /** El velo de las hojas modales. No se mueve: solo aparece y se va. */
 export const VELO: Variants = {
   fuera: { opacity: 0 },
