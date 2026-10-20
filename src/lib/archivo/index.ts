@@ -19,7 +19,7 @@
 
 import { crearArchivadorDrive, olvidarQuien } from './archivador-drive';
 import { crearArchivadorLocal } from './archivador-local';
-import { hayClienteConfigurado, hayPermiso, seHaUsadoDrive, soltarPermiso, yaEstaConectado } from './google';
+import { hayClienteConfigurado, hayPermiso, renovarEnSilencio, seHaUsadoDrive, soltarPermiso, yaEstaConectado } from './google';
 import { FalloDeArchivo, type Archivador, type Remoto } from './archivador';
 
 let local: Archivador | null = null;
@@ -47,13 +47,17 @@ export function sePuedeUsarDrive(): boolean {
 }
 
 /**
- * Si al abrir la página ya se puede usar Drive, sin abrir nada ni preguntar a nadie.
+ * Deja Drive listo al abrir la página, sin abrir nada ni preguntar a nadie.
  *
- * Es una lectura del token recordado y nada más. Lo que hace que recargar deje de pedir
- * permisos no es reconectar: es que el token de la vez anterior **sigue valiendo**.
+ * Ya no es una lectura: es una renovación de verdad contra `/api/drive/token`, que tiene
+ * el token de refresco en una cookie. Por eso recargar dejó de pedir permisos para
+ * siempre, y no solo durante la hora que duraba el token recordado.
+ *
+ * Si no hay refresco —nunca conectó, o lo revocó— devuelve `false` en silencio y la
+ * pantalla ofrece conectar, que es lo correcto.
  */
 export function reconectarDriveEnSilencio(): Promise<boolean> {
-  return Promise.resolve(yaEstaConectado());
+  return renovarEnSilencio();
 }
 
 /** Si Drive está conectado **ahora**, en esta pestaña. */

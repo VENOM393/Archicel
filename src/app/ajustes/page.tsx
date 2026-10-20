@@ -34,6 +34,7 @@ import {
   desconectarDrive,
   driveConectado,
   driveRecordado,
+  reconectarDriveEnSilencio,
   elArchivador,
   sePuedeUsarDrive,
 } from '@/lib/archivo';
@@ -128,9 +129,15 @@ function PanelDrive() {
     else setCorreo(null);
   }, []);
 
-  /* Al montar, y cada vez que se conecte o desconecte —aquí o en otra pestaña—. */
+  /**
+   * Al montar, y cada vez que se conecte o desconecte —aquí o en otra pestaña—.
+   *
+   * Primero se renueva y después se lee, en ese orden. El token de acceso solo vive en
+   * memoria, así que recién cargada la página no hay ninguno: leyendo sin renovar, una
+   * conexión permanente y sana se enseñaría como «Caducado» hasta que alguien pulsara algo.
+   */
   useEffect(() => {
-    refrescar();
+    void reconectarDriveEnSilencio().then(refrescar);
     return alCambiarDrive(refrescar);
   }, [refrescar]);
 
@@ -339,9 +346,9 @@ function Titular({ estado, deQuien }: { estado: Estado; deQuien: string }) {
 function Explicacion({ estado }: { estado: Estado }) {
   switch (estado) {
     case 'conectado':
-      return <>Desconectar retira el permiso y lo olvida en este navegador. No borra nada de tu Drive.</>;
+      return <>La conexión es permanente: no volverá a pedirte nada. Desconectar retira el permiso en Google y lo olvida en este navegador, sin borrar nada de tu Drive.</>;
     case 'caducado':
-      return <>El permiso de Google dura una hora. Renovarlo abre una ventana de Google un instante.</>;
+      return <>El permiso ya no vale: o se retiró desde la cuenta de Google, o han pasado seis meses sin usarlo. Volver a conectarlo es una ventana de Google un instante.</>;
     case 'sin-conectar':
       return <>Nada nuevo se guarda en este equipo: sin Drive conectado no se puede subir.</>;
     case 'sin-configurar':

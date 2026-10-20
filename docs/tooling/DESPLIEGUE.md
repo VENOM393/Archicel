@@ -25,6 +25,24 @@ consola de Google. Quitarle el prefijo la rompe.
 
 Al cambiarla hay que **redesplegar**: se hornea al construir.
 
+## El secreto de Google
+
+`GOOGLE_CLIENT_SECRET` es lo que hace que la conexión con Drive sea **permanente**. Sin él,
+`/api/drive/token` contesta 501 y **Drive deja de funcionar entero**: ni conectar, ni subir, ni
+abrir. No es una mejora opcional, es un requisito desde el momento en que esta ruta existe.
+
+Sale de la **misma credencial** que el ID de cliente: consola de Google Cloud → *APIs y servicios →
+Credenciales* → el ID de cliente de OAuth de tipo «Aplicación web» → *Client secret*. Ya existía; lo
+que pasa es que antes no se usaba.
+
+En Vercel va **sin** el prefijo `NEXT_PUBLIC_` y se deja como **Secret**, no como Config: a
+diferencia del ID, este no puede viajar al navegador. Y en local, en `.env.local`, que está en
+`.gitignore`.
+
+**Si Google no entrega el permiso permanente** —pasa cuando esa cuenta ya le había dado acceso a
+Archicel— la ruta contesta 409 diciendo exactamente eso y cómo se arregla: retirar el acceso en
+*Cuenta de Google → Datos y privacidad → Conexiones con apps y servicios* y volver a conectar.
+
 Sin ella la página de una asignatura abre, pero dice «Sin conectar», no ofrece Conectar Drive y
 deja «Subir» y «Carpeta» deshabilitados: no se puede guardar ningún apunte.
 
@@ -47,6 +65,7 @@ En *Settings → Environment Variables* del proyecto, las mismas que hay en `.en
 | `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Firebase | Sí |
 | `NEXT_PUBLIC_FIREBASE_APP_ID` | Firebase | Sí |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Drive (apuntes) | Sí, por diseño — «Change to Config» |
+| `GOOGLE_CLIENT_SECRET` | Drive (apuntes) | **No. Jamás.** |
 | `CANVAS_URL` | El campus | — |
 | `CANVAS_TOKEN` | El campus | **No. Jamás.** |
 | `CANVAS_ZONA` | El campus | — |

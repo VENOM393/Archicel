@@ -6,55 +6,60 @@
  * sitio del proyecto que sabe de OAuth, así que es el único que hay que mirar el día que
  * Google cambie algo.
  *
- * ## Cero configuración, y lo que eso cuesta
+ * ## Permanente, y lo que hizo falta para serlo
  *
- * Esto se puede montar de dos maneras y hubo que elegir:
+ * Se concede **una vez** y no se vuelve a pedir: ni al recargar, ni al desplegar, ni dentro
+ * de seis meses. Lo que lo consigue es el **token de refresco**, y Google solo lo entrega a
+ * quien presente el secreto del cliente — por eso existe `/api/drive/token` y por eso el
+ * canje no puede ocurrir aquí.
  *
- * **Con secreto de cliente**, en un servidor, se consigue un `refresh_token` y la conexión
- * es permanente de verdad: se concede una vez en la vida y nunca más. A cambio hay que
- * guardar un secreto en el entorno y mantener una ruta de servidor.
+ * Antes no había secreto y la consecuencia era concreta: el token de acceso dura una hora,
+ * así que recargar pasada esa hora devolvía la pantalla a «Sin conectar». Con la pestaña
+ * abierta se renovaba sola —subir nace de un clic y desde ahí Google deja abrir su
+ * ventana—, pero **al cargar una página no hay clic del que colgarse**, y una ventana que
+ * no nace de un gesto la bloquea el navegador. Esa era la pared.
  *
- * **Sin secreto**, que es lo que hay aquí, Google no entrega refresco — no es una opción
- * que se esté evitando, es que **no existe para un cliente web**. Lo que se puede hacer es
- * recordar el token de acceso, que dura una hora.
+ * Ahora la renovación es una llamada a nuestro propio servidor: no abre nada, no necesita
+ * gesto, y funciona igual al cargar que a mitad de una subida.
  *
- * Se eligió lo segundo a propósito: Archicel es de una persona y no tiene que pedirle que
- * mantenga credenciales en un fichero. El precio está medido y es este:
+ * ## Dónde está cada token
  *
- *   · recargar, cerrar la pestaña o volver mañana **dentro de la hora** → nada que hacer;
- *   · pasada la hora, **la siguiente acción lo renueva sola**, porque subir y arrastrar
- *     nacen de un gesto y Google deja abrir su ventana desde ahí. Si ya se concedió, esa
- *     ventana se abre y se cierra sin enseñar nada.
+ *   · **el de refresco**, en una cookie `HttpOnly` que este fichero no puede leer. No sale
+ *     nunca del servidor;
+ *   · **el de acceso**, solo en memoria y solo durante su hora.
  *
- * Lo que **no** se puede hacer es renovar al cargar la página: `requestAccessToken` abre
- * una ventana siempre, y una ventana que no nace de un clic la bloquea el navegador. Ese
- * era el fallo de antes —volver a conceder en cada recarga— y lo que lo arregla es
- * recordar el token, no insistir en renovarlo.
+ * Es más seguro que lo que había, donde el de acceso vivía en `localStorage` y lo leía
+ * cualquier guion del dominio. Lo único que queda en `localStorage` es una **marca** que
+ * dice que esta persona quiere Drive: no es una credencial y no abre nada.
  *
- * ## Por qué es aceptable guardarlo
- *
- * El token vive en `localStorage`, donde puede leerlo cualquier guion de este dominio. Es
- * aceptable **por el mismo motivo por el que puede vivir en el navegador**: con
- * `drive.file` no abre nada salvo los ficheros que esta aplicación creó. Ni el resto del
- * Drive, ni el correo, ni nada más. Con `drive` completo esto sería indefendible.
+ * La conexión sigue siendo **por navegador**, porque una cookie lo es. Es el modelo que
+ * Archicel ya tenía: Celeste conecta el suyo, Cristian el suyo.
  */
 
 /** Solo esto. Ni `drive`, ni `drive.readonly`: solo lo que la propia app cree. */
 export const PERMISO = 'https://www.googleapis.com/auth/drive.file';
 
 const GUION = 'https://accounts.google.com/gsi/client';
-const GUARDADO = 'archicel.drive.token.v1';
-/* Una marca que sobrevive a la caducidad del token: dice que esta persona **quiere** Drive,
-   aunque ahora mismo no tenga con qué entrar. Es lo que permite renovar en vez de caer al
-   disco en silencio. No guarda ninguna credencial. */
+const RUTA = '/api/drive/token';
+/**
+ * La marca de que esta persona **quiere** Drive. No es una credencial y no abre nada.
+ *
+ * Hace falta porque el token de refresco vive en una cookie `HttpOnly` que este fichero no
+ * puede leer: sin la marca, al cargar la página no habría forma de distinguir «nunca ha
+ * conectado» de «conectada, pero todavía no he pedido el token de esta sesión», y la
+ * pantalla enseñaría la invitación a conectar a alguien que ya lo está.
+ */
 const USADO = 'archicel.drive.usado.v1';
+/* La clave donde vivía el token de acceso. Ya no se escribe: se borra al arrancar, porque
+   un token suelto en `localStorage` es exactamente lo que este cambio quita de en medio. */
+const VIEJO = 'archicel.drive.token.v1';
 
 /* Se renueva antes de caducar de verdad: un token que expira a mitad de una subida de
    80 MB la tira entera. */
 const MARGEN_MS = 120_000;
 
-interface ClienteToken {
-  requestAccessToken(opciones?: { prompt?: string }): void;
+interface ClienteCodigo {
+  requestCode(): void;
 }
 
 declare global {
@@ -62,14 +67,22 @@ declare global {
     google?: {
       accounts?: {
         oauth2?: {
-          initTokenClient(opciones: {
+          /**
+           * El cliente de **código**, no el de token.
+           *
+           * `initTokenClient` devuelve un token de acceso y nada más: es el flujo implícito
+           * y por diseño no da refresco. El de código devuelve un `code` de un solo uso que
+           * el servidor cambia por los dos tokens. Es la diferencia entre una conexión de
+           * una hora y una permanente.
+           */
+          initCodeClient(opciones: {
             client_id: string;
             scope: string;
-            callback: (r: { access_token?: string; expires_in?: number; error?: string; error_description?: string }) => void;
+            ux_mode: 'popup' | 'redirect';
+            callback: (r: { code?: string; scope?: string; error?: string; error_description?: string }) => void;
             error_callback?: (e: { type?: string }) => void;
-          }): ClienteToken;
+          }): ClienteCodigo;
           revoke(token: string, hecho?: (r: { successful?: boolean; error?: string }) => void): void;
-          hasGrantedAllScopes?(respuesta: object, primero: string, ...resto: string[]): boolean;
         };
       };
     };
@@ -125,7 +138,7 @@ const avisarCambio = () => window.dispatchEvent(new Event(CAMBIO));
 export function alCambiarDrive(fn: () => void): () => void {
   if (typeof window === 'undefined') return () => {};
   const ajeno = (e: StorageEvent) => {
-    if (e.key !== GUARDADO && e.key !== USADO) return;
+    if (e.key !== USADO) return;
     /* Lo que diga el almacenamiento manda: se vuelve a leer en la siguiente consulta. */
     token = null;
     caducaEn = 0;
@@ -141,30 +154,19 @@ export function alCambiarDrive(fn: () => void): () => void {
 }
 
 /**
- * Se lee de `localStorage` **la primera vez que hace falta**, no al cargar el módulo.
+ * Limpia el token que las versiones anteriores dejaban en `localStorage`.
  *
- * Esta página se prerrenderiza y allí no hay `localStorage`. Leerlo arriba del todo
- * reventaría la construcción, y leerlo durante el render daría un árbol distinto en el
- * servidor y en el navegador — que es la avería de hidratación de siempre.
+ * Se hace **la primera vez que hace falta** y no al cargar el módulo: esta página se
+ * prerrenderiza y allí no hay `localStorage`. Leerlo arriba del todo reventaría la
+ * construcción.
  */
 function recordar(): void {
   if (leido || typeof window === 'undefined') return;
   leido = true;
   try {
-    const crudo = localStorage.getItem(GUARDADO);
-    if (!crudo) return;
-    const { t, hasta } = JSON.parse(crudo) as { t?: string; hasta?: number };
-    /* Se recuerda hasta que caduca **de verdad**, no hasta el margen: ya no se usa para
-       subir (eso lo decide `hayPermiso`), pero mientras valga se puede revocar al
-       desconectar. Tirarlo en el margen dejaba el permiso sin retirar. */
-    if (t && typeof hasta === 'number' && Date.now() < hasta) {
-      token = t;
-      caducaEn = hasta;
-    } else {
-      localStorage.removeItem(GUARDADO);
-    }
+    localStorage.removeItem(VIEJO);
   } catch {
-    /* almacenamiento bloqueado o contenido corrupto: se empieza de cero */
+    /* almacenamiento bloqueado: no hay nada que limpiar y nada que perder */
   }
 }
 
@@ -172,7 +174,6 @@ function guardar(nuevo: string, dura: number): string {
   token = nuevo;
   caducaEn = Date.now() + dura * 1000;
   try {
-    localStorage.setItem(GUARDADO, JSON.stringify({ t: nuevo, hasta: caducaEn }));
     localStorage.setItem(USADO, '1');
   } catch {
     /* sin almacenamiento se pierde la comodidad, no la función: seguirá valiendo en esta
@@ -186,8 +187,8 @@ function olvidar(): void {
   token = null;
   caducaEn = 0;
   try {
-    localStorage.removeItem(GUARDADO);
     localStorage.removeItem(USADO);
+    localStorage.removeItem(VIEJO);
   } catch {}
   avisarCambio();
 }
@@ -198,15 +199,15 @@ function olvidar(): void {
  * Sin esto, un token revocado o caducado antes de hora seguiría pareciendo válido hasta su
  * fecha, y «Reconectar y reintentar» devolvería el mismo token muerto sin abrir nada. Solo
  * se tira si sigue siendo el recordado: si otra petición ya consiguió uno nuevo, ese vale.
- * La marca de uso se queda, porque quererlo no ha cambiado.
+ *
+ * **La marca de uso se queda**, porque quererlo no ha cambiado — y ahora además importa
+ * más: con la marca puesta, la siguiente petición renueva contra el servidor sin abrir
+ * ninguna ventana. Tirar un token de acceso dejó de ser un problema.
  */
 export function caducarToken(rechazado: string): void {
   if (token !== rechazado) return;
   token = null;
   caducaEn = 0;
-  try {
-    localStorage.removeItem(GUARDADO);
-  } catch {}
 }
 
 /**
@@ -231,11 +232,90 @@ export function hayPermiso(): boolean {
   return Boolean(token) && Date.now() < caducaEn - MARGEN_MS;
 }
 
-/* ───────────────────────── pedirlo ───────────────────────── */
+/* ───────────────────────── el servidor ───────────────────────── */
+
+interface DelServidor {
+  access_token?: string;
+  expires_in?: number;
+  error?: string;
+  dijo?: string | null;
+}
+
+async function alServidor(cuerpo: { accion: string; code?: string }): Promise<DelServidor> {
+  const r = await fetch(RUTA, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cuerpo),
+    /* La cookie del refresco es del mismo origen, pero decirlo explícitamente evita que
+       un cambio de configuración la deje fuera sin que nadie se entere. */
+    credentials: 'same-origin',
+    cache: 'no-store',
+  });
+  const j = (await r.json().catch(() => ({}))) as DelServidor;
+  if (!r.ok) throw new Error(j.dijo || j.error || 'El servidor no pudo renovar el permiso.');
+  return j;
+}
+
+/* ───────────────────────── renovar, sin abrir nada ───────────────────────── */
+
+/** Una renovación a la vez: cinco subidas no pueden pedir cinco tokens. */
+let renovando: Promise<string> | null = null;
+
+/**
+ * Pide un token nuevo con el refresco que guarda el servidor.
+ *
+ * Esto es lo que hace que la conexión sea permanente, y lo que lo distingue de lo de antes
+ * es que **no abre ninguna ventana**: es una petición a nuestro propio dominio, así que da
+ * igual que venga de un clic o de cargar la página.
+ */
+async function renovar(): Promise<string> {
+  renovando ??= (async () => {
+    const r = await alServidor({ accion: 'renovar' });
+    if (!r.access_token) throw new Error('El servidor no devolvió ningún permiso.');
+    return guardar(r.access_token, r.expires_in ?? 3600);
+  })();
+  try {
+    return await renovando;
+  } finally {
+    renovando = null;
+  }
+}
+
+/**
+ * Intenta dejar Drive listo al abrir la aplicación, sin molestar a nadie.
+ *
+ * Si no hay cookie —nunca conectó, o la revocó— falla en silencio y la pantalla ofrece
+ * conectar, que es lo correcto. No se trata de insistir: se trata de que quien ya dijo que
+ * sí no tenga que repetirlo.
+ */
+export async function renovarEnSilencio(): Promise<boolean> {
+  if (!hayClienteConfigurado() || typeof window === 'undefined') return false;
+  if (hayPermiso()) return true;
+  /* Sin la marca no ha conectado nunca en este navegador: preguntarle al servidor sería
+     una petición garantizada a fallar en cada carga de página. */
+  if (!seHaUsadoDrive()) return false;
+  try {
+    await renovar();
+    return true;
+  } catch {
+    /* El refresco ya no vale —revocado, caducado por medio año sin usarlo, contraseña
+       cambiada—. El servidor ya ha tirado la cookie; aquí se tira la marca para que la
+       pantalla diga «Sin conectar» en vez de prometer algo que no puede cumplir. */
+    olvidar();
+    return false;
+  }
+}
+
+/* ───────────────────────── conceder ───────────────────────── */
 
 /** Una ventana a la vez: subir cinco ficheros no puede abrir cinco. */
 let pidiendo: Promise<string> | null = null;
 
+/**
+ * Abre la ventana de Google y canjea el código que devuelve.
+ *
+ * Solo desde un gesto: una ventana que no nace de un clic la bloquea el navegador.
+ */
 async function pedir(): Promise<string> {
   if (pidiendo) return pidiendo;
 
@@ -247,7 +327,7 @@ async function pedir(): Promise<string> {
     const oauth2 = window.google?.accounts?.oauth2;
     if (!oauth2) throw new Error('El acceso de Google no está disponible.');
 
-    return new Promise<string>((resolver, rechazar) => {
+    const codigo = await new Promise<string>((resolver, rechazar) => {
       /*
        * El cliente se crea **en cada petición** y no se memoriza.
        *
@@ -256,23 +336,25 @@ async function pedir(): Promise<string> {
        * creó. Crear uno nuevo no cuesta nada y quita de en medio esa clase entera de
        * avería.
        */
-      const cliente = oauth2.initTokenClient({
+      const cliente = oauth2.initCodeClient({
         client_id: id,
         scope: PERMISO,
+        ux_mode: 'popup',
         callback: (r) => {
           /*
-           * Un token **sin** el permiso de Drive no vale, aunque Google lo entregue.
+           * Un código **sin** el permiso de Drive no vale, aunque Google lo entregue.
            *
            * La ventana de Google deja desmarcar la casilla de Drive y aun así devuelve un
-           * token; guardarlo haría que cada llamada contestara 403 «insufficientPermissions»
-           * y que «Reconectar» devolviera ese mismo token sin volver a preguntar. Se rechaza
-           * aquí, con el porqué, y la siguiente vez Google vuelve a enseñar la casilla.
+           * código; canjearlo haría que cada llamada contestara 403
+           * «insufficientPermissions» y que «Reconectar» devolviera lo mismo sin volver a
+           * preguntar. Se rechaza aquí, con el porqué, y la siguiente vez Google vuelve a
+           * enseñar la casilla. El `scope` que devuelve es la lista concedida.
            */
-          if (r.access_token && typeof oauth2.hasGrantedAllScopes === 'function' && !oauth2.hasGrantedAllScopes(r, PERMISO)) {
+          if (r.code && r.scope !== undefined && !r.scope.split(' ').includes(PERMISO)) {
             rechazar(new Error('No se concedió el permiso de Drive: al conectar, deja marcada su casilla.'));
             return;
           }
-          if (r.access_token) resolver(guardar(r.access_token, r.expires_in ?? 3600));
+          if (r.code) resolver(r.code);
           else rechazar(new Error(r.error_description ?? r.error ?? 'Permiso no concedido.'));
         },
         /* Se dispara al cerrar la ventana sin conceder y cuando el navegador la bloquea.
@@ -289,15 +371,12 @@ async function pedir(): Promise<string> {
           ),
       });
 
-      /*
-       * `prompt: ''` y no `'consent'`.
-       *
-       * Con el consentimiento ya dado, Google devuelve el token **sin enseñar nada**: la
-       * ventana se abre y se cierra sola. Forzar `consent` obligaría a aceptar otra vez
-       * cada hora, que es justo lo que se está arreglando.
-       */
-      cliente.requestAccessToken({ prompt: '' });
+      cliente.requestCode();
     });
+
+    const r = await alServidor({ accion: 'canjear', code: codigo });
+    if (!r.access_token) throw new Error('El servidor no devolvió ningún permiso.');
+    return guardar(r.access_token, r.expires_in ?? 3600);
   })();
 
   try {
@@ -310,11 +389,27 @@ async function pedir(): Promise<string> {
 /**
  * Consigue un token.
  *
- * `interactivo` dice si **se viene de un gesto de la usuaria**, que es lo único que
- * permite abrir la ventana de Google. Subir y arrastrar lo son; cargar la página no.
+ * Tres escalones, y el del medio es el que cambió todo: lo que ya se tiene, lo que el
+ * servidor puede renovar **sin abrir nada**, y solo entonces la ventana de Google.
+ *
+ * `interactivo` dice si se viene de un gesto de la usuaria, que es lo único que permite
+ * abrir esa ventana. Subir y arrastrar lo son; cargar la página no — pero cargar la página
+ * ya no la necesita.
  */
 export async function conseguirToken(interactivo: boolean): Promise<string> {
   if (hayPermiso()) return token as string;
+
+  if (seHaUsadoDrive()) {
+    try {
+      return await renovar();
+    } catch (e) {
+      /* El refresco no vale. Si venimos de un gesto se puede volver a conceder aquí
+         mismo; si no, se dice y la pantalla ofrecerá conectar. */
+      olvidar();
+      if (!interactivo) throw e;
+    }
+  }
+
   if (!interactivo) throw new Error('Drive no está conectado.');
   return pedir();
 }
@@ -324,44 +419,32 @@ export function yaEstaConectado(): boolean {
   return hayClienteConfigurado() && hayPermiso();
 }
 
-/* Lo que se espera a que Google conteste antes de dar la revocación por no confirmada. */
-const ESPERA_REVOCAR_MS = 8000;
-
 /**
- * Corta la conexión: se olvida el token **y** se le pide a Google que retire el permiso.
+ * Corta la conexión: se olvida todo **y** se le pide a Google que retire el permiso.
  *
  * Olvidar va primero y no depende de nada. Aunque Google no conteste, desde ese momento
  * Archicel no tiene con qué entrar en el Drive de nadie, que es lo que se ha pedido.
  *
- * Devuelve si Google **confirmó** la revocación. Puede no hacerlo por dos motivos que no
- * son un fallo de Archicel: que el token ya hubiera caducado —pasada la hora no queda
- * nada que revocar desde aquí— o que no haya red. Entonces el permiso sigue concedido en
- * la cuenta de Google, sin ningún token que lo use, y se retira desde allí.
+ * Lo que se revoca es el **token de refresco**, no el de acceso, y eso importa: revocar el
+ * refresco retira la concesión entera —también los tokens de acceso que sigan vivos—,
+ * mientras que revocar uno de acceso solo mata esa hora. Antes se revocaba el de acceso
+ * porque era lo único que había, y pasada la hora no quedaba nada que revocar: la pantalla
+ * tenía que decir que no podía confirmarlo. Ahora sí puede, siempre.
  *
- * El guion de Google se carga si hace falta. Al recargar, el token sale de `localStorage`
- * y el guion no se ha pedido nunca, así que sin cargarlo `revoke` no existe: antes eso
- * convertía la revocación en un no-op silencioso.
+ * Como el refresco vive en una cookie que este fichero no puede leer, quien revoca es la
+ * ruta de servidor. Devuelve si Google **confirmó** la revocación; puede no hacerlo si no
+ * hay red, y entonces el permiso sigue concedido en la cuenta de Google y se retira desde
+ * allí.
  */
 export async function soltarPermiso(): Promise<boolean> {
-  recordar();
-  /* Mientras no haya caducado de verdad se puede revocar, aunque esté en los dos minutos de
-     margen en que ya no se usa para subir: con `hayPermiso()` esos dos minutos no revocaban. */
-  const t = token && Date.now() < caducaEn ? token : null;
   olvidar();
-  if (!t) return false;
-
   try {
-    await cargarGuion();
-    const oauth2 = window.google?.accounts?.oauth2;
-    if (!oauth2) return false;
-    return await new Promise<boolean>((resolver) => {
-      const plazo = window.setTimeout(() => resolver(false), ESPERA_REVOCAR_MS);
-      oauth2.revoke(t, (r) => {
-        window.clearTimeout(plazo);
-        resolver(r?.successful !== false && !r?.error);
-      });
-    });
+    const r = await alServidor({ accion: 'desconectar' });
+    return (r as { confirmado?: boolean }).confirmado === true;
   } catch {
+    /* Sin red no se puede confirmar. Desde este navegador ya no se entra igualmente: la
+       cookie se va con la respuesta, y si la respuesta no llega el token de memoria ya
+       está tirado y el de refresco caduca solo. */
     return false;
   }
 }

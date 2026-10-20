@@ -863,6 +863,7 @@ function Apuntes({
         <>
       <div className="asig-cab">
         <Camino
+          raiz={ASIGNATURAS[clave].nombre}
           camino={camino}
           alIr={setAqui}
           alSoltar={(id, esCarpeta, hasta) => void mover(id, esCarpeta, hasta)}
@@ -1331,12 +1332,14 @@ function Pregunta({
  * carpeta destino y no habría manera de mover nada hacia fuera.
  */
 function Camino({
+  raiz,
   camino,
   alIr,
   alSoltar,
   sobre,
   setSobre,
 }: {
+  raiz: string;
   camino: Carpeta[];
   alIr: (id: string | null) => void;
   alSoltar: (id: string, esCarpeta: boolean, hasta: string | null) => void;
@@ -1370,7 +1373,11 @@ function Camino({
         onClick={() => alIr(null)}
         {...diana(null)}
       >
-        Apuntes
+        {/* El nombre de la asignatura, que es el de la carpeta de verdad en Drive
+            (`Archicel/Asignaturas/Física Aplicada I`). Decía «Apuntes» a secas, que era el
+            nombre que esa carpeta tuvo antes de renombrarse: la miga prometía una ruta que
+            ya no existía y había que abrir Drive para ver dónde estaban las cosas. */}
+        {raiz}
       </button>
       {camino.map((c, i) => (
         <span className="asig-miga-par" key={c.id}>

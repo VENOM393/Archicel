@@ -281,29 +281,48 @@ tu Drive», porque con `drive.file` un token solo alcanza lo que la app creó ba
 autorización. No rompe nada —el fallo tiene nombre y la pantalla lo dice— pero es un apunte
 fantasma.
 
-### Sin secreto de cliente, y lo que eso cuesta
+### La conexión es permanente
 
-Se puede montar de dos maneras y se eligió a conciencia:
+Se concede **una vez** y no se vuelve a pedir: ni al recargar, ni al desplegar, ni dentro de seis
+meses. Lo consigue el **token de refresco**, y Google solo se lo entrega a quien presente el secreto
+del cliente — por eso existe `/api/drive/token` y por eso el canje no puede ocurrir en el navegador.
 
-- **Con secreto**, en una ruta de servidor, Google entrega un `refresh_token` y la conexión es
-  permanente de verdad. A cambio hay que mantener un secreto en el entorno.
-- **Sin secreto**, que es lo que hay, Google **no entrega refresco** — no es una opción que se esté
-  evitando, es que no existe para un cliente web. Lo que se hace es **recordar el token de acceso**
-  en `localStorage`, que dura una hora.
+**Hubo una versión sin secreto y el precio resultó ser inaceptable.** El token de acceso dura una
+hora, así que recargar pasada esa hora devolvía la pantalla a «Sin conectar». Con la pestaña abierta
+se renovaba sola —subir nace de un clic y desde ahí Google deja abrir su ventana—, pero **al cargar
+una página no hay clic del que colgarse**, y una ventana que no nace de un gesto la bloquea el
+navegador. Esa era la pared, y no se rodea: no es una opción de configuración, es cómo funciona
+`requestAccessToken`.
 
-Se eligió lo segundo porque Archicel es de una persona y no debe pedirle que mantenga credenciales
-a mano. El precio está medido: **dentro de la hora, recargar no pide nada** (comprobado: conectar
-una vez y recargar tres veces pregunta a Google **una sola vez**); pasada la hora, **con la pestaña
-abierta**, la siguiente acción lo renueva sola, porque subir y arrastrar nacen de un gesto y desde
-ahí Google deja abrir su ventana — y si ya se concedió, se abre y se cierra sin enseñar nada.
+Cuatro cosas que no se deducen:
 
-Lo que no renueva solo es **recargar pasada la hora**: el token recordado ya no vale, la pantalla
-vuelve a «Sin conectar» con «Subir» y «Carpeta» deshabilitados, y hay que pulsar **Conectar Drive**
-(comprobado en el navegador con un token caducado). Con el consentimiento dado es un clic y una
-ventana que se cierra sola, pero es un clic.
+- **`initCodeClient`, no `initTokenClient`.** El segundo es el flujo implícito y por diseño no da
+  refresco; el primero devuelve un código de un solo uso que el servidor cambia por los dos tokens.
+  Es la diferencia entre una conexión de una hora y una permanente.
+- **El `redirect_uri` del canje es la palabra `postmessage`**, literalmente. No es una dirección:
+  con `ux_mode: 'popup'` Google devuelve el código por `postMessage`, y el canje tiene que decir eso
+  mismo o contesta `redirect_uri_mismatch`. Es la parte menos adivinable de todo esto.
+- **Si Google no entrega refresco, la ruta lo dice y falla.** No lo entrega cuando la cuenta ya le
+  había dado acceso sin conexión a este cliente. Dejarlo pasar daría una sesión que funciona y, una
+  hora después, vuelve a pedir permiso: un fallo que se descubre tarde y parece otra cosa. La salida
+  está en el mensaje — retirar el acceso en la cuenta de Google y volver a conectar.
+- **Revocar el refresco retira la concesión entera**, también los tokens de acceso vivos. Por eso
+  desconectar revoca ese y no el de acceso, y por eso ahora puede confirmarlo siempre: antes, pasada
+  la hora, no quedaba nada que revocar y la pantalla tenía que decir que no podía asegurarlo.
 
-Guardar el token es aceptable **por el mismo motivo por el que puede vivir en el navegador**: con
-`drive.file` no abre nada salvo lo que esta aplicación creó.
+### Dónde está cada token
+
+- **El de refresco**, en una cookie `HttpOnly` que el JavaScript de la página no puede leer. No sale
+  nunca del servidor.
+- **El de acceso**, solo en memoria y solo durante su hora.
+
+Es **más seguro que lo que había**, donde el de acceso vivía en `localStorage` y lo leía cualquier
+guion del dominio. Lo único que queda allí es una marca que dice que esta persona quiere Drive: no
+es una credencial y no abre nada. Sin esa marca no se puede saber si hay cookie —es `HttpOnly`—, y
+la pantalla enseñaría la invitación a conectar a alguien que ya lo está.
+
+La conexión sigue siendo **por navegador**, porque una cookie lo es. Es el modelo que Archicel ya
+tenía: Celeste conecta el suyo, Cristian el suyo.
 
 ### Siempre Drive, nunca el disco
 
@@ -319,12 +338,13 @@ De ahí que sin conectar la pantalla no ofrezca subir: «Subir» y «Carpeta» s
 acción sólida pasa a ser **Conectar Drive**. Ofrecer un botón sabiendo que va a fallar es hacer
 perder el tiempo a quien lo pulse.
 
-### Qué pasa cuando pasa la hora
+### Qué pasa cuando algo falla
 
 1. **Se renueva antes de nada.** `subir` pide el token en su **primera línea**, antes de buscar la
-   carpeta. Renovar puede abrir una ventana de Google, y eso solo se permite mientras dura el
-   permiso que deja un gesto —unos segundos desde el clic—; gastarlo en dos peticiones de red hacía
-   que la ventana llegara tarde y la bloquearan. Con el consentimiento ya dado no se ve nada.
+   carpeta. Eso venía de cuando renovar podía abrir una ventana de Google y había que gastar el
+   permiso del gesto antes de que caducara; ahora renovar es una llamada a nuestro propio servidor
+   y no abre nada, pero el orden se queda: pedir el permiso antes de empezar sigue siendo lo
+   correcto, y mover esa línea no arregla nada.
 2. **Si aun así no se puede, se dice y no se guarda en otro sitio.** Sale una tira con el fichero,
    el motivo **y cómo se arregla** — que es la mitad que faltaba: saber que no queda espacio sin
    saber que hay que vaciar la papelera de Drive deja a quien lo lee igual de atascada. Cada causa
