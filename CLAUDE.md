@@ -530,6 +530,7 @@ docs/integraciones/  CANVAS.md — API del campus de la UCAM y el motor que la c
                     DRIVE.md — dónde viven los apuntes de cada asignatura
 docs/design/        DESIGN.md — contrato visual
 docs/tooling/       DESPLIEGUE.md — publicar en Vercel
+                    agent-teams/ — la tubería de agentes (jefe, desarrollador, revisor, integrador)
 README.md           la cara del repositorio
 scripts/            iconos.mjs — genera los iconos desde public/icono.svg
 ```
