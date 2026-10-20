@@ -1405,7 +1405,10 @@
      que con dos clases gana a una sola. Escrito como `.asig` el `flex` no llegaba a
      aplicarse nunca — ni el `gap` ni el reparto de alto— y costaba verlo porque la
      página seguía maquetando, solo que en bloque y con los márgenes de cada pieza. */
-  .vista.asig{display:flex;flex-direction:column;gap:20px;min-width:0;width:100%;max-width:1120px}
+  /* Sin tope de ancho: medía 1120 px en una ventana de 1686 y dejaba 548 px muertos a
+     la derecha, un tercio de la pantalla. Es la misma corrección que la pantalla de
+     asignaturas. Lo que llena ese hueco no es aire: es el horario de esta asignatura. */
+  .vista.asig{display:flex;flex-direction:column;gap:18px;min-width:0;width:100%;max-width:none}
 
   /* ── el alto de la pantalla ──
      La misma mecánica que la agenda del día: el límite se pone en `.app`, que es quien
@@ -1423,13 +1426,19 @@
   .body:has(.asig) > .pagina{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
   .vista.asig{flex:1 1 auto;min-height:0}
   /* La portada mide lo que mide; quien se queda con el resto es el panel de trabajo. */
-  .asig-portada,.asig-viene{flex:none}
+  .asig-portada{flex:none}
 
-  /* ── la portada ── */
-  /* Sin cristal: la portada es tipografía sobre la fotografía, igual que el titular del
-     calendario. Meterla en un panel la convertiría en una tarjeta más y perdería
-     exactamente lo que la hace la pieza que manda. */
-  .asig-portada{position:relative;padding-top:2px;min-width:0}
+  /* ── la banda ──
+     Dos lados: quién es esta asignatura y cuándo toca. De borde a borde con el margen
+     negativo que cancela el relleno lateral de `.body`, igual que la tira de columnas de
+     la pantalla de asignaturas. */
+  .asig-portada{
+    position:relative;min-width:0;
+    margin:0 -18px;width:calc(100% + 36px);padding:2px 18px 0;
+    display:flex;align-items:flex-end;justify-content:space-between;gap:28px;flex-wrap:wrap;
+  }
+  .asig-quien{min-width:0;flex:1 1 420px}
+  .asig-cuando{flex:0 1 auto;display:flex;flex-direction:column;align-items:flex-end;gap:12px;min-width:0}
 
   .asig-volver{
     display:inline-flex;align-items:center;gap:5px;margin-bottom:14px;
@@ -1440,238 +1449,244 @@
   .asig-volver:hover{color:var(--ink)}
   .asig-volver:hover svg{transform:translateX(-2px)}
 
-  .asig-titulo{
-    display:flex;flex-direction:column;gap:12px;
-    /* El filete del color de la asignatura, a la izquierda y a la altura del titular.
-       Es la única pieza de color grande de la pantalla y mide 3 px: el color aquí
-       identifica, no decora. */
-    border-left:3px solid var(--tc);padding-left:18px
-  }
+  /* Sin `border-left` de color. Un filete de acento al costado de una caja es el tell más
+     reconocible de una interfaz generada, y aquí además era redundante: el color de la
+     asignatura ya está en el código, en los bloques del raíl y en toda la aplicación. */
+  .asig-titulo{display:flex;flex-direction:column;gap:10px;min-width:0}
   .asig-titulo h1{
-    margin:0;font-size:clamp(36px,5.4vw,62px);font-weight:700;letter-spacing:-.042em;
-    line-height:.95;text-wrap:balance
+    margin:0;font-size:clamp(36px,5.4vw,62px);font-weight:700;
+    letter-spacing:-.042em;line-height:.95;text-wrap:balance;
   }
-
-  /* Los datos van en mono porque son medición: un código, unas horas, una cuenta. */
   .asig-datos{
-    margin:0;display:flex;align-items:center;gap:11px;flex-wrap:wrap;
+    margin:0;display:flex;align-items:center;gap:9px;flex-wrap:wrap;
     font-family:var(--data);font-size:12.5px;color:var(--ink-subtle);
-    font-variant-numeric:tabular-nums
   }
   .asig-datos b{font-weight:500;color:var(--ink-muted)}
-  .asig-datos i{width:3px;height:3px;border-radius:999px;background:var(--hairline-lit);flex:none}
-  .asig-codigo{color:var(--tc)}
+  .asig-datos i{width:3px;height:3px;border-radius:999px;background:var(--hairline-lit)}
+  .asig-codigo{color:var(--tc);letter-spacing:.04em}
 
-  /* ── la semana, dibujada como una sección ──
-     Cinco pistas verticales, y en cada una el bloque de clase a la altura que le toca
-     dentro de la franja de esta asignatura. Dice de un vistazo dos cosas que una lista
-     de horas no dice: cuántos días toca y si son mañanas o tardes. */
-  .asig-semana{
-    display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;
-    margin:24px 0 0;max-width:246px
-  }
-  .asig-dia{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
-  /* Una columna con cuerpo, no un fondo al 3,5 %.
-     Con un relleno casi transparente sobre una fotografía las pistas desaparecían y los
-     bloques de clase se leían como barras sueltas flotando: la semana no se veía por
-     ninguna parte. Un relleno y un filete de verdad la convierten en lo que es, cinco
-     columnas de las que dos están vacías — y esos dos huecos son información. */
+  /* ── el raíl del horario ──
+     Era una tira de 246 px con las horas a 10,5 px, apretada debajo del título. Ahora
+     ocupa el lado que estaba vacío y le cabe lo que antes no: el rango entero y el aula,
+     que estaban en `curso.ts` sin pintarse en ningún sitio. */
+  .asig-semana{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;min-width:0}
+  .asig-dia{display:flex;flex-direction:column;align-items:center;gap:7px;min-width:0}
+  /* La pista necesita cuerpo: con un fondo al 3,5 % desaparecía sobre la fotografía y los
+     bloques se leían como barras flotando en la nada. Y los días sin clase son
+     información, no hueco sobrante. */
   .asig-pista{
-    position:relative;width:100%;height:76px;border-radius:var(--r-xs);
-    background:rgba(255,255,255,.055);
-    border:1px solid var(--hairline)
+    position:relative;width:100%;height:104px;border-radius:var(--r-sm);
+    background:rgba(255,255,255,.055);border:1px solid var(--hairline);overflow:hidden;
   }
   .asig-dia.tiene .asig-pista{background:rgba(255,255,255,.085)}
   .asig-bloque{
-    position:absolute;left:3px;right:3px;border-radius:2px;background:var(--tc);
-    min-height:5px;
-    box-shadow:0 2px 10px -4px var(--tc)
+    /* Con margen a los lados: un bloque a sangre llena la pista y se lee como un
+       rectángulo de color en vez de como una clase dentro de un día. */
+    position:absolute;left:6px;right:6px;min-height:6px;border-radius:3px;
+    background:var(--tc);box-shadow:0 2px 8px -3px var(--tc);
   }
   .asig-letra{
     font-size:11.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--ink-subtle)
-  }
-  .asig-hora{
-    font-family:var(--data);font-size:10.5px;color:var(--ink-subtle);
-    font-variant-numeric:tabular-nums;
-    /* El hueco se reserva siempre: si no, los días con clase son más altos que los
-       libres y la fila baila. */
-    min-height:13px
+    color:var(--ink-subtle);
   }
   .asig-dia.tiene .asig-letra{color:var(--ink-muted)}
   .asig-dia.hoy .asig-letra{color:var(--accent-linea)}
   .asig-dia.hoy .asig-pista{border-color:var(--accent-linea)}
 
-  /* ── lo que viene ──
-     Una fila de piezas pequeñas, sin cristal: van sobre la foto como la portada. Si
-     llevaran panel serían tres tarjetas compitiendo con el bloque de apuntes. */
-  .asig-viene{display:flex;gap:10px;flex-wrap:wrap;min-width:0}
-  .asig-ev{
-    display:flex;align-items:center;gap:10px;min-width:0;
-    padding:9px 14px 9px 10px;border-radius:var(--r-md);
-    background:var(--panel);border:1px solid var(--hairline);
-    transition:border-color 240ms,background 240ms
+  /* El hueco se reserva siempre, con clase o sin ella, o la fila baila. */
+  .asig-horas{display:flex;flex-direction:column;align-items:center;gap:5px;min-height:30px;min-width:0}
+  .asig-rango{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;max-width:100%}
+  .asig-rango b{
+    font-family:var(--data);font-size:10.5px;font-weight:400;font-variant-numeric:tabular-nums;
+    color:var(--ink-muted);white-space:nowrap;
   }
-  .asig-ev:hover{border-color:var(--hairline-lit);background:var(--panel-strong)}
+  .asig-rango em{
+    font-style:normal;font-size:10.5px;color:var(--ink-subtle);
+    max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  /* Una clase en línea no está en ningún aula, y decirlo con el acento la distingue sin
+     meter un color nuevo. */
+  .asig-rango em.red{color:var(--accent-linea)}
+
+  /* ── lo que viene ──
+     Vive dentro de la banda. Suelto debajo desaparecía al no haber nada y, como el reloj
+     no existe en el prerender, aparecía al hidratar empujando el panel: un salto en cada
+     carga. Aquí el alto lo fija el raíl y su ausencia no mueve nada. */
+  .asig-viene{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;min-width:0}
+  .asig-ev{
+    display:flex;align-items:center;gap:9px;padding:9px 14px 9px 10px;
+    border-radius:var(--r-md);background:var(--panel);border:1px solid var(--hairline);
+    transition:background 240ms var(--ease-soft);min-width:0;
+  }
+  .asig-ev:hover{background:var(--panel-strong)}
   .asig-ev-ico{
-    width:26px;height:26px;flex:none;border-radius:var(--r-xs);display:grid;place-items:center;
-    color:var(--tc);background:color-mix(in srgb,var(--tc) 14%,transparent)
+    display:grid;place-items:center;width:26px;height:26px;flex:none;border-radius:var(--r-xs);
+    color:var(--tc);background:color-mix(in srgb,var(--tc) 14%,transparent);
   }
   .asig-ev-txt{display:flex;flex-direction:column;gap:1px;min-width:0}
   .asig-ev-txt b{
     font-size:13px;font-weight:500;color:var(--ink);
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+    max-width:22ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   }
   .asig-ev-txt small{font-size:11px;color:var(--ink-subtle)}
-  .asig-ev-cuando{
-    font-family:var(--data);font-size:11.5px;color:var(--accent-linea);flex:none;
-    font-variant-numeric:tabular-nums;margin-left:4px
-  }
+  .asig-ev-cuando{font-family:var(--data);font-size:11.5px;color:var(--accent-linea);white-space:nowrap}
 
-  /* ── los apuntes ──
-     El sitio de trabajo, y la única superficie de cristal de la pantalla. Las filas de
-     dentro se separan con una línea de 1 px y un cambio de relleno, nunca con un segundo
-     blur: cristal sobre cristal está prohibido y además se ve sucio. */
+  /* ═══ el panel de apuntes ═══ */
+
+  /* La única superficie de cristal de la pantalla. Nada de cristal sobre cristal: las
+     celdas de dentro se dibujan con 1 px y un cambio de relleno, nunca con un segundo
+     desenfoque. Y de borde a borde, como la banda. */
   .asig-apuntes{
     position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;
-    border-radius:var(--r-xl);padding:16px 18px 14px;
-    background:color-mix(in srgb,var(--panel-strong) 88%,var(--canvas));
-    border:1px solid var(--hairline);
+    margin:0 -18px;width:calc(100% + 36px);
+    padding:16px 18px 14px;border-radius:var(--r-xl);
+    background:var(--panel);border:1px solid var(--hairline);
     backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);
-    box-shadow:0 18px 42px -26px rgba(0,0,0,.8);
-    transition:border-color 240ms var(--ease-soft)
+    transition:border-color 240ms var(--ease-soft);
   }
   .asig-apuntes.encima{border-color:var(--accent-linea)}
 
-  .asig-cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-
-  /* ── las migas de pan ──
-     Hacen de título y de mapa a la vez, así que el sitio donde estás va en el peso del
-     texto y no en un color: el acento ya está gastado en el botón de subir. */
+  .asig-cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;flex:none}
   .asig-camino{display:flex;align-items:center;gap:2px;min-width:0;flex-wrap:wrap}
   .asig-miga-par{display:flex;align-items:center;gap:2px;min-width:0}
-  .asig-miga-par > svg{flex:none;color:var(--ink-subtle);opacity:.65}
+  .asig-miga-par > svg{color:var(--ink-subtle);flex:none}
   .asig-miga{
-    border:0;background:none;cursor:pointer;font:inherit;
-    padding:4px 7px;border-radius:var(--r-xs);max-width:22ch;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-    font-size:16px;font-weight:500;letter-spacing:-.014em;color:var(--ink-subtle);
-    transition:color 200ms,background 200ms,box-shadow 200ms
+    background:none;border:0;padding:3px 6px;border-radius:var(--r-xs);cursor:pointer;
+    font:inherit;font-size:16px;font-weight:500;color:var(--ink-subtle);
+    max-width:22ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    transition:color 200ms var(--ease-soft),box-shadow 200ms var(--ease-soft);
   }
-  .asig-miga:hover{color:var(--ink-muted);background:rgba(255,255,255,.05)}
-  .asig-miga.aqui{color:var(--ink);font-weight:600;font-size:17px;letter-spacing:-.018em}
-  /* Cuando se arrastra algo encima: un anillo, no un relleno. Lo que hay debajo sigue
-     leyéndose, que es lo que dice «va a caer AQUÍ» y no «esto ha cambiado». */
-  .asig-miga.diana{color:var(--ink);box-shadow:inset 0 0 0 1px var(--accent-linea)}
+  .asig-miga:hover{color:var(--ink-muted)}
+  /* Dónde estás se dice con el peso del texto, no con color: el acento ya está gastado en
+     el botón de subir. */
+  .asig-miga.aqui{font-size:17px;font-weight:600;color:var(--ink);cursor:default}
+  .asig-miga.diana{box-shadow:inset 0 0 0 1px var(--accent-linea)}
+  /* No es decorativo: dice dónde acaban los ficheros, que es información que cambia. */
   .asig-donde{
-    font-size:11.5px;color:var(--ink-subtle);margin-right:auto;
-    transition:color 240ms;
-    /* No es una etiqueta decorativa: dice dónde acaban los ficheros, que es información
-       que cambia el día que se conecte Drive. */
+    margin-right:auto;font-size:11.5px;color:var(--ink-subtle);
+    max-width:30ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   }
 
-  /* Sin conectar no es un sitio donde guardar: se dice más flojo todavía, porque lo que
-     tiene que leerse es el botón de al lado. */
-  .asig-donde.flojo{opacity:.7}
+  /* ── la rejilla ──
+     Era una lista de nombres. Para quien guarda fotos de pizarra y láminas, leer
+     «IMG_20250412_112233.jpg» es el camino lento para encontrar la del martes: se
+     reconoce por la imagen, no por el nombre. */
+  .asig-rejilla{
+    list-style:none;margin:0;padding:0 2px 2px;
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(188px,1fr));gap:14px;
+    overflow-y:auto;overflow-x:hidden;flex:1 1 auto;min-height:0;align-content:start;
+  }
 
-  /* ── la lista ── */
-  .asig-lista{
-    list-style:none;margin:0;padding:0;display:flex;flex-direction:column;
-    min-height:0;overflow-y:auto;overscroll-behavior:contain
+  .asig-celda{
+    position:relative;display:flex;flex-direction:column;min-width:0;
+    border-radius:var(--r-md);
   }
-  .asig-fila{
-    display:flex;align-items:center;gap:6px;min-width:0;
-    border-bottom:1px solid color-mix(in srgb,var(--hairline) 55%,transparent)
-  }
-  .asig-fila:last-child{border-bottom:0}
-  /* Arrastrar una fila es la forma natural de moverla, así que el cursor lo dice antes de
-     que nadie lo intente. */
-  .asig-fila[draggable='true']{cursor:grab}
-  .asig-fila[draggable='true']:active{cursor:grabbing}
-  /* La carpeta que va a recibir lo que sueltas: anillo y un punto de relleno, sin tapar
-     su nombre — hay que poder comprobar que es la que se quería. */
-  /* Mientras Drive confirma la papelera, la fila se apaga y no se deja tocar. La opacidad
-     va en los hijos y no en la fila: la de la fila la lleva Motion, y una propiedad la
-     controla Motion o la controla el CSS, nunca los dos. */
-  .asig-fila > *{transition:opacity 220ms var(--ease-soft)}
-  .asig-fila.yendo{pointer-events:none}
-  .asig-fila.yendo > *{opacity:.42}
-  .asig-fila.carp.diana{
+  .asig-celda[draggable='true']{cursor:grab}
+  .asig-celda[draggable='true']:active{cursor:grabbing}
+  /* La opacidad de la celda la lleva Motion, así que lo que se apaga al borrar son sus
+     hijos. Una propiedad tiene un dueño. */
+  .asig-celda.yendo{pointer-events:none}
+  .asig-celda.yendo > *{opacity:.42}
+  /* Diana de arrastre: un anillo, no un relleno, para que se siga leyendo encima de qué
+     va a caer — hay que poder comprobar que es la carpeta que se quería. */
+  .asig-celda.carp.diana .asig-lamina{
+    box-shadow:inset 0 0 0 2px var(--accent-linea);
     background:color-mix(in srgb,var(--accent) 16%,transparent);
-    box-shadow:inset 0 0 0 1px var(--accent-linea);
-    border-radius:var(--r-sm)
   }
-  .asig-fila.nueva,.asig-fila.carp .asig-abrir{align-items:center}
-  /* La carpeta toma el acento de la casa y no un color de tipo: no es un fichero, es el
-     sitio donde van los ficheros, y esa diferencia tiene que leerse antes que ninguna. */
-  .asig-ico.carp{--tc:var(--accent-linea)}
 
-  /* El campo de escribir un nombre, con la misma caja que la fila que sustituye para que
-     la lista no dé un salto al entrar y salir de él. */
-  .asig-bautizo{
-    flex:1 1 auto;min-width:0;margin:6px 8px 6px 0;padding:7px 10px;
-    border-radius:var(--r-sm);font:inherit;font-size:13.5px;color:var(--ink);
-    background:rgba(255,255,255,.06);
-    border:1px solid var(--accent-linea);outline:none
-  }
-  .asig-bautizo::placeholder{color:var(--ink-subtle)}
   .asig-abrir{
-    flex:1 1 auto;min-width:0;display:grid;
-    grid-template-columns:30px minmax(0,1fr) auto;align-items:center;gap:12px;
-    padding:11px 8px;margin:0;border:0;background:none;cursor:pointer;
-    font:inherit;text-align:left;border-radius:var(--r-sm);
-    transition:background 200ms
+    display:flex;flex-direction:column;gap:9px;width:100%;min-width:0;
+    background:none;border:0;padding:0;text-align:left;cursor:pointer;font:inherit;color:inherit;
+    border-radius:var(--r-md);
   }
-  .asig-abrir:hover{background:rgba(255,255,255,.045)}
-  /* ── el icono de cada tipo ──
-     El color sale de `--tc`, que la fila rellena con un token `--c-*` de los que ya usan
-     las asignaturas: **no entra ni un tono nuevo en el sistema**. El relleno al 15 % con el
-     trazo a plena intensidad es lo que deja reconocerlo de un vistazo sin competir con el
-     color de la asignatura, que es el único saturado de la página. */
-  .asig-ico{
-    width:32px;height:32px;border-radius:var(--r-sm);display:grid;place-items:center;
-    color:var(--tc,var(--ink-subtle));
-    background:color-mix(in srgb,var(--tc,var(--ink-subtle)) 15%,transparent);
-    border:1px solid color-mix(in srgb,var(--tc,var(--hairline)) 26%,transparent);
-    transition:background 220ms,border-color 220ms,transform 260ms var(--ease-out)
+  .asig-abrir:disabled{cursor:default}
+
+  /* ── la lámina ──
+     La miniatura si Drive la tiene, y si no el icono de su tipo sobre su propio color al
+     15 %. Ni un tono nuevo en el sistema: son los mismos `--c-*` que usan las asignaturas.
+     El 4:3 es fijo para que la rejilla no baile mientras llegan las imágenes. */
+  .asig-lamina{
+    position:relative;display:grid;place-items:center;overflow:hidden;
+    aspect-ratio:4/3;width:100%;border-radius:var(--r-md);
+    /* El tinte al 8 %, no al 15 que usa el icono pequeño de una fila: aquí el campo mide
+       4:3 y ocupa media celda, así que el mismo porcentaje se convierte en seis
+       rectángulos de colores. Lo que identifica es el icono, que va a plena intensidad;
+       el campo solo tiene que no ser gris. */
+    color:var(--tc);background:color-mix(in srgb,var(--tc) 8%,rgba(255,255,255,.04));
+    border:1px solid var(--hairline);
+    transition:background-color 240ms var(--ease-soft),border-color 240ms var(--ease-soft);
   }
-  .asig-abrir:hover .asig-ico{
-    background:color-mix(in srgb,var(--tc,var(--ink-subtle)) 24%,transparent);
-    border-color:color-mix(in srgb,var(--tc,var(--hairline-lit)) 42%,transparent)
+  .asig-lamina img{width:100%;height:100%;object-fit:cover;display:block}
+  /* Con imagen el tinte sobra: lo que identifica ya es la foto. */
+  .asig-lamina.con{background:rgba(0,0,0,.28)}
+  /* La carpeta no es un fichero, es el sitio donde van los ficheros: toma el acento de la
+     casa y no un color de tipo. */
+  .asig-lamina.carp{color:var(--accent-linea);background:color-mix(in srgb,var(--accent) 10%,rgba(255,255,255,.04))}
+  .asig-abrir:hover .asig-lamina{
+    background:color-mix(in srgb,var(--tc) 16%,rgba(255,255,255,.05));
+    border-color:var(--hairline-lit);
   }
-  /* Se adelanta un píxel al pasar por encima: lo justo para que la fila conteste sin que
-     parezca que se mueve. */
-  .asig-fila:hover .asig-ico{transform:translateX(1px)}
-  /* Una imagen y un PDF se distinguen por el dibujo, no por el color: un color por tipo
-     de fichero serían siete acentos nuevos peleándose entre ellos. */
+  .asig-abrir:hover .asig-lamina.con{background:rgba(0,0,0,.28)}
+  .asig-abrir:hover .asig-lamina.carp{background:color-mix(in srgb,var(--accent) 18%,rgba(255,255,255,.05))}
+  .asig-abrir:focus-visible{outline:2px solid var(--accent-linea);outline-offset:3px}
+
+  /* Celdas en espera: el hueco que van a ocupar las cosas, sin texto que caduque en medio
+     segundo. Un pulso lento, no un barrido: lo segundo pide que lo mires. */
+  .asig-celda.esperando{
+    aspect-ratio:4/3;border-radius:var(--r-md);
+    background:rgba(255,255,255,.045);border:1px solid var(--hairline);
+    animation:asig-latir 1.6s var(--ease-soft) infinite;
+  }
+  @keyframes asig-latir{0%,100%{opacity:.5}50%{opacity:.85}}
+
   .asig-nombre{
-    font-size:13.5px;color:var(--ink);min-width:0;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+    font-size:14.5px;line-height:1.3;color:var(--ink);min-width:0;
+    /* Dos líneas reservadas siempre: con el alto libre, un nombre de una línea y otro de
+       dos dejaban sus tamaños a alturas distintas y la fila se leía desalineada. */
+    min-height:calc(14.5px * 1.3 * 2);
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+    /* El nombre lo escribe quien sea y entra de fuera: se pinta como texto y nunca como
+       HTML. Aquí además puede ser larguísimo, así que se corta por líneas. */
+    overflow-wrap:anywhere;
   }
   .asig-meta{
-    font-family:var(--data);font-size:11px;color:var(--ink-subtle);flex:none;
-    font-variant-numeric:tabular-nums
+    font-family:var(--data);font-size:11px;font-variant-numeric:tabular-nums;
+    color:var(--ink-subtle);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   }
-  /* Renombrar no destruye nada, así que no se pone rojo al pasar por encima. Compartían
-     clase con el de borrar y el lápiz se encendía en el color de eliminar — el gesto más
-     inofensivo de la fila avisando como el más grave. */
-  .asig-quitar,.asig-endrive,.asig-accion{
-    flex:none;width:32px;height:32px;border-radius:var(--r-sm);display:grid;place-items:center;
-    border:0;background:none;color:var(--ink-subtle);cursor:pointer;text-decoration:none;
-    opacity:0;transition:opacity 200ms,color 200ms,background 200ms
-  }
-  .asig-fila:hover .asig-quitar,.asig-quitar:focus-visible,
-  .asig-fila:hover .asig-accion,.asig-accion:focus-visible,
-  .asig-fila:hover .asig-endrive,.asig-endrive:focus-visible{opacity:1}
-  .asig-accion:hover{color:var(--ink);background:rgba(255,255,255,.07)}
-  .asig-endrive:hover{color:var(--accent-linea);background:rgba(255,255,255,.055)}
-  .asig-quitar:hover{color:var(--late);background:color-mix(in srgb,var(--late) 12%,transparent)}
-  /* En táctil no hay `hover`: el botón se queda puesto o no hay forma de borrar nada. */
-  @media (hover:none){ .asig-quitar,.asig-endrive,.asig-accion{opacity:1} }
 
-  /* ── el vacío ──
-     Dice qué meter aquí, no «no hay nada». Un estado vacío que solo constata el vacío
-     deja a quien lo lee igual que estaba. */
+  .asig-bautizo{
+    width:100%;font:inherit;font-size:13.5px;color:var(--ink);
+    background:rgba(0,0,0,.35);border:1px solid var(--accent-linea);
+    border-radius:var(--r-sm);padding:7px 9px;outline:none;
+  }
+  .asig-bautizo::placeholder{color:var(--ink-subtle)}
+
+  /* ── los mandos ──
+     Juntos y sobre la lámina, en vez de en fila al lado del nombre: en una celda no hay
+     un costado libre donde ponerlos. */
+  .asig-mandos{
+    position:absolute;top:7px;right:7px;display:flex;gap:4px;
+    opacity:0;transition:opacity 200ms var(--ease-soft);
+  }
+  .asig-quitar,.asig-endrive,.asig-accion{
+    display:grid;place-items:center;width:28px;height:28px;flex:none;
+    border:1px solid var(--hairline);border-radius:var(--r-sm);cursor:pointer;
+    background:rgba(10,10,13,.72);backdrop-filter:none;
+    color:var(--ink-subtle);
+    transition:color 200ms var(--ease-soft),background 200ms var(--ease-soft),border-color 200ms var(--ease-soft);
+  }
+  .asig-celda:hover .asig-mandos,
+  .asig-mandos:focus-within{opacity:1}
+  .asig-accion:hover{color:var(--ink);border-color:var(--hairline-lit)}
+  .asig-endrive:hover{color:var(--ink);border-color:var(--hairline-lit)}
+  /* Renombrar no comparte color con borrar: compartían clase y el lápiz se encendía en
+     rojo — el gesto más inofensivo de la celda avisando como el más grave. */
+  .asig-quitar:hover{color:var(--late);border-color:color-mix(in srgb,var(--late) 50%,var(--hairline))}
+  /* Sin cursor no hay forma de borrar nada: en táctil se quedan puestos. */
+  @media (hover:none){
+    .asig-mandos{opacity:1}
+  }
+
   .asig-vacio{
     flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:12px;padding:38px 20px;text-align:center;color:var(--ink-subtle)
@@ -1861,10 +1876,13 @@
 
   /* ── pantallas estrechas ── */
   @media (max-width:700px){
-    .asig-titulo{border-left-width:2px;padding-left:13px}
-    .asig-semana{max-width:none}
+    /* En estrecho la banda se apila y el raíl pasa a ocupar el ancho entero. */
+    .asig-portada{flex-direction:column;align-items:stretch;gap:16px}
+    .asig-cuando{align-items:stretch}
+    .asig-viene{justify-content:flex-start}
+    .asig-pista{height:64px}
     .asig-apuntes{padding:14px 13px 12px;border-radius:var(--r-lg)}
-    .asig-meta{display:none}
+    .asig-rejilla{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
     .visor{inset:0;border-radius:0;border:0}
   }
 
@@ -3264,10 +3282,15 @@
      Al pasar el cursor sube y se enciende: el color es la recompensa de mirar una, no
      el fondo permanente de las seis. */
   .est-col::before{
-    content:'';position:absolute;inset:auto 0 0 0;height:26%;pointer-events:none;
+    content:'';position:absolute;inset:auto 0 0 0;height:40%;pointer-events:none;
     background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--tc) 40%,transparent));
     opacity:.22;
-    transition:opacity 340ms var(--ease-soft),height 480ms var(--ease-out);
+    /* Crece con `scaleY` desde el pie y no con `height`: animar el alto obliga al
+       navegador a recalcular la maquetación en cada fotograma, y en esta casa eso ya está
+       decidido — las barras de progreso se hacen igual. El origen abajo es lo que hace que
+       suba en vez de estirarse desde el centro. */
+    transform:scaleY(.65);transform-origin:50% 100%;
+    transition:opacity 340ms var(--ease-soft),transform 480ms var(--ease-out);
   }
 
   /* El brillo que cruza en diagonal al pasar el cursor. Vive en un pseudoelemento, que es
@@ -3301,7 +3324,14 @@
   }
 
   .est-pie{position:relative;z-index:1;flex:none;display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}
-  .est-raya{width:30px;height:2px;border-radius:2px;background:color-mix(in srgb,var(--tc) 72%,transparent);transition:width 380ms var(--ease-out),background-color 300ms var(--ease-soft)}
+  /* Se alarga con `scaleX` y no con `width`, por lo mismo: una propiedad que no toca la
+     maquetación. Mide los 56 px del estado encendido y en reposo está encogida. */
+  .est-raya{
+    width:56px;height:2px;border-radius:2px;
+    background:color-mix(in srgb,var(--tc) 72%,transparent);
+    transform:scaleX(.536);
+    transition:transform 380ms var(--ease-out),background-color 300ms var(--ease-soft);
+  }
   /* El código es una referencia real de la escuela, así que va en la monoespaciada
      tabular, igual que en cada clase del horario. */
   .est-cod{
@@ -3328,13 +3358,13 @@
   }
   .est-puerta:hover .est-col::before,
   .est-puerta:focus-visible .est-col::before,
-  .est-col.es-elegido::before{opacity:.5;height:40%}
+  .est-col.es-elegido::before{opacity:.5;transform:scaleY(1)}
   .est-puerta:hover .est-col::after,
   .est-puerta:focus-visible .est-col::after,
   .est-col.es-elegido::after{opacity:.85;transform:translateY(-8%)}
   .est-puerta:hover .est-raya,
   .est-puerta:focus-visible .est-raya,
-  .est-col.es-elegido .est-raya{width:56px;background:var(--tc)}
+  .est-col.es-elegido .est-raya{transform:scaleX(1);background:var(--tc)}
   .est-puerta:hover .est-cod,
   .est-puerta:focus-visible .est-cod,
   .est-col.es-elegido .est-cod{color:var(--ink)}

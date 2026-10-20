@@ -429,10 +429,39 @@ que es lo que hace que lleguen escalonadas sin tocar un número:
    dibujada con las clases de esa asignatura. Es lo que hace que la página sea *de esa asignatura*.
 2. **Lo que viene.** Hasta cuatro entregas y exámenes de esa asignatura, de hoy en adelante, del
    calendario que ya existe. Si no hay ninguno, la pieza no se pinta.
-3. **Los apuntes.** Una **lista** —no una rejilla, y sin miniaturas— con carpetas primero y
-   apuntes después; migas de pan arriba («Apuntes › Tema 3»), que también sirven de diana para
-   sacar algo arrastrándolo hacia arriba. Arrastrar ficheros del disco encima sube a la carpeta en
-   la que se está. Cada fila de Drive lleva un enlace **Verlo en tu Drive**.
+3. **Los apuntes.** Una **rejilla con miniaturas**, carpetas primero y apuntes después; migas de
+   pan arriba («Apuntes › Tema 3»), que también sirven de diana para sacar algo arrastrándolo
+   hacia arriba. Arrastrar ficheros del disco encima sube a la carpeta en la que se está. Cada
+   celda de Drive lleva un enlace **Verlo en tu Drive**.
+
+   **Era una lista sin miniaturas y se cambió a conciencia.** La razón de la lista era no
+   convertir la pantalla en una rejilla de tarjetas idénticas, que el contrato visual prohíbe
+   como estructura. Pero el material de una estudiante de arquitectura son imágenes —fotos de
+   pizarra, láminas, croquis—, y leer `IMG_20250412_112233.jpg` es el camino lento para
+   encontrar la foto del martes. Con la miniatura, la celda deja de ser una tarjeta idéntica:
+   cada una enseña algo distinto, que es exactamente lo que aquella regla pedía.
+
+   **La miniatura es el sexto verbo del archivador**, `miniatura(remoto, ancho)`, y no una
+   opción de `leer`: leer trae el fichero —ochenta megas si hace falta— y esto trae veinte kilos
+   para una celda. En Drive son dos viajes, `fields=hasThumbnail,thumbnailLink` y después la
+   imagen con el sufijo de tamaño cambiado por `=w420`; nunca es interactivo, porque esto pasa al
+   desplazar y una rejilla que abre ventanas de Google sola es una rejilla rota. En el archivador
+   local una imagen se devuelve entera y lo demás devuelve `null`.
+
+   **`null` no es un fallo**, y de ahí cuelga todo lo demás: un `.dwg`, un `.zip` o un `.skp` no
+   tienen imagen que enseñar, y la respuesta correcta para ellos es su icono de `iconos.tsx`. Lo
+   mismo si el token caducó o si Drive dijo que no. Quien pinta no distingue «no se pudo» de «no
+   la tiene».
+
+   Lo que lo hace barato: **solo se piden las celdas que están en pantalla**
+   (`IntersectionObserver` con 280 px de margen), **de tres en tres** —el mismo número que las
+   subidas y por el mismo motivo— y se recuerdan en memoria con tope de 16 MB, **incluido el
+   `null`**: sin eso, los `.zip` de una carpeta volvían a preguntar cada vez que su celda
+   entraba en pantalla, y la respuesta iba a ser la misma siempre.
+
+   **Drive puede tardar en generar la miniatura.** Recién subido, `hasThumbnail` llega `false` y
+   la imagen aparece minutos después. La celda cae a su icono y lo vuelve a intentar al recargar;
+   no se reintenta en bucle, y el fallo no se recuerda.
 4. **El visor.** Las imágenes que el navegador sabe pintar (no `.heic` ni `.tif`), PDF y vídeo se
    ven dentro; el resto (`.docx`, planos, modelos…) ofrece **Descargar**. Un `<img>` o un `<iframe>`
    no saben mandar la cabecera de autorización, así que el fichero se baja con `fetch` **leyendo el

@@ -106,5 +106,24 @@ export function crearArchivadorLocal(): Archivador {
       op.alAvanzar?.(blob, 1);
       return blob;
     },
+
+    /**
+     * Lo guardado en el equipo no tiene miniaturas generadas por nadie, así que una imagen
+     * se devuelve entera y lo demás no devuelve nada.
+     *
+     * Entera y no reducida a propósito: esto es solo lo que se guardó antes de que todo
+     * pasara a Drive, son unos pocos ficheros y ya están en este disco. Montar un
+     * reductor con `canvas` para eso sería código nuevo al servicio de un camino que ya
+     * no crece.
+     */
+    async miniatura(remoto: Remoto) {
+      if (remoto.proveedor !== 'local') return null;
+      try {
+        const blob = await conAlmacen<Blob | undefined>('readonly', (s) => s.get(remoto.id));
+        return blob && blob.type.startsWith('image/') ? blob : null;
+      } catch {
+        return null;
+      }
+    },
   };
 }

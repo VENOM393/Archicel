@@ -48,15 +48,29 @@ function useLista<T>(
   ordenar: (l: T[]) => T[],
   clave: string,
   rango?: Rango,
-): T[] {
+): [T[], boolean] {
   const [lista, setLista] = useState<T[]>([]);
+  /**
+   * Si el almacén ya contestó alguna vez.
+   *
+   * Sin esto no hay forma de distinguir «no tienes nada» de «todavía no se sabe», y las
+   * dos cosas se ven igual: una lista vacía. La pantalla de apuntes le decía «no tienes
+   * nada» a alguien que sí tiene cosas, durante todo el viaje a Firestore.
+   *
+   * Se pone a `false` al cambiar de `clave` —otro almacén, otro rango— porque entonces lo
+   * de antes ya no responde por lo de ahora.
+   */
+  const [listo, setListo] = useState(false);
   /* la huella de lo último entregado, para no repetir */
   const huella = useRef('');
   const refs = useRef({ escuchar, ordenar, rango });
   refs.current = { escuchar, ordenar, rango };
 
   useEffect(() => {
+    setListo(false);
+    huella.current = '';
     return refs.current.escuchar((cruda) => {
+      setListo(true);
       const ordenada = refs.current.ordenar(cruda);
       const nueva = JSON.stringify(ordenada);
       if (nueva === huella.current) return;
@@ -67,7 +81,7 @@ function useLista<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clave]);
 
-  return lista;
+  return [lista, listo];
 }
 
 export function useEventos(rango?: Rango): Evento[] {
@@ -76,7 +90,7 @@ export function useEventos(rango?: Rango): Evento[] {
     (cb: (l: Evento[]) => void, r?: Rango) => almacen.eventos.escuchar(cb, r),
     [almacen],
   );
-  return useLista(escuchar, ordenarEventos, `${almacen.uid ?? ''}|${rango?.desde ?? ''}|${rango?.hasta ?? ''}`, rango);
+  return useLista(escuchar, ordenarEventos, `${almacen.uid ?? ''}|${rango?.desde ?? ''}|${rango?.hasta ?? ''}`, rango)[0];
 }
 
 export function useTareas(rango?: Rango): Tarea[] {
@@ -85,7 +99,7 @@ export function useTareas(rango?: Rango): Tarea[] {
     (cb: (l: Tarea[]) => void, r?: Rango) => almacen.tareas.escuchar(cb, r),
     [almacen],
   );
-  return useLista(escuchar, ordenarTareas, `${almacen.uid ?? ''}|${rango?.desde ?? ''}|${rango?.hasta ?? ''}`, rango);
+  return useLista(escuchar, ordenarTareas, `${almacen.uid ?? ''}|${rango?.desde ?? ''}|${rango?.hasta ?? ''}`, rango)[0];
 }
 
 /**
@@ -120,14 +134,15 @@ function ordenarApuntes(l: Apunte[]): Apunte[] {
  * todos: una sola suscripción en vez de seis, ningún índice compuesto que mantener, y
  * cambiar de asignatura no vuelve a la red. El día que esto sean miles, se filtra arriba.
  */
-export function useApuntes(asignatura: string): Apunte[] {
+export function useApuntes(asignatura: string): [Apunte[], boolean] {
   const { almacen } = useArchicel();
   const escuchar = useCallback(
     (cb: (l: Apunte[]) => void) => almacen.apuntes.escuchar(cb),
     [almacen],
   );
-  const todos = useLista(escuchar, ordenarApuntes, `${almacen.uid ?? ''}|apuntes`);
-  return useMemo(() => todos.filter((a) => a.asignatura === asignatura), [todos, asignatura]);
+  const [todos, listo] = useLista(escuchar, ordenarApuntes, `${almacen.uid ?? ''}|apuntes`);
+  const suyos = useMemo(() => todos.filter((a) => a.asignatura === asignatura), [todos, asignatura]);
+  return [suyos, listo];
 }
 
 /** Alfabético y sin distinguir mayúsculas, que es como espera verlo cualquiera. */
@@ -136,11 +151,12 @@ function ordenarCarpetas(l: Carpeta[]): Carpeta[] {
 }
 
 /** Las carpetas de una asignatura, todas: el árbol lo arma la pantalla. */
-export function useCarpetas(asignatura: string): Carpeta[] {
+export function useCarpetas(asignatura: string): [Carpeta[], boolean] {
   const { almacen } = useArchicel();
   const escuchar = useCallback((cb: (l: Carpeta[]) => void) => almacen.carpetas.escuchar(cb), [almacen]);
-  const todas = useLista(escuchar, ordenarCarpetas, `${almacen.uid ?? ''}|carpetas`);
-  return useMemo(() => todas.filter((c) => c.asignatura === asignatura), [todas, asignatura]);
+  const [todas, listo] = useLista(escuchar, ordenarCarpetas, `${almacen.uid ?? ''}|carpetas`);
+  const suyas = useMemo(() => todas.filter((c) => c.asignatura === asignatura), [todas, asignatura]);
+  return [suyas, listo];
 }
 
 /** La entrega que viene: de ella cuelgan la cuenta atrás y el mensaje de bienvenida. */

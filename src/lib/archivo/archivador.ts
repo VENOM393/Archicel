@@ -173,6 +173,24 @@ export interface Archivador {
    * una puerta pública a un apunte.
    */
   leer(remoto: Remoto, opciones?: OpcionesDeLectura): Promise<Blob>;
+
+  /**
+   * Una miniatura para enseñar en la rejilla, o `null` si no la hay.
+   *
+   * **`null` no es un fallo**, y esa es la parte que importa: un `.dwg`, un `.zip` o un
+   * `.skp` no tienen imagen que enseñar, y la respuesta correcta para ellos es su icono.
+   * Quien llama no tiene que distinguir «no se pudo» de «no la tiene»: en los dos casos
+   * pinta el icono, que es lo que un sistema de iconos existe para hacer.
+   *
+   * Es un verbo propio y no un `leer` con una opción porque son dos cosas distintas: leer
+   * trae **el fichero** —ochenta megas de lámina si hace falta— y esto trae veinte kilos
+   * para una celda. Mezclarlos haría que pintar una rejilla de treinta apuntes se bajara
+   * la asignatura entera.
+   *
+   * `ancho` es una petición, no una garantía: el proveedor devuelve lo que tenga más
+   * cerca.
+   */
+  miniatura(remoto: Remoto, ancho: number): Promise<Blob | null>;
 }
 
 /**

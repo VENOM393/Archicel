@@ -418,6 +418,21 @@ export const COLUMNA: Variants = {
   },
 };
 
+/**
+ * Una celda de la rejilla de apuntes.
+ *
+ * No anima el alto, y eso no es un detalle: las filas de una lista se abrían y cerraban
+ * con `height`, que en una rejilla no significa nada —la celda que entra no empuja hacia
+ * abajo a las de al lado, las recoloca todas—. Lo que hace que una rejilla no dé un salto
+ * al añadir algo es `layout` en cada celda, y lo que hace que la nueva se note es que
+ * llegue creciendo.
+ */
+export const CELDA: Variants = {
+  fuera: { opacity: 0, scale: 0.94 },
+  dentro: { opacity: 1, scale: 1, transition: MUELLE.normal },
+  saliendo: { opacity: 0, scale: 0.95, transition: { duration: TIEMPO.roce, ease: CURVA.fuera } },
+};
+
 /** El velo de las hojas modales. No se mueve: solo aparece y se va. */
 export const VELO: Variants = {
   fuera: { opacity: 0 },

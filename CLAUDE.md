@@ -502,17 +502,40 @@ dentro de una página que se va, lo que se ve es la **geometría**, no la opacid
 
 ## La página de una asignatura
 
-`/asignatura/[clave]`, una por cada entrada de `ASIGNATURAS`. Se llega pulsando una clase en el
-horario o su chip en la leyenda, y es **una página compuesta, no un tablero de widgets**: la portada
-manda, y los apuntes son la superficie de trabajo.
+`/asignatura/[clave]`, una por cada entrada de `ASIGNATURAS`. Se llega desde la estantería de
+`/asignaturas`, y también pulsando una clase en el horario. Es **una página compuesta, no un
+tablero de widgets**, y va de borde a borde: una banda arriba y, debajo, los apuntes.
 
 **Estado: terminada**, con los pendientes de DRIVE.md § 10. Los bytes van a Drive —y solo a
-Drive—, con carpetas, renombrar y mover. Es una lista, no una rejilla, y sin miniaturas; el visor
-enseña dentro imágenes que el navegador sabe pintar, PDF y vídeo, y el resto se descarga. El
-planteamiento completo está en
-[docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
+Drive—, con carpetas, renombrar y mover. Es una **rejilla con miniaturas**; el visor enseña dentro
+imágenes que el navegador sabe pintar, PDF y vídeo, y el resto se descarga. El planteamiento
+completo está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
+
+**La banda tiene dos lados**: a la izquierda quién es la asignatura, a la derecha cuándo toca y qué
+viene. Era una columna de 1120 px que dejaba 548 px muertos a la derecha en una ventana de 1686 —un
+tercio de la pantalla—, y lo que llena ese hueco no es aire: es el horario de esta asignatura, con
+**el aula**, que estaba en `curso.ts` sin pintarse en ningún sitio.
 
 Lo que no se deduce leyendo el código:
+
+- **Una lista vacía no significa que no haya nada.** `useApuntes` y `useCarpetas` arrancan en `[]`,
+  así que durante todo el viaje a Firestore la pantalla le decía «arrastra aquí tus fotos» a alguien
+  que ya tenía cuarenta. Por eso los dos devuelven ahora `[lista, listo]`, y mientras `listo` sea
+  falso la rejilla pinta celdas en espera en vez del estado vacío.
+- **La miniatura es un verbo propio del archivador, no un `leer` con una opción.** Leer trae el
+  fichero —ochenta megas de lámina si hace falta— y la miniatura trae veinte kilos para una celda;
+  mezclarlos haría que pintar una rejilla se bajara la asignatura entera. Y **`null` no es un
+  fallo**: un `.dwg` o un `.zip` no tienen imagen, y la respuesta correcta para ellos es su icono.
+- **Solo se piden las miniaturas de lo que está en pantalla**, con `IntersectionObserver` y de tres
+  en tres. Una carpeta con cuarenta fotos son ochenta peticiones, y lanzarlas al abrir gasta la
+  cuota de alguien en imágenes que no va a mirar.
+- **El tinte de la lámina va al 8 %, no al 15 del icono de una fila.** El campo mide 4:3 y ocupa
+  media celda, así que el mismo porcentaje se convierte en seis rectángulos de colores. Lo que
+  identifica es el icono, a plena intensidad; el campo solo tiene que no ser gris.
+- **El título no lleva filete de color al costado.** Un `border-left` de acento en una caja es el
+  tell más reconocible de una interfaz generada, y aquí además era redundante.
+- **El nombre de una celda reserva dos líneas siempre.** Con el alto libre, un nombre de una línea
+  y otro de dos dejaban sus tamaños a alturas distintas y la fila se leía desalineada.
 
 - **La interfaz no habla con el almacenamiento.** Habla con `Archivador`, en `src/lib/archivo/`. Es
   el mismo patrón que el almacén y por el mismo motivo: el día que Drive se sustituya por otra cosa,
@@ -525,6 +548,9 @@ Lo que no se deduce leyendo el código:
 - **`.vista.on` tiene dos clases.** Una regla nueva escrita como `.asig` pierde contra ella y no se
   aplica — sin error y sin que se note, porque la página sigue maquetando en bloque. Va
   `.vista.asig`.
+- **Sin Drive conectado el panel se sustituye entero** por la invitación a conectarlo, y eso incluye
+  lo que se guardó en el equipo antes del cambio a Drive: existe, se puede abrir, pero no se ve.
+  Viene de antes de esta pantalla y no se ha tocado aquí.
 
 ## El repositorio
 

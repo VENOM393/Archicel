@@ -144,6 +144,10 @@ export function elArchivador(): Archivador {
     leer(remoto, opciones) {
       return paraRemoto(remoto).leer(remoto, opciones);
     },
+
+    miniatura(remoto, ancho) {
+      return paraRemoto(remoto).miniatura(remoto, ancho);
+    },
   };
 }
 

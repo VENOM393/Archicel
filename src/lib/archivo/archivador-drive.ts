@@ -708,6 +708,87 @@ function descargar(id: string, op: OpcionesDeLectura, interactivo: boolean): Des
   return d;
 }
 
+/* ───────────────────────── miniaturas ───────────────────────── */
+
+/**
+ * Lo que Drive ya nos dijo de cada apunte: su miniatura, o `null` si no tiene.
+ *
+ * El `null` se recuerda igual que la imagen, y es la mitad del ahorro: sin eso, los
+ * `.dwg` y los `.zip` de una carpeta volvían a preguntar a Drive cada vez que su celda
+ * entraba en pantalla, y la respuesta iba a ser la misma siempre.
+ */
+const miniaturas = new Map<string, Blob | null>();
+let ocupadoMini = 0;
+const CABEN_MINI = 16 * 1024 * 1024;
+
+/** Lo que se está pidiendo ahora: dos celdas del mismo apunte no preguntan dos veces. */
+const pidiendoMini = new Map<string, Promise<Blob | null>>();
+
+function recordarMini(id: string, blob: Blob | null): void {
+  const antes = miniaturas.get(id);
+  if (antes) ocupadoMini -= antes.size;
+  miniaturas.delete(id);
+  miniaturas.set(id, blob);
+  ocupadoMini += blob?.size ?? 0;
+  for (const [k, b] of miniaturas) {
+    if (ocupadoMini <= CABEN_MINI) break;
+    miniaturas.delete(k);
+    ocupadoMini -= b?.size ?? 0;
+  }
+}
+
+/**
+ * Cuántas miniaturas se piden a la vez.
+ *
+ * El mismo número que las subidas, y por el mismo motivo: una carpeta con cuarenta fotos
+ * son ochenta peticiones, y lanzarlas todas de golpe hace que Drive conteste 429 a la
+ * mitad — con lo que la rejilla tarda más en llenarse que pidiéndolas de tres en tres.
+ */
+const MINIS_A_LA_VEZ = 3;
+let enVuelo = 0;
+const cola: (() => void)[] = [];
+
+async function conTurno<T>(hacer: () => Promise<T>): Promise<T> {
+  if (enVuelo >= MINIS_A_LA_VEZ) await new Promise<void>((listo) => cola.push(listo));
+  enVuelo++;
+  try {
+    return await hacer();
+  } finally {
+    enVuelo--;
+    cola.shift()?.();
+  }
+}
+
+/**
+ * Le pide a Drive la miniatura de un fichero.
+ *
+ * Son dos viajes y no hay forma de que sea uno: primero los metadatos, que dicen si existe
+ * y dónde, y después la imagen. `thumbnailLink` llega con un sufijo de tamaño (`=s220`)
+ * que se puede cambiar por el que queramos, y eso es lo que evita bajar una miniatura de
+ * 220 px para pintarla a 400 y verla borrosa.
+ *
+ * **Nunca es interactivo.** Esto ocurre al desplazar, no al pulsar: si el token caducó, lo
+ * correcto es que no haya miniatura hasta que la usuaria haga algo que justifique abrir la
+ * ventana de Google. Una rejilla que abre ventanas emergentes sola es una rejilla rota.
+ */
+async function pedirMiniatura(id: string, ancho: number): Promise<Blob | null> {
+  const r = await llamar(
+    `${API}/files/${encodeURIComponent(id)}?fields=hasThumbnail,thumbnailLink`,
+    {},
+    { interactivo: false },
+  );
+  const ficha = (await r.json()) as { hasThumbnail?: boolean; thumbnailLink?: string };
+  if (!ficha.hasThumbnail || !ficha.thumbnailLink) return null;
+
+  /* El sufijo de tamaño de Google: `=s220`, `=w200-h150`… Se cambia por el que pedimos. */
+  const url = ficha.thumbnailLink.replace(/=[swh][\d-]*(?:[swh]\d+)*$/, '') + `=w${ancho}`;
+  const img = await fetch(url, { headers: { Authorization: `Bearer ${await token(false)}` } });
+  if (!img.ok) return null;
+  const blob = await img.blob();
+  /* Drive contesta 200 con una página de error si el enlace ya no vale. */
+  return blob.type.startsWith('image/') ? blob : null;
+}
+
 /** Hasta este tamaño, pasar el puntero por encima ya lo va bajando. */
 const PRECARGA = 8 * 1024 * 1024;
 
@@ -806,6 +887,9 @@ function olvidarLoDeLaCuenta(): void {
   recordados.clear();
   ocupado = 0;
   bajando.clear();
+  miniaturas.clear();
+  ocupadoMini = 0;
+  pidiendoMini.clear();
 }
 
 /*
@@ -1007,6 +1091,29 @@ export function crearArchivadorDrive(): Archivador {
       } finally {
         if (oyente) d.oyentes.delete(oyente);
       }
+    },
+
+    async miniatura(remoto: Remoto, ancho: number) {
+      if (remoto.proveedor !== 'drive' || !hayPermiso()) return null;
+      if (miniaturas.has(remoto.id)) return miniaturas.get(remoto.id) ?? null;
+
+      const ya = pidiendoMini.get(remoto.id);
+      if (ya) return ya;
+
+      const mia = conexion;
+      const p = conTurno(() => pedirMiniatura(remoto.id, ancho))
+        /* Cualquier fallo es «no hay miniatura»: la celda pinta su icono y nadie se entera.
+           Lo que no se puede es tumbar una rejilla entera porque Drive no quiso dar una
+           imagen de 20 kB. No se recuerda el fallo, para que recargar lo vuelva a intentar. */
+        .catch(() => null)
+        .then((blob) => {
+          if (conexion === mia) recordarMini(remoto.id, blob);
+          return blob;
+        })
+        .finally(() => pidiendoMini.delete(remoto.id));
+
+      pidiendoMini.set(remoto.id, p);
+      return p;
     },
   };
 }

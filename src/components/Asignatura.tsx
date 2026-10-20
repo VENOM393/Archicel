@@ -28,7 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as mo from 'motion/react-m';
 import { AnimatePresence } from 'motion/react';
 
-import { APARECER, ORQUESTA, PIEZA, VELO, HOJA, MUELLE, CURVA, TIEMPO } from '@/lib/ui/movimiento';
+import { APARECER, CELDA, ORQUESTA, PIEZA, VELO, HOJA, MUELLE, CURVA, TIEMPO } from '@/lib/ui/movimiento';
 import { Icono, TIPOS } from '@/lib/ui/catalogo';
 import { Button } from '@/components/ui/button';
 import { useAhora, useApuntes, useCarpetas, useEventos } from '@/hooks/useDatos';
@@ -67,6 +67,7 @@ import {
   hhmm,
   type Apunte,
   type Carpeta,
+  type Clase,
   type ClaveAsignatura,
 } from '@/lib/data';
 import { AlCuerpo } from '@/components/AlCuerpo';
@@ -80,13 +81,16 @@ const MINIMO_VISIBLE = 420;
 export function Asignatura({ clave }: { clave: ClaveAsignatura }) {
   const asig = ASIGNATURAS[clave];
   const ahora = useAhora();
-  const apuntes = useApuntes(clave);
+  const [apuntes, apuntesListos] = useApuntes(clave);
 
   return (
     <mo.section className="vista on asig" variants={ORQUESTA} aria-label={asig.nombre}>
+      {/* `LoQueViene` ya no es hermano de la portada: vive dentro de ella. Suelto aquí
+          desaparecía al no haber nada y, como el reloj no existe en el prerender, aparecía
+          al hidratar empujando el panel hacia abajo — un salto en cada carga. Dentro de la
+          banda, cuyo alto lo fija el raíl del horario, que esté o no ya no mueve nada. */}
       <Portada clave={clave} ahora={ahora} nApuntes={apuntes.length} />
-      <LoQueViene clave={clave} ahora={ahora} />
-      <Apuntes clave={clave} apuntes={apuntes} />
+      <Apuntes clave={clave} apuntes={apuntes} apuntesListos={apuntesListos} />
     </mo.section>
   );
 }
@@ -94,12 +98,30 @@ export function Asignatura({ clave }: { clave: ClaveAsignatura }) {
 /* ───────────────────────── la portada ───────────────────────── */
 
 /**
- * El nombre, los datos y la semana.
+ * Dónde está esta clase: el aula, en corto.
  *
- * La semana no es decoración: son las clases reales de esta asignatura, sacadas del mismo
- * `HORARIO` que pinta la pantalla de horario. Dibujada como una sección —una línea por
- * día, y sobre ella el bloque de clase a la altura que le toca— dice de un vistazo dos
- * cosas que una lista de horas no dice: cuántos días toca y si son mañanas o tardes.
+ * `aula` viene como `'P5_2_A03 · Aula 3, 2ª planta, Pab. 5'`: el código oficial, y detrás
+ * lo que diría una persona. En un raíl de cien píxeles cabe lo segundo y no lo primero,
+ * así que se queda con «Aula 3» y el resto se va al `title`. Este dato ya estaba en
+ * `curso.ts` y no se pintaba en ningún sitio.
+ */
+function dondeEs(c: Clase): string {
+  if (c.online) return 'En línea';
+  const humano = c.aula.split(' · ')[1];
+  return humano ? humano.split(',')[0] : c.aula;
+}
+
+/**
+ * La banda de la asignatura: a la izquierda quién es, a la derecha cuándo y qué viene.
+ *
+ * Era una columna de 1120 px que dejaba un tercio de la pantalla vacío a su derecha. Como
+ * banda de dos lados, ese hueco lo llena el horario de esta asignatura —que antes era una
+ * tira de 246 px con las horas a 10 px— y los próximos eventos.
+ *
+ * La semana no es decoración: son las clases reales, del mismo `HORARIO` que pinta la
+ * pantalla de horario. Dibujada como una sección —una línea por día, y sobre ella el
+ * bloque de clase a la altura que le toca— dice de un vistazo dos cosas que una lista de
+ * horas no dice: cuántos días toca y si son mañanas o tardes.
  */
 function Portada({ clave, ahora, nApuntes }: { clave: ClaveAsignatura; ahora: Date | null; nApuntes: number }) {
   const asig = ASIGNATURAS[clave];
@@ -118,50 +140,67 @@ function Portada({ clave, ahora, nApuntes }: { clave: ClaveAsignatura; ahora: Da
 
   return (
     <mo.header className="asig-portada" variants={PIEZA} style={{ ['--tc' as string]: `var(--c-${asig.color})` }}>
-      <VolverAlHorario />
-      <div className="asig-titulo">
-        <h1>{asig.nombre}</h1>
-        <p className="asig-datos">
-          <span className="asig-codigo">{asig.codigo}</span>
-          <i aria-hidden="true" />
-          <span>
-            <b>{horas}</b> h a la semana
-          </span>
-          <i aria-hidden="true" />
-          <span>
-            <b>{nApuntes}</b> {nApuntes === 1 ? 'apunte' : 'apuntes'}
-          </span>
-        </p>
+      <div className="asig-quien">
+        <VolverAAsignaturas />
+        {/* Sin `border-left` de color: un filete de acento al costado de una caja es el
+            tell más reconocible de una interfaz generada, y aquí no hacía falta — el color
+            de la asignatura ya está en el código y en los bloques del horario. */}
+        <div className="asig-titulo">
+          <h1>{asig.nombre}</h1>
+          <p className="asig-datos">
+            <span className="asig-codigo">{asig.codigo}</span>
+            <i aria-hidden="true" />
+            <span>
+              {/* Sin decimales de más: 2,5 h se escribe así y no `2.5`. */}
+              <b>{horas.toLocaleString('es-ES')}</b> h a la semana
+            </span>
+            <i aria-hidden="true" />
+            <span>
+              <b>{nApuntes}</b> {nApuntes === 1 ? 'apunte' : 'apuntes'}
+            </span>
+          </p>
+        </div>
       </div>
 
-      {clases.length > 0 && (
-        <div className="asig-semana" aria-label="Cuándo hay clase">
-          {DIAS_CORTOS.map((letra, i) => {
-            const dia = i + 1;
-            const suyas = clases.filter((c) => c.dia === dia);
-            return (
-              <div className={`asig-dia${dia === diaHoy ? ' hoy' : ''}${suyas.length ? ' tiene' : ''}`} key={letra}>
-                <span className="asig-pista" aria-hidden="true">
-                  {suyas.map((c) => (
-                    <span
-                      className="asig-bloque"
-                      key={c.ini}
-                      style={{
-                        top: `${((c.ini - desde) / alto) * 100}%`,
-                        height: `${((c.fin - c.ini) / alto) * 100}%`,
-                      }}
-                      title={`${hhmm(c.ini)} – ${hhmm(c.fin)}`}
-                    />
-                  ))}
-                </span>
-                <span className="asig-letra">{letra}</span>
-                {/* La hora solo donde hay clase: repetirla vacía llena la fila de guiones */}
-                <span className="asig-hora">{suyas.length ? hhmm(suyas[0].ini) : ''}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <div className="asig-cuando">
+        {clases.length > 0 && (
+          <div className="asig-semana" aria-label="Cuándo hay clase">
+            {DIAS_CORTOS.map((letra, i) => {
+              const dia = i + 1;
+              const suyas = clases.filter((c) => c.dia === dia);
+              return (
+                <div className={`asig-dia${dia === diaHoy ? ' hoy' : ''}${suyas.length ? ' tiene' : ''}`} key={letra}>
+                  <span className="asig-pista" aria-hidden="true">
+                    {suyas.map((c) => (
+                      <span
+                        className="asig-bloque"
+                        key={c.ini}
+                        style={{
+                          top: `${((c.ini - desde) / alto) * 100}%`,
+                          height: `${((c.fin - c.ini) / alto) * 100}%`,
+                        }}
+                        title={`${hhmm(c.ini)} – ${hhmm(c.fin)}`}
+                      />
+                    ))}
+                  </span>
+                  <span className="asig-letra">{letra}</span>
+                  {/* Las horas y el aula solo donde hay clase: repetirlas vacías llenan la
+                      fila de guiones. El hueco sí se reserva siempre, o la fila baila. */}
+                  <span className="asig-horas">
+                    {suyas.map((c) => (
+                      <span className="asig-rango" key={c.ini} title={c.aula}>
+                        <b>{hhmm(c.ini)}–{hhmm(c.fin)}</b>
+                        <em className={c.online ? 'red' : undefined}>{dondeEs(c)}</em>
+                      </span>
+                    ))}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <LoQueViene clave={clave} ahora={ahora} />
+      </div>
     </mo.header>
   );
 }
@@ -194,8 +233,10 @@ function LoQueViene({ clave, ahora }: { clave: ClaveAsignatura; ahora: Date | nu
 
   if (proximos.length === 0) return null;
 
+  /* Ya no es una pieza del escalonado de la página: vive dentro de la banda y entra con
+     ella. Una pieza dentro de otra pieza contaría el mismo gesto dos veces. */
   return (
-    <mo.div className="asig-viene" variants={PIEZA}>
+    <div className="asig-viene">
       {proximos.map((e) => {
         const dias = ahora
           ? Math.round((deFecha(e.fecha).getTime() - new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).getTime()) / 86_400_000)
@@ -213,7 +254,7 @@ function LoQueViene({ clave, ahora }: { clave: ClaveAsignatura; ahora: Date | nu
           </span>
         );
       })}
-    </mo.div>
+    </div>
   );
 }
 
@@ -301,11 +342,19 @@ async function enParalelo<T>(lista: T[], cuantos: number, hacer: (x: T) => Promi
 }
 
 
-function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[] }) {
+function Apuntes({
+  clave,
+  apuntes,
+  apuntesListos,
+}: {
+  clave: ClaveAsignatura;
+  apuntes: Apunte[];
+  apuntesListos: boolean;
+}) {
   const { almacen } = useArchicel();
   const { avisar } = useUI();
   const archivador = useMemo(() => elArchivador(), []);
-  const carpetas = useCarpetas(clave);
+  const [carpetas, carpetasListas] = useCarpetas(clave);
   const entrada = useRef<HTMLInputElement>(null);
 
   const [aqui, setAqui] = useState<string | null>(null);
@@ -769,7 +818,16 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
     ]);
   }, [problemas, archivador, yaConectado, avisar, porId, clave, subir, apuntar, quejarse, apuntes, borrar]);
 
-  const vacio = hijas.length === 0 && suyos.length === 0 && subiendo.length === 0 && problemas.length === 0 && !creando;
+  const nada = hijas.length === 0 && suyos.length === 0 && subiendo.length === 0 && problemas.length === 0 && !creando;
+  /**
+   * Esperando a que el almacén conteste por primera vez.
+   *
+   * Es la diferencia entre «no tienes nada» y «todavía no se sabe», y antes se veían
+   * igual: las dos listas arrancan vacías, así que durante todo el viaje a Firestore la
+   * pantalla le decía «arrastra aquí tus fotos» a alguien que ya tenía cuarenta.
+   */
+  const esperando = nada && !(apuntesListos && carpetasListas);
+  const vacio = nada && !esperando;
 
   return (
     <mo.div
@@ -877,22 +935,31 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
               : 'Arrastra aquí tus fotos de pizarra, los PDF de teoría o lo que te manden.'}
           </p>
         </div>
+      ) : esperando ? (
+        /* Celdas en espera: ni un número ni un texto, solo el hueco que van a ocupar las
+           cosas. Decir «cargando…» obliga a leer algo que caduca en medio segundo. */
+        <ul className="asig-rejilla" aria-busy="true" aria-label="Cargando los apuntes">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <li className="asig-celda esperando" key={i} aria-hidden="true" />
+          ))}
+        </ul>
       ) : (
-        <ul className="asig-lista">
+        <ul className="asig-rejilla">
           <AnimatePresence initial={false}>
             {creando && (
-              <mo.li className="asig-fila nueva" key="nueva" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}>
-                <span className="asig-ico carp" aria-hidden="true">
-                  <IconoCarpeta />
+              <mo.li className="asig-celda carp nueva" key="nueva" variants={CELDA} initial="fuera" animate="dentro" exit="saliendo">
+                <span className="asig-lamina carp" aria-hidden="true">
+                  <IconoCarpeta tam={34} />
                 </span>
                 <Bautizo inicial="" alTerminar={(n) => void crearCarpeta(n)} alCancelar={() => setCreando(false)} />
               </mo.li>
             )}
 
             {hijas.map((c) => (
-              <FilaCarpeta
+              <CeldaCarpeta
                 key={c.id}
                 carpeta={c}
+                cuantas={dentroDe(c.id, apuntes, carpetas)}
                 editando={renombrando === c.id}
                 marcada={sobre === c.id}
                 yendo={yendo.has(c.id)}
@@ -907,7 +974,7 @@ function Apuntes({ clave, apuntes }: { clave: ClaveAsignatura; apuntes: Apunte[]
             ))}
 
             {suyos.map((a) => (
-              <Fila
+              <Celda
                 key={a.id}
                 apunte={a}
                 editando={renombrando === a.id}
@@ -1366,11 +1433,101 @@ function Bautizo({
   );
 }
 
-function IconoCarpeta() {
+function IconoCarpeta({ tam = 16 }: { tam?: number }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={tam} height={tam} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={tam > 24 ? 1.3 : 1.6} strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h3l2 2.5h6A2.5 2.5 0 0 1 20 10v7a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17Z" />
     </svg>
+  );
+}
+
+/**
+ * Cuántas cosas hay dentro de una carpeta, contando solo el primer nivel.
+ *
+ * Solo el primero a propósito: lo que la celda promete es lo que se va a ver al entrar.
+ * Contar el árbol entero diría «18» y al abrirla habría dos carpetas, que se lee como que
+ * falta algo.
+ */
+function dentroDe(id: string, apuntes: Apunte[], carpetas: Carpeta[]): number {
+  let n = 0;
+  for (const a of apuntes) if ((a.carpeta ?? null) === id) n++;
+  for (const c of carpetas) if ((c.madre ?? null) === id) n++;
+  return n;
+}
+
+/** Lo que se le pide a Drive. Más ancho que la celda, para que no se vea blanda. */
+const ANCHO_MINI = 420;
+
+/**
+ * La lámina de una celda: la miniatura si la hay, y si no, el icono de su tipo.
+ *
+ * **`null` no es un fallo.** Un `.dwg`, un `.zip` o un `.skp` no tienen imagen que
+ * enseñar, y para eso existe el sistema de iconos: se pinta el suyo y nadie se entera de
+ * que se preguntó. Lo mismo si el token caducó o si Drive dijo que no — una rejilla no
+ * puede romperse porque no llegue una imagen de 20 kB.
+ *
+ * Solo se pide lo que está en pantalla. Una carpeta con cuarenta fotos son ochenta
+ * peticiones, y pedirlas todas al abrir la página gasta la cuota de alguien en imágenes
+ * que no va a mirar. El margen de 280 px hace que lleguen un poco antes de hacer falta,
+ * que es lo que evita ver el hueco al desplazar.
+ */
+function Miniatura({ apunte, tipo }: { apunte: Apunte; tipo: ReturnType<typeof tipoDeFichero> }) {
+  const caja = useRef<HTMLSpanElement>(null);
+  const [url, setUrl] = useState<string | null>(null);
+  const [visto, setVisto] = useState(false);
+  const { id: remotoId, proveedor } = apunte.remoto;
+
+  useEffect(() => {
+    const e = caja.current;
+    if (!e || visto) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisto(true);
+      return;
+    }
+    const ojo = new IntersectionObserver(
+      (entradas) => {
+        if (entradas.some((x) => x.isIntersecting)) {
+          setVisto(true);
+          ojo.disconnect();
+        }
+      },
+      { rootMargin: '280px' },
+    );
+    ojo.observe(e);
+    return () => ojo.disconnect();
+  }, [visto]);
+
+  useEffect(() => {
+    if (!visto) return;
+    let vivo = true;
+    let suelta: string | null = null;
+    void elArchivador()
+      .miniatura({ proveedor, id: remotoId }, ANCHO_MINI)
+      .then((blob) => {
+        if (!vivo || !blob) return;
+        suelta = URL.createObjectURL(blob);
+        setUrl(suelta);
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+      /* La dirección la crea y la suelta quien pinta, que es quien sabe cuándo deja de
+         hacer falta. Sin esto, desplazar una carpeta larga va dejando blobs vivos. */
+      if (suelta) URL.revokeObjectURL(suelta);
+    };
+  }, [visto, remotoId, proveedor]);
+
+  return (
+    <span
+      ref={caja}
+      className={`asig-lamina${url ? ' con' : ''}`}
+      style={{ ['--tc' as string]: `var(--c-${tipo.color})` }}
+      aria-hidden="true"
+    >
+      {/* El nombre no va en el `alt`: la celda ya lo dice debajo, y repetirlo hace que un
+          lector de pantalla lo lea dos veces. */}
+      {url ? <img src={url} alt="" loading="lazy" decoding="async" /> : <IconoDeFichero clase={tipo.clase} tam={38} />}
+    </span>
   );
 }
 
@@ -1392,8 +1549,9 @@ function BotonesDeFila({ alRenombrar, alBorrar, que }: { alRenombrar: () => void
   );
 }
 
-function FilaCarpeta({
+function CeldaCarpeta({
   carpeta,
+  cuantas,
   editando,
   marcada,
   yendo,
@@ -1406,6 +1564,7 @@ function FilaCarpeta({
   setSobre,
 }: {
   carpeta: Carpeta;
+  cuantas: number;
   editando: boolean;
   marcada: boolean;
   yendo: boolean;
@@ -1419,12 +1578,12 @@ function FilaCarpeta({
 }) {
   return (
     <mo.li
-      className={`asig-fila carp${marcada ? ' diana' : ''}${yendo ? ' yendo' : ''}`}
+      className={`asig-celda carp${marcada ? ' diana' : ''}${yendo ? ' yendo' : ''}`}
       layout
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}
+      variants={CELDA}
+      initial="fuera"
+      animate="dentro"
+      exit="saliendo"
       draggable={!editando && !yendo}
       aria-busy={yendo || undefined}
       /* `Capture` porque Motion declara su propio `onDragStart` —el de su gesto de
@@ -1450,28 +1609,35 @@ function FilaCarpeta({
     >
       {editando ? (
         <>
-          <span className="asig-ico carp" aria-hidden="true">
-            <IconoCarpeta />
+          <span className="asig-lamina carp" aria-hidden="true">
+            <IconoCarpeta tam={34} />
           </span>
           <Bautizo inicial={carpeta.nombre} alTerminar={alBautizar} alCancelar={alCancelar} />
         </>
       ) : (
         <>
           <button type="button" className="asig-abrir" onClick={alEntrar} title={carpeta.nombre} disabled={yendo}>
-            <span className="asig-ico carp" aria-hidden="true">
-              <IconoCarpeta />
+            {/* La carpeta no lleva miniatura: no es un fichero, es el sitio donde van los
+                ficheros, y por eso también toma el acento de la casa en vez de un color
+                de tipo. */}
+            <span className="asig-lamina carp" aria-hidden="true">
+              <IconoCarpeta tam={34} />
             </span>
             <span className="asig-nombre">{carpeta.nombre}</span>
-            <span className="asig-meta">{yendo ? 'A la papelera…' : 'Carpeta'}</span>
+            <span className="asig-meta">
+              {yendo ? 'A la papelera…' : cuantas === 0 ? 'Vacía' : `${cuantas} ${cuantas === 1 ? 'cosa' : 'cosas'}`}
+            </span>
           </button>
-          <BotonesDeFila alRenombrar={alRenombrar} alBorrar={alBorrar} que={carpeta.nombre} />
+          <span className="asig-mandos">
+            <BotonesDeFila alRenombrar={alRenombrar} alBorrar={alBorrar} que={carpeta.nombre} />
+          </span>
         </>
       )}
     </mo.li>
   );
 }
 
-function Fila({
+function Celda({
   apunte,
   editando,
   yendo,
@@ -1492,7 +1658,7 @@ function Fila({
 }) {
   const tipo = tipoDeFichero(apunte.tipo, apunte.nombre);
   const enDrive = apunte.remoto.proveedor === 'drive';
-  /* Posarse un momento sobre la fila ya empieza a bajarlo: cuando llega el clic, está. */
+  /* Posarse un momento sobre la celda ya empieza a bajarlo: cuando llega el clic, está. */
   const pausa = useRef<ReturnType<typeof setTimeout> | null>(null);
   const posarse = () => {
     if (!enDrive || pausa.current) return;
@@ -1504,12 +1670,12 @@ function Fila({
   };
   return (
     <mo.li
-      className={`asig-fila${yendo ? ' yendo' : ''}`}
+      className={`asig-celda${yendo ? ' yendo' : ''}`}
       layout
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}
+      variants={CELDA}
+      initial="fuera"
+      animate="dentro"
+      exit="saliendo"
       draggable={!editando && !yendo}
       aria-busy={yendo || undefined}
       onDragStartCapture={(e) => e.dataTransfer.setData(TIPO_ARRASTRE, `a:${apunte.id}`)}
@@ -1518,39 +1684,39 @@ function Fila({
     >
       {editando ? (
         <>
-          <span className="asig-ico" style={{ ['--tc' as string]: `var(--c-${tipo.color})` }} aria-hidden="true">
-            <IconoDeFichero clase={tipo.clase} />
-          </span>
+          <Miniatura apunte={apunte} tipo={tipo} />
           <Bautizo inicial={apunte.nombre} alTerminar={alBautizar} alCancelar={alCancelar} />
         </>
       ) : (
         <>
           <button type="button" className="asig-abrir" onClick={alAbrir} onFocus={posarse} title={apunte.nombre} disabled={yendo}>
-            <span className="asig-ico" style={{ ['--tc' as string]: `var(--c-${tipo.color})` }} aria-hidden="true">
-              <IconoDeFichero clase={tipo.clase} />
-            </span>
+            <Miniatura apunte={apunte} tipo={tipo} />
             <span className="asig-nombre">{apunte.nombre}</span>
             <span className="asig-meta">
               {yendo ? 'A la papelera…' : `${tipo.nombre} · ${pesoLegible(apunte.tam)}`}
             </span>
           </button>
-          {enDrive && (
-            <a
-              className="asig-endrive"
-              href={`https://drive.google.com/file/d/${apunte.remoto.id}/view`}
-              target="_blank"
-              rel="noreferrer"
-              title="Verlo en tu Drive"
-              aria-label={`Ver ${apunte.nombre} en tu Drive`}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 4h6v6" />
-                <path d="M20 4 11 13" />
-                <path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10" />
-              </svg>
-            </a>
-          )}
-          <BotonesDeFila alRenombrar={alRenombrar} alBorrar={alBorrar} que={apunte.nombre} />
+          {/* Los mandos van juntos en una caja sobre la lámina, y aparecen al pasar el
+              cursor. En táctil se quedan puestos: sin `hover` no habría forma de borrar. */}
+          <span className="asig-mandos">
+            {enDrive && (
+              <a
+                className="asig-endrive"
+                href={`https://drive.google.com/file/d/${apunte.remoto.id}/view`}
+                target="_blank"
+                rel="noreferrer"
+                title="Verlo en tu Drive"
+                aria-label={`Ver ${apunte.nombre} en tu Drive`}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 4h6v6" />
+                  <path d="M20 4 11 13" />
+                  <path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10" />
+                </svg>
+              </a>
+            )}
+            <BotonesDeFila alRenombrar={alRenombrar} alBorrar={alBorrar} que={apunte.nombre} />
+          </span>
         </>
       )}
     </mo.li>
@@ -1718,20 +1884,25 @@ function Contenido({ apunte, cerrar }: { apunte: Apunte; cerrar: () => void }) {
 }
 
 /**
- * La vuelta al horario.
+ * La vuelta a las asignaturas.
  *
- * El dock sigue señalando Horario mientras se está aquí, pero eso dice dónde estás, no
- * cómo volver: pulsarlo lleva al horario igual, sí, pero hay que deducirlo. Una salida
- * explícita no depende de que nadie deduzca nada — la misma razón por la que la agenda
- * del día tiene su botón «Semana».
+ * Decía «Horario» y llevaba a `/horario`, que era verdad cuando la única puerta de una
+ * asignatura era pulsar una clase en la rejilla del horario. Ahora la casa de una
+ * asignatura es `/asignaturas` —la estantería de columnas—, y una salida que lleva a otro
+ * sitio del que has venido es peor que no tener salida: te deja donde no estabas.
+ *
+ * El dock sigue señalando Asignaturas mientras se está aquí, pero eso dice dónde estás,
+ * no cómo volver: pulsarlo lleva igual, sí, pero hay que deducirlo. Una salida explícita
+ * no depende de que nadie deduzca nada — la misma razón por la que la agenda del día
+ * tiene su botón «Semana».
  */
-function VolverAlHorario() {
+function VolverAAsignaturas() {
   return (
-    <Link href="/horario" className="asig-volver">
+    <Link href="/asignaturas" className="asig-volver" prefetch>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="m14 6-6 6 6 6" />
       </svg>
-      Horario
+      Asignaturas
     </Link>
   );
 }
