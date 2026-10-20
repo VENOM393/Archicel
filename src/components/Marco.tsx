@@ -54,9 +54,9 @@ const SECCIONES = [
   {
     href: '/horario',
     titulo: 'Horario de clases',
-    /* Ya no lleva `tambien: ['/asignatura']`: la casa de una asignatura es la estantería,
-       que es la sección que existe para elegirla. Pulsar una clase sigue llevando a su
-       asignatura, pero entonces lo que se enciende es Asignaturas, que es donde se ha
+    /* Ya no lleva `tambien: ['/asignatura']`: la casa de una asignatura es la sección
+       Asignaturas, que es la que existe para elegirla. Pulsar una clase sigue llevando a
+       su asignatura, pero entonces lo que se enciende es Asignaturas, que es donde se ha
        ido — señalar Horario desde una pantalla que no cuelga de él era mentira. */
     /* un reloj: el horario responde a "a qué hora", no a "qué día" — esa es la del
        calendario, y con dos rejillas seguidas en el raíl no se distinguirían */

@@ -174,7 +174,7 @@ const ORDEN = ['/', '/calendario', '/horario', '/asignaturas'] as const;
  */
 const DENTRO_DE: Record<string, string> = {
   '/dia': '/calendario',
-  /* Una asignatura cuelga de la estantería, que es la sección que existe para elegirla.
+  /* Una asignatura cuelga de `/asignaturas`, que es la sección que existe para elegirla.
      Colgaba del horario cuando la única puerta era pulsar una clase. Esa puerta sigue
      abierta, y por eso ir del horario a una asignatura pasó a ser un viaje lateral —el
      mismo que hace el agua del dock al saltar de Horario a Asignaturas— en vez de uno de
@@ -365,58 +365,54 @@ export const PIEZA: Variants = {
 };
 
 /**
- * Un lomo de la estantería.
+ * Una columna de la pantalla de asignaturas.
  *
- * Los libros no aparecen: **se colocan**. Llegan desde abajo, inclinados, y se enderezan
- * al apoyarse — por eso el giro pivota en el pie (`transform-origin` en la hoja de
- * estilos, que es una propiedad que Motion no toca) y no en el centro: un libro que gira
- * sobre su mitad no se posa, flota.
+ * Suben desde abajo con muelle y escalonadas. Muelle y no duración a propósito: una
+ * curva de duración lleva a las seis a la vez aunque salgan escalonadas, y un muelle se
+ * adapta a la distancia, así que las seis parecen del mismo material sin ir a compás
+ * como un metrónomo. Es lo que separa seis cajas que aparecen de seis que llegan.
  *
- * El `custom` es el índice del lomo, y de él salen la inclinación y la altura de caída.
- * Alternar el lado es lo que separa una estantería de una fila de rectángulos: seis
- * libros que caen exactamente igual se leen como una animación; seis que caen cada uno a
- * su manera se leen como libros.
+ * El `custom` es el índice, y de él sale la altura de caída: la primera llega desde más
+ * abajo que la última. Seis columnas que suben exactamente lo mismo se leen como una
+ * animación; seis que suben cada una lo suyo se leen como algo que se está montando.
  *
- * Los otros dos estados son los de elegir uno. `elegido` no lleva `y`: mientras el cursor
+ * Los otros dos estados son los de elegir una. `elegido` no lleva `y`: mientras el cursor
  * sigue encima, `whileHover` manda sobre esa propiedad y pelearse con él daría un salto.
- * Lo que distingue al elegido es la escala y la luz, y la luz la pone el CSS.
  */
-export const LOMO: Variants = {
+export const COLUMNA: Variants = {
   fuera: (i: number = 0) => ({
     opacity: 0,
-    y: 38 + (i % 3) * 9,
-    rotate: i % 2 === 0 ? -2.4 : 2.4,
-    filter: 'blur(7px)',
+    y: 64 + (i % 3) * 16,
+    filter: 'blur(9px)',
   }),
   dentro: {
     opacity: 1,
     y: 0,
-    rotate: 0,
     filter: 'blur(0px)',
-    transition: { duration: TIEMPO.viaje, ease: CURVA.salida },
+    transition: { ...MUELLE.denso, opacity: { duration: TIEMPO.paso, ease: CURVA.salida } },
   },
-  /* El que se abre crece. Solo escala: mientras el cursor sigue encima, `whileHover`
-     manda sobre `y` y disputárselo daría un salto justo al pulsar. */
-  elegido: { scale: 1.07, filter: 'blur(0px)', transition: MUELLE.vivo },
+  /* La que se abre crece y se adelanta. */
+  elegido: { scale: 1.045, filter: 'blur(0px)', transition: MUELLE.vivo },
   /**
-   * Los demás se retiran hacia la balda.
+   * Las demás se retiran.
    *
    * Lo que se ve aquí es que **caen**, no que se apagan, y esa es toda la diferencia: el
    * envoltorio de la página ya está bajando la opacidad de todo a cero en 155 ms, así que
    * un `opacity: 0` propio encima la apagaba dos veces y a los 90 ms no quedaba nada que
-   * mirar — la estantería desaparecía antes de contar nada.
+   * mirar — la pantalla desaparecía antes de contar nada. Comprobado con una tira de
+   * fotogramas.
    *
-   * La geometría sobrevive a ese fundido: un libro que baja y se encoge se sigue viendo
-   * bajar mientras se va. Por eso aquí hay desplazamiento y escala, y de opacidad solo lo
-   * justo para que se hundan en la sombra.
+   * La geometría sobrevive a ese fundido: una columna que baja y se encoge se sigue
+   * viendo bajar mientras se va. Por eso aquí hay desplazamiento y escala, y de opacidad
+   * solo lo justo para que se hundan.
    *
    * Y es corto a propósito. Lo que dure más que la salida de la página no se llega a ver,
    * solo a pagar en espera después de pulsar.
    */
   aparta: {
     opacity: 0.3,
-    y: 30,
-    scale: 0.965,
+    y: 34,
+    scale: 0.96,
     filter: 'blur(4px)',
     transition: { duration: 0.14, ease: CURVA.fuera },
   },

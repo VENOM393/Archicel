@@ -91,9 +91,9 @@ export const HORARIO: Clase[] = [
  * Las horas de clase que tiene una asignatura a la semana.
  *
  * Sale del horario, no de un número escrito a mano: si entra una clase nueva, esto cambia
- * solo. Lo usa la estantería para dar grosor a cada lomo — una asignatura de cuatro horas
- * es un libro del doble de ancho que una de dos—, así que el ancho de un lomo no es
- * decoración: es cuánto pesa esa asignatura en su semana.
+ * solo. Lo usa la pantalla de asignaturas para dar ancho a cada columna —una asignatura
+ * de cuatro horas ocupa el doble que una de dos—, así que ese ancho no es decoración: es
+ * cuánto pesa esa asignatura en su semana.
  */
 export function horasSemanalesDe(clave: ClaveAsignatura): number {
   return HORARIO.filter((c) => c.asignatura === clave).reduce((s, c) => s + (c.fin - c.ini), 0) / 60;

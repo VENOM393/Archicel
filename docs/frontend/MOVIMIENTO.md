@@ -59,7 +59,7 @@ Por eso cada variante tiene **tres** estados y no dos: `fuera`, `dentro`, `salie
 | `RELEVO` | paneles del calendario | Dos vistas que se turnan en el mismo hueco |
 | `PAGINA` | envoltorio de ruta | El cambio de sección, con dirección (§ 3) |
 | `PIEZA` | cada parte de una página | Llega escalonada dentro de un `ORQUESTA` |
-| `LOMO` | lomos de la estantería | Un libro colocándose, y los dos estados de elegir uno |
+| `COLUMNA` | columnas de `/asignaturas` | Suben con muelle y escalonadas, y los dos estados de elegir una |
 | `VELO` | telón de las hojas | Solo opacidad |
 | `HOJA` | hojas modales | Sube desde abajo con muelle |
 | `AVISO` | toast | Sube desde abajo, centrado |
@@ -94,23 +94,23 @@ const ORDEN = ['/', '/calendario', '/horario', '/asignaturas'];
 mantener, y el precio de olvidarlo es una transición que empuja al revés que el indicador.
 
 Y con ella va `DENTRO_DE`, que dice de qué sección cuelga cada detalle. `/asignatura/*`
-cuelga de `/asignaturas` —la estantería, que es la sección que existe para elegirla— y no
+cuelga de `/asignaturas` —la sección que existe para elegirla— y no
 de `/horario`, aunque desde el horario también se llegue pulsando una clase. La
 consecuencia es correcta y conviene saberla: ir del horario a una asignatura es un viaje
 **lateral**, no de profundidad, porque son dos secciones distintas y el agua del dock
 también viaja.
 
-### 3.1b · El caso del lomo: una salida que el fundido de la página se tragaba
+### 3.1b · Una salida que el fundido de la página se tragaba
 
-La estantería de `/asignaturas` quería que al elegir una asignatura el libro elegido se
-quedara y los demás se apartaran. La primera versión lo escribió como parecía natural
-—`opacity: 0` en los que se van— y **no se veía nada**: el envoltorio de página ya está
-bajando la opacidad de todo a cero en 155 ms, así que el apagado iba dos veces y a los
-90 ms no quedaba estantería que mirar. Comprobado con una tira de fotogramas.
+`/asignaturas` quería que al elegir una asignatura la columna elegida se quedara y las
+demás se apartaran. La primera versión lo escribió como parecía natural —`opacity: 0` en
+las que se van— y **no se veía nada**: el envoltorio de página ya está bajando la opacidad
+de todo a cero en 155 ms, así que el apagado iba dos veces y a los 90 ms no quedaba
+pantalla que mirar. Comprobado con una tira de fotogramas.
 
 La regla que sale de ahí sirve para cualquier pantalla: **dentro de una página que se va,
-lo que se ve es la geometría, no la opacidad.** Un libro que baja 30 px y se encoge al
-0.96 se sigue viendo bajar mientras se apaga; uno que solo se apaga desaparece dos veces
+lo que se ve es la geometría, no la opacidad.** Una columna que baja 34 px y se encoge al
+0.96 se sigue viendo bajar mientras se apaga; una que solo se apaga desaparece dos veces
 más rápido de lo que nadie puede leer.
 
 ### 3.2 · Dos ejes, porque hay dos clases de viaje

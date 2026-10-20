@@ -3164,24 +3164,24 @@
 
 
   /* ═══════════════════════════════════════════════════════
-     ESTANTERÍA — elegir asignatura
-     Seis lomos de pie sobre una balda. El ancho de cada uno son sus
-     horas de clase a la semana; la altura, realismo y nada más.
+     ASIGNATURAS — seis columnas de cristal, a todo el ancho
+     Cristal de verdad sobre la fotografía, no una tarjeta con
+     un desenfoque de adorno: es la misma superficie con la que
+     están hechos el dock y los paneles de la casa.
      ═══════════════════════════════════════════════════════ */
 
   /* Dos clases, no una: `.vista.on` también lleva dos y con una sola pierde. Escrito
      como `.est` el `flex` no llegaría a aplicarse nunca y la página seguiría maquetando
      en bloque, sin error y sin que se note hasta que algo no cabe. Ya pasó con `.asig`. */
-  .vista.est{display:flex;flex-direction:column;gap:22px;min-width:0;width:100%;max-width:1180px}
+  .vista.est{display:flex;flex-direction:column;gap:20px;min-width:0;width:100%;max-width:none}
 
   /* ── el alto de la pantalla ──
      La misma mecánica que la agenda del día y la página de una asignatura: el límite se
      pone en `.app`, que es quien contiene el dock, y de ahí hacia abajo cada capa reparte
-     lo que le sobra. Una estantería que desplaza es una estantería que no se ve de un
-     vistazo, y verla de un vistazo es toda la razón de que exista.
+     lo que le sobra. Las columnas se quedan con todo lo que queda.
 
      `height:100%` y no `auto` en `.body`: con `auto` la columna crece hasta su contenido,
-     `.app` la recorta y los pies de los libros quedan fuera. */
+     `.app` la recorta y el pie queda fuera. Costó 436 px en la agenda del día. */
   .app:has(.est){height:100dvh;overflow:hidden}
   .app:has(.est) > .body{min-height:0;height:100%}
   .body:has(.est){display:flex;flex-direction:column;min-height:0;overflow:hidden}
@@ -3190,178 +3190,164 @@
   .vista.est{flex:1 1 auto;min-height:0}
   .est-cab{flex:none}
 
-  /* ── la balda ──
-     Está puesta desde el primer fotograma y no se anima: los libros llegan a una
-     estantería que ya existe. Si la balda entrara con ellos, lo que se vería aparecer
-     sería una página, y lo que tiene que verse es cómo se llena. */
+  /* El titular de esta pantalla es más grande que el de las demás a propósito: aquí no
+     hay nada más que leer, y los pesos grandes de la casa son 700 con el tracking
+     apretado. Es el mismo registro que el número del día en la agenda. */
+  .est-titulo{
+    font-size:clamp(34px,4.4vw,56px);font-weight:700;letter-spacing:-.042em;line-height:.95;
+    margin:0;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  }
+  .est-titulo .anio{font-family:var(--data);font-size:13px;font-weight:400;color:var(--ink-subtle);letter-spacing:0}
+  .est-nota{display:block;margin-top:7px;font-size:13px;color:var(--ink-subtle)}
+
+  /* ── la tira, de borde a borde ──
+     El margen negativo cancela el relleno lateral de `.body` (18 px a cada lado), que es
+     lo único que separaba las columnas del canto de la pantalla. `.body` lleva
+     `overflow-x:clip`, así que sacar 36 px no abre una barra de desplazamiento. */
   .est-fila{
     position:relative;flex:1 1 auto;min-height:0;
-    display:flex;align-items:flex-end;justify-content:center;gap:10px;
-    list-style:none;margin:0;padding:0 0 14px;
-  }
-  /* La tabla: una línea clara justo bajo los pies y un canto oscuro debajo. Las dos
-     cosas, no una — con la línea sola los libros se apoyaban en un trazo flotante; el
-     canto es lo que le da grosor a la madera. */
-  /* El canto de la tabla empieza exactamente donde acaban los pies —`bottom` 11 más
-     3 de alto son los 14 del relleno de la fila—, porque dos píxeles de aire entre el
-     libro y la madera bastan para que los seis parezcan flotar. */
-  .est-fila::after{
-    content:'';position:absolute;left:0;right:0;bottom:11px;height:3px;
-    border-radius:1px;
-    background:linear-gradient(90deg,
-      transparent,
-      rgba(255,255,255,.34) 4%,
-      rgba(255,255,255,.62) 50%,
-      rgba(255,255,255,.34) 96%,
-      transparent);
-  }
-  /* Y debajo, el grueso de la madera vista de canto. Sin esto la balda es un trazo
-     flotando y no una tabla en la que se puede apoyar algo. */
-  .est-fila::before{
-    content:'';position:absolute;left:0;right:0;bottom:0;height:11px;
-    background:linear-gradient(180deg,
-      rgba(0,0,0,.78),
-      rgba(0,0,0,.42) 45%,
-      rgba(0,0,0,.10) 80%,
-      transparent);
-    pointer-events:none;
+    display:flex;align-items:stretch;gap:8px;
+    list-style:none;margin:0 -18px;padding:0;width:calc(100% + 36px);
   }
 
-  /* ── el hueco de cada libro ──
-     `flex:var(--peso)` con base 0: el grosor sale de las horas y se reparte el ancho que
-     haya. Cuatro horas ocupan exactamente el doble que dos, sin que nadie escriba un
-     número. El tope existe para que en una pantalla ancha los libros no se vuelvan
-     puertas. */
-  .est-hueco{
-    flex:var(--peso,2) 1 0;
-    min-width:72px;max-width:226px;
-    display:flex;align-items:flex-end;min-height:0;height:100%;
-  }
-  .est-puerta{
-    display:flex;align-items:flex-end;width:100%;height:100%;
-    text-decoration:none;color:inherit;min-height:0;
-  }
+  /* ── una columna ──
+     `flex:var(--peso)` con base 0: el ancho sale de las horas de clase y se reparte la
+     pantalla entera. Cuatro horas ocupan exactamente el doble que dos, sin que nadie
+     escriba un número. Sin tope: ocupar todo el ancho es el encargo. */
+  .est-hueco{flex:var(--peso,2) 1 0;min-width:0;display:flex;min-height:0}
+  .est-puerta{display:flex;width:100%;min-height:0;text-decoration:none;color:inherit}
   .est-puerta:focus-visible{outline:none}
 
-  /* ── el lomo ──
-     El degradado en diagonal no es atmósfera —esa vive en la fotografía y solo ahí—: es
-     la forma del objeto. Un lomo es un cilindro de papel, le da la luz por el centro y se
-     apaga en los cantos, y sin eso lo que queda es un rectángulo de color, que es
-     justamente la tarjeta idéntica que el contrato prohíbe como estructura de pantalla.
+  /* El cristal. Es el mismo material que el plato del dock y los paneles del escritorio
+     —desenfoque del fondo, relleno translúcido, filete claro arriba— y por eso no es
+     decoración: estas columnas flotan sobre la fotografía, que es la única condición que
+     el contrato visual le pone al cristal. Lo que no puede haber es cristal **dentro** de
+     cristal, y aquí dentro no hay ninguno. */
+  .est-col{
+    position:relative;overflow:hidden;
+    display:flex;flex-direction:column;align-items:center;
+    width:100%;min-height:0;
+    padding:30px 10px 26px;
+    border:1px solid var(--hairline);
+    border-radius:var(--r-xl);
+    /* Carbón neutro, el mismo cristal que el plato del dock y los paneles del
+       escritorio. Tiñendo la superficie con el color de la asignatura salían seis lavados
+       de color a pantalla completa, que es justo el «segundo color saturado» que el
+       contrato prohíbe — y además hacía que esta pantalla no se pareciera a ninguna otra
+       de la aplicación. El color de cada asignatura vive en los detalles de abajo.
 
-     El color va al 17 % sobre carbón. Seis lomos a plena saturación serían un arcoíris y
-     un segundo color saturado por fila; al 17 % el color identifica sin gritar, que es el
-     mismo criterio con el que se tiñen los iconos de los ficheros. */
-  .est-lomo{
-    position:relative;display:flex;flex-direction:column;align-items:center;
-    width:100%;height:var(--alto,96%);min-height:0;
-    padding:13px 8px 11px;
-    border:1px solid color-mix(in srgb,var(--tc) 24%,var(--hairline));
-    border-radius:var(--r-sm) var(--r-sm) 3px 3px;
-    /* Opaco, y no es un detalle: a través de un lomo translúcido se veía la casa, y
-       seis cristales de colores delante de una fotografía no son una estantería — son
-       exactamente el «cristal sobre cristal» que el contrato prohíbe. Un libro tapa lo
-       que tiene detrás; eso es lo que lo convierte en un objeto y no en un panel. */
-    background:
-      linear-gradient(180deg,rgba(255,255,255,.085),rgba(255,255,255,0) 16%),
-      linear-gradient(100deg,
-        rgba(0,0,0,.42) 0%,
-        rgba(0,0,0,.12) 15%,
-        rgba(255,255,255,.07) 52%,
-        rgba(0,0,0,.16) 85%,
-        rgba(0,0,0,.40) 100%),
-      color-mix(in srgb,var(--tc) 21%,#16161B);
-    box-shadow:0 14px 32px rgba(0,0,0,.55),0 3px 8px rgba(0,0,0,.5);
-    /* El giro de la variante pivota en el pie: un libro se posa sobre la balda, no gira
-       sobre su mitad. `transform-origin` no es `transform`, así que puede vivir aquí sin
-       disputarle nada a Motion. */
-    transform-origin:50% 100%;
-    /* El color responde al cursor desde el CSS porque es lo único que Motion no toca en
-       este elemento: de `transform` se ocupa la variante, y una propiedad tiene un dueño. */
+       Opacidad fija y no `var(--panel)`: el deslizador del modo edición manda en los
+       widgets del escritorio, y aquí al 30 % el título caería por debajo del contraste
+       mínimo sobre la fotografía. Es la misma excepción que ya hace el calendario. */
+    background:rgba(var(--panel-rgb),.72);
+    backdrop-filter:blur(26px) saturate(145%);
+    -webkit-backdrop-filter:blur(26px) saturate(145%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.10),
+      inset 0 -1px 0 rgba(0,0,0,.35),
+      0 24px 54px -28px rgba(0,0,0,.95),
+      0 4px 10px -5px rgba(0,0,0,.55);
+    /* El color y la luz responden al cursor desde el CSS porque son lo único que Motion
+       no toca en este elemento: de `transform` se ocupa la variante, y una propiedad
+       tiene un dueño. */
     transition:
-      background-color 260ms var(--ease-soft),
-      border-color 260ms var(--ease-soft),
-      box-shadow 260ms var(--ease-soft);
+      background-color 300ms var(--ease-soft),
+      border-color 300ms var(--ease-soft),
+      box-shadow 300ms var(--ease-soft);
   }
 
-  /* Los dos filetes de la encuadernación. Son lo que separa un libro de una pestaña. */
-  .est-filete{
-    flex:none;width:58%;height:1px;
-    background:color-mix(in srgb,var(--tc) 60%,transparent);
+  /* El color de la asignatura, en reposo: un rescoldo al pie del cristal y nada más.
+     Es lo que la identifica de un vistazo sin pintar la pantalla — al 22 % y ocupando
+     un cuarto de la altura es un matiz, no un lavado. Lo que de verdad dice qué
+     asignatura es, es el nombre, que para eso mide 28 px.
+
+     Al pasar el cursor sube y se enciende: el color es la recompensa de mirar una, no
+     el fondo permanente de las seis. */
+  .est-col::before{
+    content:'';position:absolute;inset:auto 0 0 0;height:26%;pointer-events:none;
+    background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--tc) 40%,transparent));
+    opacity:.22;
+    transition:opacity 340ms var(--ease-soft),height 480ms var(--ease-out);
   }
-  /* Sin `margin-bottom:auto` aquí: los márgenes automáticos del nombre son los únicos
-     que reparten el hueco libre, y por eso el título queda centrado entre los dos
-     filetes. Con los dos puestos había tres márgenes repartiéndose el sitio y el nombre
-     terminaba pegado al pie. */
-  .est-filete.arriba{margin-bottom:0}
+
+  /* El brillo que cruza en diagonal al pasar el cursor. Vive en un pseudoelemento, que es
+     terreno que Motion no pisa, así que su `transform` no le disputa nada a la variante. */
+  .est-col::after{
+    content:'';position:absolute;inset:-10%;pointer-events:none;
+    background:linear-gradient(104deg,
+      transparent 28%,
+      rgba(255,255,255,.07) 48%,
+      rgba(255,255,255,.02) 56%,
+      transparent 68%);
+    opacity:0;transform:translateY(14%);
+    transition:opacity 420ms var(--ease-soft),transform 700ms var(--ease-out);
+  }
 
   /* ── el título, vertical y de abajo arriba ──
-     Como se encuaderna en español: para leerlo se inclina la cabeza a la izquierda. La
-     rotación vive en este elemento y no en el lomo, que lo anima Motion.
+     La rotación vive en este elemento y no en la columna, que la anima Motion.
 
-     `margin-block:auto` es lo que lo centra entre el filete de arriba y el pie, y
-     `flex:0 1 auto` con `overflow` lo que impide que un nombre largo empuje al código
-     fuera del libro en una pantalla baja. */
+     Márgenes **físicos** y no lógicos: en `writing-mode: vertical-rl` el eje de bloque
+     corre en horizontal, así que `margin-block:auto` pondría los márgenes a los lados y
+     el título se quedaría pegado a un extremo. Es el fallo que no se ve leyendo el
+     código, porque la propiedad lógica parece la correcta justo hasta que el elemento
+     escribe en vertical. */
   .est-nombre{
-    /* Márgenes físicos y no lógicos: en `writing-mode: vertical-rl` el eje de bloque
-       corre en horizontal, así que `margin-block:auto` ponía los márgenes a los lados y
-       el título se quedaba pegado a un extremo. Es el fallo que no se ve leyendo el
-       código, porque la propiedad lógica parece la correcta justo hasta que el elemento
-       escribe en vertical. */
-    margin-top:auto;margin-bottom:auto;
-    flex:0 1 auto;min-height:0;
+    position:relative;z-index:1;
+    flex:0 1 auto;min-height:0;margin-top:auto;margin-bottom:auto;
     writing-mode:vertical-rl;transform:rotate(180deg);
-    font-size:16px;font-weight:600;letter-spacing:-.012em;line-height:1;
-    color:var(--ink);text-shadow:var(--halo);
+    font-size:clamp(20px,1.95vw,28px);font-weight:600;letter-spacing:-.03em;line-height:1;
+    color:var(--ink);text-shadow:0 2px 6px rgba(0,0,0,.5);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   }
 
-  .est-pie{flex:none;display:flex;flex-direction:column;align-items:center;gap:9px;width:100%}
+  .est-pie{position:relative;z-index:1;flex:none;display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}
+  .est-raya{width:30px;height:2px;border-radius:2px;background:color-mix(in srgb,var(--tc) 72%,transparent);transition:width 380ms var(--ease-out),background-color 300ms var(--ease-soft)}
   /* El código es una referencia real de la escuela, así que va en la monoespaciada
      tabular, igual que en cada clase del horario. */
   .est-cod{
-    font-family:var(--data);font-size:10.5px;font-variant-numeric:tabular-nums;
-    letter-spacing:.045em;color:var(--ink-subtle);
+    font-family:var(--data);font-size:11px;font-variant-numeric:tabular-nums;
+    letter-spacing:.05em;color:var(--ink-subtle);transition:color 300ms var(--ease-soft);
   }
 
-  /* ── con el cursor encima, y el elegido ──
-     Se remarca con color, no se ensancha: un libro que crece empuja a sus vecinos y toda
-     la fila baila para señalar uno solo. Lo que sube es la luz; lo que se levanta lo lleva
-     Motion. */
-  .est-puerta:hover .est-lomo,
-  .est-puerta:focus-visible .est-lomo,
-  .est-lomo.es-elegido{
-    border-color:color-mix(in srgb,var(--tc) 52%,var(--hairline-lit));
-    background:
-      linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,0) 16%),
-      linear-gradient(100deg,
-        rgba(0,0,0,.34) 0%,
-        rgba(0,0,0,.07) 15%,
-        rgba(255,255,255,.10) 52%,
-        rgba(0,0,0,.11) 85%,
-        rgba(0,0,0,.32) 100%),
-      color-mix(in srgb,var(--tc) 38%,#17171C);
-    box-shadow:0 22px 46px rgba(0,0,0,.6),0 5px 12px rgba(0,0,0,.5);
+  /* ── con el cursor encima, y la elegida ──
+     Se remarca con luz, no se ensancha: una columna que crece empuja a las demás y la
+     fila entera baila para señalar una sola. Lo que sube es el cristal; lo que se levanta
+     lo lleva Motion. */
+  .est-puerta:hover .est-col,
+  .est-puerta:focus-visible .est-col,
+  .est-col.es-elegido{
+    /* El filete se tiñe, la superficie no: el cristal sigue siendo carbón y lo que
+       cambia es el canto, que es donde el color se lee sin teñir nada. */
+    border-color:color-mix(in srgb,var(--tc) 42%,var(--hairline-lit));
+    background:rgba(var(--panel-strong-rgb),.78);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.16),
+      inset 0 -1px 0 rgba(0,0,0,.35),
+      0 36px 72px -30px rgba(0,0,0,1),
+      0 6px 14px -6px rgba(0,0,0,.6);
   }
-  .est-puerta:hover .est-filete,
-  .est-puerta:focus-visible .est-filete,
-  .est-lomo.es-elegido .est-filete{background:var(--tc)}
+  .est-puerta:hover .est-col::before,
+  .est-puerta:focus-visible .est-col::before,
+  .est-col.es-elegido::before{opacity:.5;height:40%}
+  .est-puerta:hover .est-col::after,
+  .est-puerta:focus-visible .est-col::after,
+  .est-col.es-elegido::after{opacity:.85;transform:translateY(-8%)}
+  .est-puerta:hover .est-raya,
+  .est-puerta:focus-visible .est-raya,
+  .est-col.es-elegido .est-raya{width:56px;background:var(--tc)}
   .est-puerta:hover .est-cod,
   .est-puerta:focus-visible .est-cod,
-  .est-lomo.es-elegido .est-cod{color:var(--ink-muted)}
+  .est-col.es-elegido .est-cod{color:var(--ink)}
 
-  /* El teclado no tiene cursor, así que el anillo es lo único que dice dónde está. Va
-     fuera del lomo para que no se recorte contra su propio borde. */
-  .est-puerta:focus-visible .est-lomo{
-    outline:2px solid var(--accent-linea);outline-offset:3px;
-  }
+  /* El teclado no tiene cursor, así que el anillo es lo único que dice dónde está. */
+  .est-puerta:focus-visible .est-col{outline:2px solid var(--accent-linea);outline-offset:-3px}
 
   .est-vacia{color:var(--ink-subtle);font-size:14px;margin:0}
 
-  /* En una pantalla estrecha seis lomos no caben con el nombre legible: la fila pasa a
-     desplazarse de lado en vez de aplastarlos. El escritorio es lo que se verifica aquí;
+  /* En una pantalla estrecha seis columnas no caben con el nombre legible: la tira pasa a
+     desplazarse de lado en vez de aplastarlas. El escritorio es lo que se verifica aquí;
      esto solo evita que lo otro se vea roto. */
   @media (max-width:760px){
-    .est-fila{justify-content:flex-start;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
-    .est-hueco{flex:none;width:96px}
+    .est-fila{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+    .est-hueco{flex:none;width:104px}
   }

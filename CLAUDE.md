@@ -469,25 +469,28 @@ Cuatro cosas que no se deducen:
 Y una de interfaz: **`onDragStartCapture` y no `onDragStart`**. Motion declara el suyo —el de su
 gesto de arrastre— y tapa el del DOM, que es el que lleva `dataTransfer`.
 
-## La estantería: elegir asignatura
+## Elegir asignatura
 
-`/asignaturas`, la cuarta sección del dock. Seis lomos de pie sobre una balda, el título
-en vertical y el código al pie. **Es la puerta de las asignaturas**; pulsar una clase en el
-horario sigue llevando a la suya, pero la casa de una asignatura es esta.
+`/asignaturas`, la cuarta sección del dock. Seis columnas de cristal de borde a borde de
+la pantalla, el nombre en vertical a 28 px y el código al pie. **Es la puerta de las
+asignaturas**; pulsar una clase en el horario sigue llevando a la suya, pero la casa de
+una asignatura es esta.
 
-Cuatro cosas que no se deducen del código:
+Cinco cosas que no se deducen del código:
 
-- **El ancho de un lomo son sus horas de clase a la semana**, sacadas de `HORARIO` con
-  `horasSemanalesDe`. Cuatro horas es un libro del doble de ancho que dos. Nadie lo lee en
-  ningún sitio: se ve, y resulta ser verdad. La **altura** no es un dato y no finge serlo
-  —sale del código de la asignatura para que no cambie— y está porque en una estantería
-  real los libros no están enrasados.
-- **El lomo es opaco, y eso no es un detalle.** Translúcido se veía la casa a través de los
-  libros, que es el «cristal sobre cristal» que el contrato prohíbe: seis cristales de
-  colores delante de una fotografía no son una estantería. Un libro tapa lo que tiene
-  detrás, y eso es lo que lo convierte en un objeto.
-- **Con el cursor encima se remarca, no se ensancha.** Un libro que crece empuja a sus
-  vecinos y toda la fila baila para señalar uno. Lo que sube es la luz —y esa la lleva el
+- **El ancho de una columna son sus horas de clase a la semana**, sacadas de `HORARIO` con
+  `horasSemanalesDe`. Cuatro horas ocupan el doble que dos. Nadie lo lee en ningún sitio:
+  se ve, y resulta ser verdad. Si cambia el cuatrimestre, la pantalla cambia sola.
+- **El cristal es carbón neutro, no el color de la asignatura.** Hubo una versión con la
+  superficie teñida y eran seis lavados de color a pantalla completa: el «segundo color
+  saturado» que el contrato prohíbe, y además una pantalla que no se parecía a ninguna
+  otra de la aplicación. El color vive en el filete del pie y en un rescoldo al 22 %, y
+  solo sale de verdad en la que se señala.
+- **La opacidad es fija, no `var(--panel)`.** El deslizador del modo edición manda en los
+  widgets del escritorio; aquí al 30 % el título caería por debajo del contraste mínimo
+  sobre la fotografía. Es la misma excepción que ya hace el calendario.
+- **Con el cursor encima se remarca, no se ensancha.** Una columna que crece empuja a las
+  demás y la fila entera baila para señalar una. Lo que sube es la luz —y esa la lleva el
   CSS, porque es lo único que Motion no toca aquí—; el levantarse lo lleva `whileHover`.
 - **`margin-block` no centra un texto vertical.** En `writing-mode: vertical-rl` el eje de
   bloque corre en horizontal, así que `margin-block:auto` pone los márgenes a los lados y
