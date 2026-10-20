@@ -1428,6 +1428,22 @@
   /* La portada mide lo que mide; quien se queda con el resto es el panel de trabajo. */
   .asig-portada{flex:none}
 
+  /* ── la zona de trabajo, en dos columnas ──
+     No se añade alto: no hay. El de la página está repartido hasta el último píxel, así
+     que la columna del calendario sale de partir en dos lo que antes se comía el panel de
+     apuntes. `min-height:0` en las tres cajas, o lo de abajo queda fuera y sin scroll —
+     los 436 px que costó la agenda del día.
+
+     Dos paneles **hermanos**, no uno dentro de otro: cristal sobre cristal está prohibido. */
+  .asig-zona{
+    display:flex;flex-direction:row;gap:14px;flex:1 1 auto;min-height:0;min-width:0;
+    /* El sangrado a borde vive aquí y no en cada panel: así el hueco entre los dos es el
+       único sitio donde se ve la fotografía, y los dos llegan al canto. */
+    margin:0 -18px;width:calc(100% + 36px);padding:0 18px;
+  }
+  .asig-apuntes{flex:1 1 auto;min-width:0}
+  .asig-agenda{flex:0 0 340px;min-width:0;min-height:0;display:flex;flex-direction:column}
+
   /* ── la banda ──
      Dos lados: quién es esta asignatura y cuándo toca. De borde a borde con el margen
      negativo que cancela el relleno lateral de `.body`, igual que la tira de columnas de
@@ -1537,8 +1553,7 @@
      celdas de dentro se dibujan con 1 px y un cambio de relleno, nunca con un segundo
      desenfoque. Y de borde a borde, como la banda. */
   .asig-apuntes{
-    position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;
-    margin:0 -18px;width:calc(100% + 36px);
+    position:relative;min-height:0;display:flex;flex-direction:column;
     padding:16px 18px 14px;border-radius:var(--r-xl);
     background:var(--panel);border:1px solid var(--hairline);
     backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);
@@ -1691,7 +1706,92 @@
     flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:12px;padding:38px 20px;text-align:center;color:var(--ink-subtle)
   }
-  .asig-vacio p{margin:0;font-size:13px;max-width:34ch;line-height:1.5}
+  .asig-vacia{color:var(--ink-subtle);font-size:14px;margin:0}
+
+  /* ── el calendario de la asignatura ──
+     `.cal-panel` mide `calc(100dvh - 196px)`, y ese 196 es el chrome de /calendario, no el
+     de esta página: aquí desbordaría. Esta superficie mide contra **su columna**.
+
+     Se lleva `--suelo` porque el deslizador de opacidad del escritorio no manda sobre un
+     calendario: al 30 % sobre la fotografía el texto del mes cae por debajo del mínimo
+     legible. Es la misma excepción que ya hace /calendario. */
+  .asig-agenda{
+    /* El cristal lo lleva **el contenedor**, no la rejilla. Lo ponía `.mes-rejilla`, y
+       entonces la cabecera del mes quedaba sobre la fotografía desnuda: media columna era
+       un panel y la otra media no. Y dentro no puede haber un segundo desenfoque —
+       cristal sobre cristal está prohibido y además se ve sucio. */
+    background:rgba(var(--panel-rgb), max(var(--opa), .66));
+    border:1px solid var(--hairline);
+    backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);
+    border-radius:var(--r-xl);overflow:hidden;
+  }
+  .asig-agenda .cal-cab{
+    flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:12px 12px 10px;flex-wrap:wrap;
+  }
+  .asig-agenda .sem-titulo .rango{font-size:17px;font-weight:600;letter-spacing:-.02em}
+  .asig-agenda .sem-titulo .anio{font-size:11.5px}
+  .asig-agenda .dia-nav{gap:4px}
+  /* La rejilla se queda con lo que sobra y las filas llevan alto definido: `.celda` tiene
+     `container-type: size`, que contiene en los dos ejes, y con filas `auto` colapsarían. */
+  .asig-agenda .mes-rejilla{
+    /* Sin fondo ni desenfoque propios: los pone el contenedor. */
+    background:none;backdrop-filter:none;-webkit-backdrop-filter:none;
+    flex:1 1 auto;min-height:0;border-radius:0;
+    grid-template-rows:auto repeat(var(--filas,6),minmax(42px,1fr));
+    padding:6px;gap:3px;
+  }
+  .asig-agenda .celda{padding:3px 4px}
+  .asig-agenda .dia-num{font-size:11px}
+  /* En una columna estrecha el `+` de cada celda no cabe sin robarle sitio al número. */
+  .asig-agenda .mas-ev{display:none}
+
+  /* ── etiquetas ──
+     El chip es el mismo lenguaje que la leyenda del horario: superficie neutra, filete de
+     1 px y **el color como un punto**. Catorce etiquetas de relleno saturado serían el
+     arcoíris que esta pantalla acaba de dejar de ser. */
+  .asig-tags{display:flex;align-items:center;gap:7px;flex-wrap:wrap;flex:none;margin-bottom:12px}
+  .asig-tag{
+    display:inline-flex;align-items:center;gap:7px;padding:5px 10px 5px 8px;
+    border-radius:var(--r-sm);font:inherit;font-size:12px;color:var(--ink-muted);cursor:pointer;
+    background:var(--panel);border:1px solid var(--hairline);
+    transition:background 200ms var(--ease-soft),border-color 200ms var(--ease-soft),color 200ms var(--ease-soft);
+  }
+  .asig-tag i{width:8px;height:8px;border-radius:999px;background:var(--tc);flex:none}
+  .asig-tag b{font-weight:500;color:var(--ink)}
+  .asig-tag:hover{background:var(--panel-strong);border-color:var(--hairline-lit)}
+  /* Filtrando: el filete se tiñe y el chip se aclara. El relleno sigue sin ser el color. */
+  .asig-tag.on{border-color:color-mix(in srgb,var(--tc) 60%,var(--hairline-lit));background:var(--panel-strong)}
+  /* Diana de arrastre: anillo y no relleno, para que se siga leyendo cuál es. */
+  .asig-tag.diana{box-shadow:inset 0 0 0 2px var(--accent-linea)}
+  .asig-tag.nueva{color:var(--ink-subtle);border-style:dashed}
+  .asig-tag.nueva:hover{color:var(--ink-muted)}
+  .asig-tag-x{
+    display:grid;place-items:center;width:15px;height:15px;margin-right:-3px;
+    border-radius:999px;font-size:13px;line-height:1;color:var(--ink-subtle);
+    opacity:0;transition:opacity 180ms var(--ease-soft),color 180ms var(--ease-soft);
+  }
+  .asig-tag:hover .asig-tag-x,
+  .asig-celda-tag:hover .asig-tag-x{opacity:1}
+  .asig-tag-x:hover{color:var(--late)}
+  .asig-tags .asig-bautizo{width:auto;min-width:150px;font-size:12px;padding:5px 9px}
+
+  /* ── las etiquetas dentro de una celda ──
+     Más pequeñas y sin la cuenta: aquí solo hace falta reconocerlas. Si no caben, la caja
+     recorta y lo que queda visible es el punto — nunca media etiqueta. */
+  .asig-celda-tags{display:flex;flex-wrap:wrap;gap:4px;min-width:0;max-height:21px;overflow:hidden}
+  .asig-celda-tag{
+    display:inline-flex;align-items:center;gap:5px;padding:2px 6px 2px 5px;max-width:100%;
+    border-radius:var(--r-xs);font-size:10.5px;color:var(--ink-muted);
+    background:rgba(255,255,255,.05);border:1px solid var(--hairline);
+  }
+  .asig-celda-tag i{width:6px;height:6px;border-radius:999px;background:var(--tc);flex:none}
+  .asig-celda-tag b{font-weight:400;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  @container (max-width: 150px){
+    .asig-celda-tag b{display:none}
+    .asig-celda-tag{padding:3px;gap:0}
+  }
 
   /* ── sin Drive conectado ──
      No es el vacío de una carpeta: es que la superficie entera todavía no tiene dónde
@@ -1883,6 +1983,10 @@
     .asig-pista{height:64px}
     .asig-apuntes{padding:14px 13px 12px;border-radius:var(--r-lg)}
     .asig-rejilla{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+    /* En estrecho no caben dos columnas: el calendario se va y quedan los apuntes, que es
+       a lo que se viene. El escritorio es lo que se verifica aquí. */
+    .asig-zona{flex-direction:column}
+    .asig-agenda{display:none}
     .visor{inset:0;border-radius:0;border:0}
   }
 

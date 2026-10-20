@@ -531,6 +531,16 @@ Drive—, con carpetas, renombrar y mover. Es una **rejilla con miniaturas**; el
 imágenes que el navegador sabe pintar, PDF y vídeo, y el resto se descarga. El planteamiento
 completo está en [docs/integraciones/DRIVE.md](docs/integraciones/DRIVE.md).
 
+**Abajo hay dos columnas**: los apuntes y, a la derecha, el **mes de esta asignatura**. No se añadió
+alto —el de la página está repartido hasta el último píxel—: la columna sale de partir en dos lo que
+antes se comía el panel de apuntes. Son dos paneles **hermanos** de cristal, nunca uno dentro de otro.
+
+**Las etiquetas son la otra mitad de organizarse.** Una carpeta dice dónde vive algo y solo puede
+decir una cosa; una etiqueta dice qué es y pueden ser varias. Se ponen **arrastrando** el apunte
+sobre el chip —el mismo gesto, el mismo tipo de arrastre y el mismo anillo que soltar sobre una
+carpeta—, se quitan con la equis del chip de la celda, y filtran al pulsarlas: varias a la vez es
+**intersección**, porque buscar «Tema 3» y «Pasar a limpio» es buscar lo que es las dos cosas.
+
 **La banda tiene dos lados**: a la izquierda quién es la asignatura, a la derecha cuándo toca y qué
 viene. Era una columna de 1120 px que dejaba 548 px muertos a la derecha en una ventana de 1686 —un
 tercio de la pantalla—, y lo que llena ese hueco no es aire: es el horario de esta asignatura, con
@@ -556,6 +566,20 @@ Lo que no se deduce leyendo el código:
   tell más reconocible de una interfaz generada, y aquí además era redundante.
 - **El nombre de una celda reserva dos líneas siempre.** Con el alto libre, un nombre de una línea
   y otro de dos dejaban sus tamaños a alturas distintas y la fila se leía desalineada.
+- **El catálogo de etiquetas es global, pero la barra no.** «Pasar a limpio» vale en todas las
+  asignaturas, y tenerlas por asignatura obligaría a recrear las mismas cinco seis veces. Lo que
+  evita la mezcla es que la barra solo enseña las que se usan **aquí**, más las que no se usan en
+  ningún sitio — esas son las recién creadas, y esconderlas justo al crearlas desconcierta.
+- **La equis de borrar una etiqueta solo existe si no la lleva nada.** Así borrar no puede perder
+  trabajo y no hace falta preguntar: una etiqueta sin usar no guarda nada, y la recién creada con una
+  errata —que es el caso que de verdad pasa— es por definición una sin usar.
+- **El mes de la asignatura enseña eventos Y tareas**, y es una excepción a una regla escrita: el mes
+  de `/calendario` no enseña tareas a propósito, porque «una entrega no compite con gimnasio». Aquí
+  ese motivo no existe —todo lo que se ve es de esta asignatura— y lo que ayuda es ver juntas la
+  entrega y las tardes que hay para prepararla. Siguen separadas visualmente: eventos como chips,
+  tareas como una cuenta al pie.
+- **El cristal de la columna lo lleva el contenedor, no la rejilla del mes.** Al revés, la cabecera
+  del mes quedaba sobre la fotografía desnuda: media columna era un panel y la otra media no.
 
 - **La interfaz no habla con el almacenamiento.** Habla con `Archivador`, en `src/lib/archivo/`. Es
   el mismo patrón que el almacén y por el mismo motivo: el día que Drive se sustituya por otra cosa,

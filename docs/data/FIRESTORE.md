@@ -110,8 +110,21 @@ users/{uid}
     asignatura: "geometria"
     nombre: "Tema 3"
     madre: "<carpetaId>"           ← opcional; sin él, la raíz de la asignatura
+    etiquetas: ["<etiquetaId>"]    ← opcional; una carpeta entera puede ser «Tema 3»
     remoto: { proveedor: "drive" | "local", id: "<id de la carpeta en Drive>" }
     creado / actualizado: <timestamp>   ← se ordena por `nombre`
+
+  users/{uid}/etiquetas/{etiquetaId} ← lo que algo ES, que pueden ser varias cosas a la vez
+    nombre: "Pasar a limpio"       ← ≤ 60, lo escribe ella
+    color: "ambar"                 ← de los catorce de COLORES
+    creado / actualizado: <timestamp>   ← se ordena por `nombre`, nunca por un opcional
+
+    El catálogo es GLOBAL, no por asignatura: «pasar a limpio» vale en todas, y tenerlas
+    por asignatura obligaría a recrear las mismas cinco seis veces. Lo que evita la mezcla
+    es la pantalla, que solo enseña las que se usan en la asignatura que se está mirando.
+
+    No tiene `asignatura` ni `remoto`: no vive en ninguna carpeta y no tiene bytes en
+    ningún sitio. Es el documento más pequeño de la base.
 
   users/{uid}/asignaturas/{id}     ← lo siguiente que toca
     nombre, color, profesor, progreso
@@ -188,8 +201,9 @@ cada colección declara sus campos opcionales en `almacen-firestore.ts`:
 |---|---|
 | `eventos` | `materia`, `nota` |
 | `tareas` | `asignatura`, `progreso` |
-| `apuntes` | `carpeta`, `orden` |
-| `carpetas` | `madre` |
+| `apuntes` | `carpeta`, `orden`, `etiquetas` |
+| `carpetas` | `madre`, `etiquetas` |
+| `etiquetas` | — |
 
 El opcional que no llega, o llega `undefined`, se manda como `deleteField()` y desaparece.
 `undefined` necesitaba ese trato de todas formas: Firestore rechaza la escritura entera si lo

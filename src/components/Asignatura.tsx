@@ -31,7 +31,7 @@ import { AnimatePresence } from 'motion/react';
 import { APARECER, CELDA, ORQUESTA, PIEZA, VELO, HOJA, MUELLE, CURVA, TIEMPO } from '@/lib/ui/movimiento';
 import { Icono, TIPOS } from '@/lib/ui/catalogo';
 import { Button } from '@/components/ui/button';
-import { useAhora, useApuntes, useCarpetas, useEventos } from '@/hooks/useDatos';
+import { useAhora, useApuntes, useCarpetas, useEtiquetas, useEventos, useTareas } from '@/hooks/useDatos';
 import { useDialogo } from '@/hooks/useDialogo';
 import { useUI } from '@/lib/ui/contexto';
 import { useArchicel } from '@/lib/firebase/sesion';
@@ -66,12 +66,18 @@ import {
   deFecha,
   hhmm,
   type Apunte,
+  COLORES,
   type Carpeta,
   type Clase,
   type ClaveAsignatura,
+  type Color,
+  type Etiqueta,
+  type ID,
 } from '@/lib/data';
 import { AlCuerpo } from '@/components/AlCuerpo';
 import { HojaConectarDrive, IconoDrive } from '@/components/HojaConectarDrive';
+import { HojaEvento, type PeticionEvento } from '@/components/HojaEvento';
+import { MesDeEventos, mesEntero } from '@/components/MesDeEventos';
 
 const DIAS_CORTOS = ['L', 'M', 'X', 'J', 'V'] as const;
 
@@ -90,7 +96,13 @@ export function Asignatura({ clave }: { clave: ClaveAsignatura }) {
           al hidratar empujando el panel hacia abajo — un salto en cada carga. Dentro de la
           banda, cuyo alto lo fija el raíl del horario, que esté o no ya no mueve nada. */}
       <Portada clave={clave} ahora={ahora} nApuntes={apuntes.length} />
-      <Apuntes clave={clave} apuntes={apuntes} apuntesListos={apuntesListos} />
+      {/* El alto de esta página ya está repartido hasta el último píxel, así que la
+          columna del calendario no se añade: sale de partir en dos el hueco que se comía
+          el panel de apuntes. De ahí que esta caja exista y reparta a lo ancho. */}
+      <mo.div className="asig-zona" variants={ORQUESTA}>
+        <Apuntes clave={clave} apuntes={apuntes} apuntesListos={apuntesListos} />
+        <AgendaDeAsignatura clave={clave} />
+      </mo.div>
     </mo.section>
   );
 }
@@ -258,6 +270,70 @@ function LoQueViene({ clave, ahora }: { clave: ClaveAsignatura; ahora: Date | nu
   );
 }
 
+/* ───────────────────────── el calendario de la asignatura ───────────────────────── */
+
+/**
+ * El mes de esta asignatura, a la derecha.
+ *
+ * Enseña **eventos y tareas**, y eso es una excepción a una regla escrita: el mes de
+ * `/calendario` enseña eventos y nunca tareas, a propósito, porque «una entrega no compite
+ * con gimnasio». Aquí ese motivo no existe — todo lo que se ve es de esta asignatura, así
+ * que no hay gimnasio que estorbe —, y lo que de verdad ayuda es ver juntas la entrega y
+ * las tres tardes que hay para prepararla. Siguen separadas visualmente: los eventos son
+ * chips, las tareas una cuenta discreta al pie.
+ *
+ * El mes que se mira sale de `useAhora` y no de `new Date()`: la página se prerrenderiza y
+ * el servidor no sabe qué día es donde está ella. Hasta que llega el reloj, **el hueco se
+ * reserva igual**: si la columna apareciera al hidratar, empujaría la rejilla de apuntes y
+ * daría un salto en cada carga — es el mismo fallo que obligó a mudar «lo que viene»
+ * dentro de la banda.
+ */
+function AgendaDeAsignatura({ clave }: { clave: ClaveAsignatura }) {
+  const asig = ASIGNATURAS[clave];
+  const ahora = useAhora();
+  /* `null` hasta que alguien navegue: mientras tanto manda el reloj. */
+  const [elegido, setElegido] = useState<Date | null>(null);
+  const mes = elegido ?? ahora;
+
+  const rango = useMemo(() => (mes ? mesEntero(mes) : null), [mes]);
+  const eventos = useEventos(rango ?? { desde: '9999-12-31', hasta: '9999-12-31' });
+  const tareas = useTareas(rango ?? { desde: '9999-12-31', hasta: '9999-12-31' });
+  const [hoja, setHoja] = useState<PeticionEvento | null>(null);
+
+  /* Por `buscarAsignatura` y no comparando cadenas: `materia` se escribe a mano y
+     «Geometria» sin tilde se perdería, que se lee como que la aplicación pierde cosas. */
+  const mios = useMemo(
+    () => eventos.filter((e) => buscarAsignatura(e.materia)?.codigo === asig.codigo),
+    [eventos, asig.codigo],
+  );
+  const tareasPorDia = useMemo(() => {
+    const n: Record<string, number> = {};
+    for (const t of tareas) {
+      if (buscarAsignatura(t.asignatura)?.codigo === asig.codigo) n[t.fecha] = (n[t.fecha] ?? 0) + 1;
+    }
+    return n;
+  }, [tareas, asig.codigo]);
+
+  return (
+    <mo.aside className="asig-agenda" variants={PIEZA} aria-label={`Calendario de ${asig.nombre}`}>
+      {mes && (
+        <MesDeEventos
+          ref_={mes}
+          setRef={setElegido}
+          eventos={mios}
+          tareasPorDia={tareasPorDia}
+          abrirEvento={setHoja}
+          leyenda={false}
+          compacto
+        />
+      )}
+      {/* Hermana de la sección y no descendiente: `PIEZA` lleva desenfoque, y un ancestro
+          con `filter` se convierte en el bloque contenedor de todo lo `fixed` de dentro. */}
+      <HojaEvento peticion={hoja} cerrar={() => setHoja(null)} />
+    </mo.aside>
+  );
+}
+
 /* ───────────────────────── los apuntes ───────────────────────── */
 
 /**
@@ -355,6 +431,9 @@ function Apuntes({
   const { avisar } = useUI();
   const archivador = useMemo(() => elArchivador(), []);
   const [carpetas, carpetasListas] = useCarpetas(clave);
+  const [etiquetas] = useEtiquetas();
+  /** Por qué etiquetas se está filtrando. Varias a la vez es intersección, no unión. */
+  const [filtro, setFiltro] = useState<string[]>([]);
   const entrada = useRef<HTMLInputElement>(null);
 
   const [aqui, setAqui] = useState<string | null>(null);
@@ -450,8 +529,42 @@ function Apuntes({
     if (aqui && !porId.has(aqui)) setAqui(null);
   }, [aqui, porId]);
 
-  const hijas = useMemo(() => carpetas.filter((c) => (c.madre ?? null) === aqui), [carpetas, aqui]);
-  const suyos = useMemo(() => apuntes.filter((a) => (a.carpeta ?? null) === aqui), [apuntes, aqui]);
+  const porEtiqueta = useMemo(() => new Map(etiquetas.map((e) => [e.id, e])), [etiquetas]);
+
+  /**
+   * Cuántas cosas **de esta asignatura** lleva cada etiqueta.
+   *
+   * Es lo que decide qué chips se enseñan —el catálogo es global, la barra no— y también
+   * si una etiqueta se puede borrar sin preguntar: una que no lleva nada no guarda nada.
+   */
+  const cuentas = useMemo(() => {
+    const n: Record<string, number> = {};
+    for (const x of [...apuntes, ...carpetas]) for (const id of x.etiquetas ?? []) n[id] = (n[id] ?? 0) + 1;
+    return n;
+  }, [apuntes, carpetas]);
+
+  /* Solo las que se usan aquí, más las que no se usan en ningún sitio: esas son las recién
+     creadas, y esconderlas justo después de crearlas sería desconcertante. */
+  const deAqui = useMemo(
+    () => etiquetas.filter((e) => cuentas[e.id] > 0 || !Object.keys(cuentas).includes(e.id)),
+    [etiquetas, cuentas],
+  );
+
+  /* Intersección y no unión: filtrar por «Tema 3» y «Pasar a limpio» es buscar lo que es
+     las dos cosas. La unión sería un filtro que amplía al pulsarlo, que nadie espera. */
+  const pasaFiltro = useCallback(
+    (x: { etiquetas?: ID[] }) => filtro.length === 0 || filtro.every((f) => (x.etiquetas ?? []).includes(f)),
+    [filtro],
+  );
+
+  const hijas = useMemo(
+    () => carpetas.filter((c) => (c.madre ?? null) === aqui && pasaFiltro(c)),
+    [carpetas, aqui, pasaFiltro],
+  );
+  const suyos = useMemo(
+    () => apuntes.filter((a) => (a.carpeta ?? null) === aqui && pasaFiltro(a)),
+    [apuntes, aqui, pasaFiltro],
+  );
   const carpetaActual = aqui ? porId.get(aqui) : undefined;
   const destino = useMemo<Destino>(
     () => ({ asignatura: clave, padre: carpetaActual?.remoto }),
@@ -557,6 +670,77 @@ function Apuntes({
       }
     },
     [archivador, almacen, clave, destino, aqui, avisar],
+  );
+
+  /**
+   * Pone o quita una etiqueta.
+   *
+   * `guardar` recibe el documento **entero**, nunca un trozo: una escritura parcial borraría
+   * en la nube los opcionales que no llevara. Es la regla del almacén y aquí se nota más
+   * que en ningún sitio, porque lo que se toca es justo un opcional.
+   */
+  const etiquetar = useCallback(
+    async (id: string, esCarpeta: boolean, etiqueta: string, poner = true) => {
+      const que = esCarpeta ? carpetas.find((c) => c.id === id) : apuntes.find((a) => a.id === id);
+      if (!que) return;
+      const tiene = que.etiquetas ?? [];
+      if (poner === tiene.includes(etiqueta)) return;
+      const nuevas = poner ? [...tiene, etiqueta] : tiene.filter((x) => x !== etiqueta);
+      /* Una lista vacía se manda como `undefined` para que el almacén la borre de verdad en
+         vez de dejar un array vacío rondando por la nube. */
+      const campo = nuevas.length ? nuevas : undefined;
+      try {
+        if (esCarpeta) await almacen.carpetas.guardar({ ...(que as Carpeta), etiquetas: campo });
+        else await almacen.apuntes.guardar({ ...(que as Apunte), etiquetas: campo });
+      } catch {
+        avisar('No se pudo cambiar la etiqueta.');
+      }
+    },
+    [almacen, apuntes, carpetas, avisar],
+  );
+
+  const crearEtiqueta = useCallback(
+    async (nombre: string, color: Color) => {
+      const limpio = acortar(nombre.trim(), TOPES.nombreEtiqueta);
+      if (!limpio) return;
+      /* Si ya existe una que se llama igual no se crea otra: dos «Tema 3» que no son la
+         misma son el principio de un catálogo inútil. */
+      const ya = etiquetas.find((e) => e.nombre.localeCompare(limpio, 'es', { sensitivity: 'base' }) === 0);
+      if (ya) return;
+      try {
+        await almacen.etiquetas.guardar({ id: nuevaClave(), nombre: limpio, color, creado: Date.now() });
+      } catch {
+        avisar('No se pudo crear la etiqueta.');
+      }
+    },
+    [almacen, etiquetas, avisar],
+  );
+
+  const renombrarEtiqueta = useCallback(
+    async (e: Etiqueta, nombre: string) => {
+      const limpio = acortar(nombre.trim(), TOPES.nombreEtiqueta);
+      if (!limpio || limpio === e.nombre) return;
+      try {
+        await almacen.etiquetas.guardar({ ...e, nombre: limpio });
+      } catch {
+        avisar('No se pudo renombrar la etiqueta.');
+      }
+    },
+    [almacen, avisar],
+  );
+
+  /* Solo se llega aquí con una etiqueta que no lleva nada, así que no hay nada que perder
+     y no hace falta preguntar. Lo garantiza la barra, que esconde la equis si se usa. */
+  const borrarEtiqueta = useCallback(
+    async (e: Etiqueta) => {
+      setFiltro((f) => f.filter((x) => x !== e.id));
+      try {
+        await almacen.etiquetas.borrar(e.id);
+      } catch {
+        avisar('No se pudo borrar la etiqueta.');
+      }
+    },
+    [almacen, avisar],
   );
 
   const renombrar = useCallback(
@@ -902,6 +1086,19 @@ function Apuntes({
         />
       </div>
 
+      <BarraEtiquetas
+        etiquetas={deAqui}
+        cuentas={cuentas}
+        filtro={filtro}
+        alFiltrar={(id) => setFiltro((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]))}
+        alCrear={(n, c) => void crearEtiqueta(n, c)}
+        alRenombrar={(e, n) => void renombrarEtiqueta(e, n)}
+        alBorrar={(e) => void borrarEtiqueta(e)}
+        alSoltar={(id, esC, et) => void etiquetar(id, esC, et)}
+        sobre={sobre}
+        setSobre={setSobre}
+      />
+
       <AnimatePresence>
         {subiendo.length > 0 && (
           <mo.div className="asig-subiendo" key="subiendo" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: TIEMPO.roce, ease: CURVA.salida }}>
@@ -961,6 +1158,8 @@ function Apuntes({
                 key={c.id}
                 carpeta={c}
                 cuantas={dentroDe(c.id, apuntes, carpetas)}
+                porEtiqueta={porEtiqueta}
+                alQuitarTag={(t) => void etiquetar(c.id, true, t, false)}
                 editando={renombrando === c.id}
                 marcada={sobre === c.id}
                 yendo={yendo.has(c.id)}
@@ -978,6 +1177,8 @@ function Apuntes({
               <Celda
                 key={a.id}
                 apunte={a}
+                porEtiqueta={porEtiqueta}
+                alQuitarTag={(t) => void etiquetar(a.id, false, t, false)}
                 editando={renombrando === a.id}
                 yendo={yendo.has(a.id)}
                 alAbrir={() => setAbierto(a)}
@@ -1559,6 +1760,8 @@ function BotonesDeFila({ alRenombrar, alBorrar, que }: { alRenombrar: () => void
 function CeldaCarpeta({
   carpeta,
   cuantas,
+  porEtiqueta,
+  alQuitarTag,
   editando,
   marcada,
   yendo,
@@ -1572,6 +1775,8 @@ function CeldaCarpeta({
 }: {
   carpeta: Carpeta;
   cuantas: number;
+  porEtiqueta: Map<string, Etiqueta>;
+  alQuitarTag: (id: string) => void;
   editando: boolean;
   marcada: boolean;
   yendo: boolean;
@@ -1634,6 +1839,7 @@ function CeldaCarpeta({
             <span className="asig-meta">
               {yendo ? 'A la papelera…' : cuantas === 0 ? 'Vacía' : `${cuantas} ${cuantas === 1 ? 'cosa' : 'cosas'}`}
             </span>
+            <TagsDeCelda ids={carpeta.etiquetas ?? []} porId={porEtiqueta} alQuitar={alQuitarTag} />
           </button>
           <span className="asig-mandos">
             <BotonesDeFila alRenombrar={alRenombrar} alBorrar={alBorrar} que={carpeta.nombre} />
@@ -1646,6 +1852,8 @@ function CeldaCarpeta({
 
 function Celda({
   apunte,
+  porEtiqueta,
+  alQuitarTag,
   editando,
   yendo,
   alAbrir,
@@ -1655,6 +1863,8 @@ function Celda({
   alBorrar,
 }: {
   apunte: Apunte;
+  porEtiqueta: Map<string, Etiqueta>;
+  alQuitarTag: (id: string) => void;
   editando: boolean;
   yendo: boolean;
   alAbrir: () => void;
@@ -1702,6 +1912,7 @@ function Celda({
             <span className="asig-meta">
               {yendo ? 'A la papelera…' : `${tipo.nombre} · ${pesoLegible(apunte.tam)}`}
             </span>
+            <TagsDeCelda ids={apunte.etiquetas ?? []} porId={porEtiqueta} alQuitar={alQuitarTag} />
           </button>
           {/* Los mandos van juntos en una caja sobre la lámina, y aparecen al pasar el
               cursor. En táctil se quedan puestos: sin `hover` no habría forma de borrar. */}
@@ -1727,6 +1938,171 @@ function Celda({
         </>
       )}
     </mo.li>
+  );
+}
+
+/* ───────────────────────── etiquetas ───────────────────────── */
+
+/**
+ * La barra de etiquetas: crear, filtrar y, sobre todo, ser diana.
+ *
+ * **Se etiqueta arrastrando.** Se coge un apunte y se suelta sobre el chip, igual que se
+ * suelta sobre una carpeta o sobre una miga para moverlo. Es el mismo gesto, el mismo tipo
+ * de arrastre y el mismo resaltado de anillo, así que no hay nada nuevo que aprender — y
+ * sobre todo no hay un diálogo de por medio para una acción que se hace veinte veces
+ * seguidas.
+ *
+ * **Solo se enseñan las que se usan aquí**, más las que se acaban de crear. El catálogo es
+ * global —«pasar a limpio» vale en todas las asignaturas— pero una barra con las etiquetas
+ * de las seis juntas sería una lista que no dice nada de esta.
+ */
+function BarraEtiquetas({
+  etiquetas,
+  cuentas,
+  filtro,
+  alFiltrar,
+  alCrear,
+  alRenombrar,
+  alBorrar,
+  alSoltar,
+  sobre,
+  setSobre,
+}: {
+  etiquetas: Etiqueta[];
+  /** Cuántas cosas de esta asignatura lleva cada etiqueta. */
+  cuentas: Record<string, number>;
+  filtro: string[];
+  alFiltrar: (id: string) => void;
+  alCrear: (nombre: string, color: Color) => void;
+  alRenombrar: (e: Etiqueta, nombre: string) => void;
+  alBorrar: (e: Etiqueta) => void;
+  alSoltar: (id: string, esCarpeta: boolean, etiqueta: string) => void;
+  sobre: string | null;
+  setSobre: (id: string | null) => void;
+}) {
+  const [creando, setCreando] = useState(false);
+  const [editando, setEditando] = useState<string | null>(null);
+  /* El siguiente color de la paleta que no esté ya cogido: crear cinco etiquetas seguidas
+     no debería dar cinco veces el mismo ámbar. */
+  const siguiente = useMemo(() => {
+    const usados = new Set(etiquetas.map((e) => e.color));
+    return COLORES.find((c) => c !== 'piedra' && !usados.has(c)) ?? 'piedra';
+  }, [etiquetas]);
+
+  return (
+    <div className="asig-tags" role="group" aria-label="Etiquetas">
+      {etiquetas.map((e) =>
+        editando === e.id ? (
+          <Bautizo
+            key={e.id}
+            inicial={e.nombre}
+            alTerminar={(n) => {
+              setEditando(null);
+              alRenombrar(e, n);
+            }}
+            alCancelar={() => setEditando(null)}
+          />
+        ) : (
+          <button
+            key={e.id}
+            type="button"
+            className={`asig-tag${filtro.includes(e.id) ? ' on' : ''}${sobre === e.id ? ' diana' : ''}`}
+            style={{ ['--tc' as string]: `var(--c-${e.color})` }}
+            aria-pressed={filtro.includes(e.id)}
+            title={cuentas[e.id] ? `${cuentas[e.id]} aquí` : 'Sin usar en esta asignatura'}
+            onClick={() => alFiltrar(e.id)}
+            onDoubleClick={() => setEditando(e.id)}
+            onDragOver={(ev) => {
+              if (!ev.dataTransfer.types.includes(TIPO_ARRASTRE)) return;
+              ev.preventDefault();
+              ev.stopPropagation();
+              setSobre(e.id);
+            }}
+            onDragLeave={() => setSobre(null)}
+            onDrop={(ev) => {
+              const crudo = ev.dataTransfer.getData(TIPO_ARRASTRE);
+              if (!crudo) return;
+              ev.preventDefault();
+              ev.stopPropagation();
+              setSobre(null);
+              const [tipo, id] = crudo.split(':');
+              alSoltar(id, tipo === 'c', e.id);
+            }}
+          >
+            <i aria-hidden="true" />
+            <b>{e.nombre}</b>
+            {/*
+              La equis solo existe cuando la etiqueta **no la lleva nada**.
+
+              Así borrar no puede perder trabajo y no hace falta preguntar: una etiqueta sin
+              usar no guarda nada. Y la recién creada con una errata, que es el caso que de
+              verdad pasa, es por definición una sin usar.
+            */}
+            {!cuentas[e.id] && (
+              <span
+                className="asig-tag-x"
+                role="button"
+                tabIndex={-1}
+                aria-label={`Borrar la etiqueta ${e.nombre}`}
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  alBorrar(e);
+                }}
+              >
+                ×
+              </span>
+            )}
+          </button>
+        ),
+      )}
+
+      {creando ? (
+        <Bautizo
+          inicial=""
+          alTerminar={(n) => {
+            setCreando(false);
+            alCrear(n, siguiente);
+          }}
+          alCancelar={() => setCreando(false)}
+        />
+      ) : (
+        <button type="button" className="asig-tag nueva" onClick={() => setCreando(true)}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Etiqueta
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Las etiquetas de un apunte o una carpeta, dentro de su celda. */
+function TagsDeCelda({ ids, porId, alQuitar }: { ids: ID[]; porId: Map<string, Etiqueta>; alQuitar: (id: string) => void }) {
+  const suyas = ids.map((i) => porId.get(i)).filter((e): e is Etiqueta => Boolean(e));
+  if (suyas.length === 0) return null;
+  return (
+    <span className="asig-celda-tags">
+      {suyas.map((e) => (
+        <span key={e.id} className="asig-celda-tag" style={{ ['--tc' as string]: `var(--c-${e.color})` }} title={e.nombre}>
+          <i aria-hidden="true" />
+          <b>{e.nombre}</b>
+          <span
+            className="asig-tag-x"
+            role="button"
+            tabIndex={-1}
+            aria-label={`Quitar ${e.nombre}`}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              ev.preventDefault();
+              alQuitar(e.id);
+            }}
+          >
+            ×
+          </span>
+        </span>
+      ))}
+    </span>
   );
 }
 

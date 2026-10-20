@@ -61,6 +61,7 @@ Por eso cada variante tiene **tres** estados y no dos: `fuera`, `dentro`, `salie
 | `PIEZA` | cada parte de una página | Llega escalonada dentro de un `ORQUESTA` |
 | `COLUMNA` | columnas de `/asignaturas` | Suben con muelle y escalonadas, y los dos estados de elegir una |
 | `CELDA` | celdas de la rejilla de apuntes | Entra creciendo; el recolocado lo lleva `layout`, no el alto |
+| `MES` | la rejilla del calendario | Viaja en la dirección en que se navega de mes |
 | `VELO` | telón de las hojas | Solo opacidad |
 | `HOJA` | hojas modales | Sube desde abajo con muelle |
 | `AVISO` | toast | Sube desde abajo, centrado |
