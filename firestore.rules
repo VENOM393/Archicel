@@ -40,18 +40,19 @@ service cloud.firestore {
       ];
     }
 
-    // La barra doble no es un error de copia: es lo que hace que esto se pueda publicar.
+    // [0-9] y no la abreviatura con barra invertida, a propósito.
     //
-    // Dentro de una cadena de las reglas, '\' abre una secuencia de escape, y '\d' no es
-    // ninguna — la consola contesta «Unexpected 'd'» y se niega a guardar el fichero
-    // entero. Escrito '\\d', la cadena contiene una barra y una d, que es justo lo que el
-    // motor de expresiones regulares necesita ver.
+    // Dentro de una cadena de las reglas la barra abre una secuencia de escape, así que la
+    // abreviatura hay que doblarla y la consola rechaza el fichero ENTERO si no se hace —
+    // con un segundo error en otra línea que es solo el analizador descarrilando. Estuvo
+    // mal desde el primer commit, así que estas reglas nunca se habían podido publicar
+    // tal cual.
     //
-    // Estuvo mal desde el primer commit, así que lo que hay publicado en la consola no
-    // salió nunca de este fichero. Si alguien «lo arregla» quitando una barra, las reglas
-    // dejan de publicarse otra vez.
+    // Doblarla funciona, pero deja una trampa esperando a quien la vea y crea que sobra.
+    // Con [0-9] no hay nada que escapar: no queda ni una barra invertida en todo el
+    // fichero, y esta clase de avería no puede volver.
     function fechaValida(f) {
-      return f is string && f.matches('^\\d{4}-\\d{2}-\\d{2}$');
+      return f is string && f.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
     }
 
     function minutosValidos(m) {

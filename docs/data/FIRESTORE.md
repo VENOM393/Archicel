@@ -157,7 +157,7 @@ bajo el espacio. Es el camino estándar y no rompe lo de arriba.
 Están en [`firestore.rules`](../../firestore.rules), listas para pegar en
 **Firestore → Reglas → Publicar**.
 
-> **Las barras dobles de `fechaValida` no se tocan.** Dentro de una cadena de las reglas,
+> **`fechaValida` usa [0-9] y no la abreviatura con barra invertida.** Dentro de una cadena de las reglas,
 > `\` abre una secuencia de escape y `\d` no es ninguna: la consola contesta
 > *«Unexpected 'd'»* y se niega a guardar **el fichero entero**, con un segundo error en
 > otra línea que es solo el analizador descarrilando. Escrito `\\d`, la cadena contiene
