@@ -59,10 +59,21 @@ const VIDA = 60 * 60 * 24 * 180;
  */
 const DESTINO = 'postmessage';
 
-function credenciales(): { id: string; secreto: string } | null {
-  const id = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-  const secreto = process.env.GOOGLE_CLIENT_SECRET;
-  return id && secreto ? { id, secreto } : null;
+/**
+ * Las dos piezas, y **cuál falta** si falta alguna.
+ *
+ * Decir «falta GOOGLE_CLIENT_SECRET» cuando lo que falta es el identificador manda a
+ * buscar al sitio equivocado, y las dos se configuran en pantallas distintas de dos
+ * consolas distintas. Un mensaje que nombra la variable correcta ahorra media tarde.
+ */
+function credenciales(): { id: string; secreto: string } | { faltan: string[] } {
+  const id = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '';
+  const secreto = process.env.GOOGLE_CLIENT_SECRET ?? '';
+  const faltan = [
+    ...(id ? [] : ['NEXT_PUBLIC_GOOGLE_CLIENT_ID']),
+    ...(secreto ? [] : ['GOOGLE_CLIENT_SECRET']),
+  ];
+  return faltan.length ? { faltan } : { id, secreto };
 }
 
 /** Lo que Google contesta. Solo se lee lo que se usa. */
@@ -100,9 +111,13 @@ function fallo(r: Respuesta, estado = 400) {
 
 export async function POST(pet: NextRequest) {
   const cred = credenciales();
-  if (!cred) {
+  if ('faltan' in cred) {
     return NextResponse.json(
-      { error: 'sin-configurar', dijo: 'Falta GOOGLE_CLIENT_SECRET en el entorno.' },
+      {
+        error: 'sin-configurar',
+        faltan: cred.faltan,
+        dijo: `${cred.faltan.length === 1 ? 'Falta' : 'Faltan'} ${cred.faltan.join(' y ')} en el entorno del servidor. Al añadirlas en Vercel hay que volver a desplegar: un despliegue que ya existe no las recoge solo.`,
+      },
       { status: 501 },
     );
   }
