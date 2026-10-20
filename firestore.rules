@@ -40,8 +40,18 @@ service cloud.firestore {
       ];
     }
 
+    // La barra doble no es un error de copia: es lo que hace que esto se pueda publicar.
+    //
+    // Dentro de una cadena de las reglas, '\' abre una secuencia de escape, y '\d' no es
+    // ninguna — la consola contesta «Unexpected 'd'» y se niega a guardar el fichero
+    // entero. Escrito '\\d', la cadena contiene una barra y una d, que es justo lo que el
+    // motor de expresiones regulares necesita ver.
+    //
+    // Estuvo mal desde el primer commit, así que lo que hay publicado en la consola no
+    // salió nunca de este fichero. Si alguien «lo arregla» quitando una barra, las reglas
+    // dejan de publicarse otra vez.
     function fechaValida(f) {
-      return f is string && f.matches('^\d{4}-\d{2}-\d{2}$');
+      return f is string && f.matches('^\\d{4}-\\d{2}-\\d{2}$');
     }
 
     function minutosValidos(m) {

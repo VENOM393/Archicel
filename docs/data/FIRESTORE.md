@@ -155,7 +155,19 @@ bajo el espacio. Es el camino estándar y no rompe lo de arriba.
 ## 3 · Reglas de seguridad
 
 Están en [`firestore.rules`](../../firestore.rules), listas para pegar en
-**Firestore → Reglas → Publicar**. Lo que hacen:
+**Firestore → Reglas → Publicar**.
+
+> **Las barras dobles de `fechaValida` no se tocan.** Dentro de una cadena de las reglas,
+> `\` abre una secuencia de escape y `\d` no es ninguna: la consola contesta
+> *«Unexpected 'd'»* y se niega a guardar **el fichero entero**, con un segundo error en
+> otra línea que es solo el analizador descarrilando. Escrito `\\d`, la cadena contiene
+> una barra y una d, que es lo que el motor de expresiones regulares necesita ver.
+>
+> Estuvo mal desde el primer commit, así que lo que había publicado en la consola nunca
+> salió de este fichero. Si alguien lo «arregla» quitando una barra, vuelve a ser
+> impublicable.
+
+Lo que hacen:
 
 - Nadie lee ni escribe sin haber iniciado sesión.
 - Cada usuario solo alcanza su propio árbol `users/{uid}`.
