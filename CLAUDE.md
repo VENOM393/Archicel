@@ -67,118 +67,6 @@ Reglas de convivencia:
   explicando por qué.
 - Si hace falta una skill que no está instalada, se pide y se instala. No se improvisa su contenido.
 
-## Graft — la capa de contexto del código
-
-[Graft](https://github.com/trailhq/Graft) (`@nanonets/graft`, MIT) construye un **grafo del código**
-en `graft/`: nodos markdown que explican cada parte en prosa y apuntan al `file:line` exacto, más un
-grafo de quién-llama-a-qué. Consultar un nodo cuesta unos cientos de tokens; reconstruir ese
-entendimiento leyendo ficheros cuesta miles y además pierde las aristas.
-
-Traducido a esta casa: **Graft es cómo se navega el código; las skills de frontend son cómo se
-diseña.** No compiten, se usan en fases distintas de la misma tarea.
-
-### Estado: instalado
-
-Graft 0.19.0, instalado de forma global (`npm install -g @nanonets/graft`) y cableado solo para
-Claude Code con `graft init --agents claude --no-global`. Dos decisiones de Cristian:
-
-- **Telemetría desactivada**, con `graft telemetry disable`. Se guarda en la máquina, no en el repo;
-  `graft telemetry status` tiene que decir `off — you disabled it`. En una máquina nueva hay que
-  repetirlo.
-- **Sin `--deep`.** Solo el grafo estructural: gratis, sin clave y sin red. `--deep` escribe
-  resúmenes con un LLM y consume clave de API de pago; no se lanza.
-
-Lo que está versionado es el cableado, no el grafo: `.claude/settings.json` (statusline y hooks),
-`.claude/helpers/graft-*.cjs`, `.claude/skills/graft/SKILL.md` (el manual del propio Graft — **ahí
-está el detalle fino, no hay que duplicarlo aquí**), `.mcp.json` y `.ignore`. Todo eso es de Graft:
-lo reescribe al actualizarse, así que no se edita a mano. `graft/` es caché local regenerable, como
-`node_modules`, y va en `.gitignore` **anclado** (`/graft/`): sin la barra delante también ignoraba
-`.claude/skills/graft/` y la skill no llegaba al repositorio.
-
-**Hay que reiniciar Claude Code** después de instalarlo para que cargue el MCP.
-
-### Graft y los worktrees
-
-Cada sesión de AO trabaja en su propio worktree. Nada de lo commiteado lleva la ruta de un worktree:
-los hooks se resuelven con `${CLAUDE_PROJECT_DIR}` y el MCP arranca con `npx -y @nanonets/graft mcp`,
-que reutiliza la instalación global sin descargar nada. Lo que sí es de esta máquina es la ruta de
-Node dentro de `.claude/helpers/*.cjs`, y esos ficheros tienen su propio plan B si no la encuentran.
-
-Cinco cosas que no se deducen:
-
-- **Un worktree nuevo, sin preparar, escribe fuera del repo.** Graft recuerda `--no-global` en un sello
-  dentro de `graft/`, que no se versiona; sin sello, la primera sesión re-cablea con los valores por
-  defecto y mete sus hooks y su MCP en `~/.claude/settings.json` y `~/.claude.json`, **en todos los
-  proyectos**. Comprobado en un worktree de prueba. Lo evita esto, antes de abrir la primera sesión:
-
-  ```bash
-  graft init --agents claude --no-global --no-build
-  ```
-
-  Deja el sello con `global: false` y reescribe los ficheros del repo con el mismo contenido. Es el
-  `post-create` del proyecto en AO, y lo que hay que lanzar a mano en un worktree que ya existía la
-  primera vez que trae el cableado desde `master`.
-- **Limpiar la configuración global no basta si queda un Graft vivo.** Ya ha pasado: se quitaron los
-  hooks y el MCP de `~/.claude`, y minutos después estaban otra vez. Cada sesión de Claude Code
-  abierta mientras la global estaba sucia tiene cargado el MCP `graft` de usuario, y ese servidor —o
-  el siguiente que la sesión levante— vuelve a cablear con los valores por defecto. Antes de limpiar
-  hay que matar los `graft mcp` vivos (`node`/`npx` con `graft` en la línea de comando) o cerrar
-  esas sesiones, y después de limpiar esperar un par de minutos y comprobar que no reaparece. Lo que
-  hay que quitar: los hooks con `graft-hooks.cjs` de `~/.claude/settings.json`, `mcpServers.graft`
-  del nivel superior de `~/.claude.json` y `~/.claude/helpers/graft-hooks.cjs`. `graft uninstall` no
-  sirve para esto: no tiene modo «solo global» y se llevaría también el cableado del repo.
-- **Los ficheros de Graft van fijados a LF en `.gitattributes`.** Con `core.autocrlf=true` el
-  checkout los dejaba en CRLF y Graft los reescribe en LF: `git status` marcaba cuatro ficheros de
-  `.claude/` con `git diff` vacío, y AO no recoge un worktree sucio. Si Graft empieza a escribir un
-  fichero nuevo en el repo, va también a esa lista.
-- **El primer `graft map` o `graft grep` de un worktree construye su grafo**, unos segundos. Cada
-  worktree tiene el suyo y nunca se comparte: el código de dos ramas no es el mismo.
-- **En Windows no compila `tree-sitter-kotlin`**: no trae binario precompilado y aquí no hay Python ni
-  compilador de C++. En esta máquina su `bindings/node/index.js` (dentro de la instalación global) es
-  un sustituto vacío, con el original al lado como `index.js.orig`. Graft solo lo usa al leer un
-  `.kt` y Archicel no tiene ninguno. **Un `npm install -g` o `graft upgrade` lo deshace**: se vuelve a
-  instalar con `--ignore-scripts` y se repone el sustituto, o `graft` no arranca.
-
-### Cómo se usa durante el trabajo
-
-Todos los comandos son gratis, sin clave, y responden en menos de un segundo. **Normalmente basta con
-una llamada**: se elige la que encaja, se actúa sobre la respuesta y no se encadenan herramientas a
-ver si sale algo mejor.
-
-| Situación | Comando |
-|---|---|
-| Aterrizar en el repo / "explícame la arquitectura" | `graft map` |
-| Entender un flujo ("cómo funciona X") o no saber dónde vive algo | `graft ask "<pregunta>" --source` |
-| Ya sabes el símbolo y quieres editarlo | `graft grep "<símbolo>"` |
-| Saber qué hay dentro de un fichero antes de tocarlo | `graft skeleton <fichero>` |
-| Renombrar, borrar o cambiar una firma | `graft callers <símbolo> --depth 2` |
-| Refactor que cruza varios ficheros | `graft callers <símbolo> --depth all` |
-| Medir el riesgo de un cambio ya hecho | `graft blast` |
-
-Reglas:
-
-- **Graft antes que `grep`, `find` o abrir ficheros a ciegas.** Ese es el punto de tenerlo.
-- **No hay que ejecutar `graft build` después de editar.** Las consultas refrescan el grafo solas,
-  incluyendo cambios sin commitear.
-- **Nunca pipear un comando de graft por `head`, `tail` o `sed -n`.** La salida ya viene capada y el
-  recorte se come resultados y la línea de tokens ahorrados.
-- Si un `grep` no encuentra nada, **afloja el patrón** (nombre pelado, sin firma) y reintenta con
-  graft; no te pases a `grep -rn`.
-- Al cerrar un turno en el que se usó graft, reporta el ahorro: `🌱 graft saved ~N tokens (M calls)`.
-
-### Después: qué no espera de Graft
-
-- **No indexa CSS ni markdown.** `docs/design/DESIGN.md` y `app/globals.css` se leen directamente;
-  el contrato visual no vive en el grafo.
-- **No sustituye a `playwright-cli`.** Graft dice cómo es el código; solo el navegador dice cómo se ve.
-- **No sustituye al criterio de diseño.** Sirve para llegar rápido al fichero correcto, no para
-  decidir qué poner en él.
-- Antes de dar por cerrado un cambio que toca varios ficheros: `graft blast` para ver qué alcanza, y
-  después la verificación visual de siempre.
-- Si algo se tuerce, `graft uninstall` revierte exactamente lo que `init` escribió.
-
-Referencia completa de comandos, flags y solución de problemas: [docs/tooling/GRAFT.md](docs/tooling/GRAFT.md).
-
 ## Arquitectura y seguridad
 
 Antes de tocar nada estructural, dos documentos:
@@ -631,7 +519,7 @@ Cosas que no se deducen mirando:
 ## Estructura
 
 ```
-.claude/skills/     las cinco skills de frontend, más la de graft (la escribe graft init)
+.claude/skills/     las cinco skills de frontend
 docs/frontend/      SKILLS.md — uso de las skills
                     MOVIMIENTO.md — el sistema de animación (Motion)
                     WIDGETS.md — arquitectura del escritorio y modo edición
@@ -641,9 +529,7 @@ docs/data/          FIRESTORE.md — modelo · SEGURIDAD.md — revisión · CUE
 docs/integraciones/  CANVAS.md — API del campus de la UCAM y el motor que la consume
                     DRIVE.md — dónde viven los apuntes de cada asignatura
 docs/design/        DESIGN.md — contrato visual
-docs/tooling/       GRAFT.md — referencia de la capa de contexto
-                    DESPLIEGUE.md — publicar en Vercel
+docs/tooling/       DESPLIEGUE.md — publicar en Vercel
 README.md           la cara del repositorio
 scripts/            iconos.mjs — genera los iconos desde public/icono.svg
-graft/              grafo del código (git-ignored, regenerable — uno por worktree)
 ```
