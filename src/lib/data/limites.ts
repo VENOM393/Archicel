@@ -16,6 +16,7 @@ export const TOPES = {
   asignatura: 120,
   nombreApunte: 300,
   nombreCarpeta: 200,
+  nombreEtiqueta: 60,
   tipo: 120,
 } as const;
 

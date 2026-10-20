@@ -167,6 +167,33 @@ export interface Carpeta {
   /** Lo escribe quien sea: se pinta como texto, nunca como HTML. */
   nombre: string;
   remoto: { proveedor: 'local' | 'drive'; id: string; /** Qué cuenta de Google lo subió, si se supo. */ cuenta?: string };
+  /** Qué es. Ver `Etiqueta`: una carpeta entera puede ser «Tema 3». */
+  etiquetas?: ID[];
+  creado?: number;
+  actualizado?: number;
+}
+
+/**
+ * Una etiqueta: lo que un apunte **es**, que pueden ser varias cosas a la vez.
+ *
+ * Es la otra mitad de organizarse, y la que faltaba. Una carpeta dice **dónde vive** algo y
+ * solo puede decir una cosa: una foto de pizarra del Tema 3, que además hay que pasar a
+ * limpio y que entra en la entrega del día 12, tenía que elegir una de las tres.
+ *
+ * **El catálogo es global, no por asignatura.** «Pasar a limpio» o «Entregado» valen en
+ * todas, y tenerlas por asignatura obligaría a recrear las mismas cinco seis veces. Lo que
+ * evita que se mezclen es la pantalla: la barra de filtros de una asignatura solo enseña
+ * las que tienen algo puesto allí.
+ *
+ * No tiene `asignatura` ni `remoto`: una etiqueta no vive en ninguna carpeta y no tiene
+ * bytes en ningún sitio. Es el documento más pequeño de la base.
+ */
+export interface Etiqueta {
+  id: ID;
+  /** Lo escribe ella: se pinta como texto, nunca como HTML. Tope en `TOPES.nombreEtiqueta`. */
+  nombre: string;
+  /** De los catorce de `COLORES`. Ni uno nuevo: el sistema de color ya está cerrado. */
+  color: Color;
   creado?: number;
   actualizado?: number;
 }
@@ -204,6 +231,13 @@ export interface Apunte {
   carpeta?: ID;
   /** Para ordenar a mano dentro de la asignatura. Sin él manda `creado`. */
   orden?: number;
+  /**
+   * Qué es este apunte. Varias a la vez, a diferencia de `carpeta`.
+   *
+   * Son identificadores de `Etiqueta`, no nombres: renombrar una etiqueta no obliga a
+   * reescribir nada de lo que la lleva, igual que pasa con las carpetas.
+   */
+  etiquetas?: ID[];
   creado?: number;
   actualizado?: number;
 }

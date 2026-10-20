@@ -52,9 +52,19 @@ service cloud.firestore {
       return t is string && t.size() <= maximo;
     }
 
+    // Una lista de identificadores, acotada en cuántos.
+    //
+    // Lo que NO se puede comprobar aquí es el contenido: las reglas no saben recorrer una
+    // lista, así que no hay forma de exigir que cada elemento sea un texto corto. Lo que
+    // acota el tamaño real es el límite de 1 MB por documento de Firestore, y el daño
+    // posible es un documento propio inflado. Se dice en vez de fingir que está cubierto.
+    function listaCorta(l, cuantos) {
+      return l is list && l.size() <= cuantos;
+    }
+
     // las colecciones con forma fija; el comodín de abajo no debe tocarlas
     function estaValidada(coleccion) {
-      return coleccion in ['eventos', 'tareas', 'apuntes', 'carpetas', 'ajustes', 'layout'];
+      return coleccion in ['eventos', 'tareas', 'apuntes', 'carpetas', 'etiquetas', 'ajustes', 'layout'];
     }
 
     // El paso franco del administrador.
@@ -145,7 +155,8 @@ service cloud.firestore {
           // qué cuenta de Google lo subió, para poder decirlo si otra no lo encuentra
           && (!('cuenta' in request.resource.data.remoto) || textoCorto(request.resource.data.remoto.cuenta, 320))
           && (!('carpeta' in request.resource.data) || textoCorto(request.resource.data.carpeta, 200))
-          && (!('orden' in request.resource.data) || request.resource.data.orden is number);
+          && (!('orden' in request.resource.data) || request.resource.data.orden is number)
+          && (!('etiquetas' in request.resource.data) || listaCorta(request.resource.data.etiquetas, 12));
       }
 
       // carpetas: el esqueleto con el que la usuaria se organiza dentro de una asignatura.
@@ -164,7 +175,30 @@ service cloud.firestore {
           && request.resource.data.remoto is map
           && request.resource.data.remoto.proveedor in ['local', 'drive']
           && textoCorto(request.resource.data.remoto.id, 300)
-          && (!('cuenta' in request.resource.data.remoto) || textoCorto(request.resource.data.remoto.cuenta, 320));
+          && (!('cuenta' in request.resource.data.remoto) || textoCorto(request.resource.data.remoto.cuenta, 320))
+          && (!('etiquetas' in request.resource.data) || listaCorta(request.resource.data.etiquetas, 12));
+      }
+
+      // etiquetas: lo que un apunte ES, que pueden ser varias cosas a la vez.
+      //
+      // La otra mitad de organizarse. Una carpeta dice dónde vive algo y solo puede decir
+      // una cosa; una etiqueta dice qué es y se pueden poner varias. Por eso el catálogo
+      // es global y no por asignatura: «pasar a limpio» o «entregado» valen en todas, y
+      // tenerlas por asignatura obligaría a recrear las mismas cinco seis veces.
+      //
+      // Sin `asignatura`, entonces, y sin `remoto`: una etiqueta no tiene bytes en ningún
+      // sitio. Es el documento más pequeño de toda la base.
+      //
+      // El 60 de `nombre` es el mismo número que `TOPES.nombreEtiqueta` en
+      // src/lib/data/limites.ts. No hay fuente única: cambiar uno sin el otro produce o
+      // rechazos del servidor o validación muerta.
+      match /etiquetas/{etiquetaId} {
+        allow read, delete: if esPropietario(uid);
+        allow create, update: if esPropietario(uid)
+          && textoCorto(request.resource.data.nombre, 60)
+          && request.resource.data.nombre.size() > 0
+          && request.resource.data.color is string
+          && request.resource.data.color.size() <= 20;
       }
 
       // lo que venga después (asignaturas, proyectos, referencias…): mismo dueño y

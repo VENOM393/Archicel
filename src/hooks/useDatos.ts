@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useArchicel } from '@/lib/firebase/sesion';
-import { aFecha, deFecha, hoy, type Apunte, type Carpeta, type Evento, type Rango, type Tarea } from '@/lib/data';
+import { aFecha, deFecha, hoy, type Apunte, type Carpeta, type Etiqueta, type Evento, type Rango, type Tarea } from '@/lib/data';
 
 /** Ordena por fecha, luego por hora y por último por `id`, que nunca empata. */
 function ordenarEventos(l: Evento[]): Evento[] {
@@ -148,6 +148,24 @@ export function useApuntes(asignatura: string): [Apunte[], boolean] {
 /** Alfabético y sin distinguir mayúsculas, que es como espera verlo cualquiera. */
 function ordenarCarpetas(l: Carpeta[]): Carpeta[] {
   return [...l].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }) || a.id.localeCompare(b.id));
+}
+
+/** Igual que las carpetas: alfabético, y el desempate por `id` para que la lista no baile. */
+function ordenarEtiquetas(l: Etiqueta[]): Etiqueta[] {
+  return [...l].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }) || a.id.localeCompare(b.id));
+}
+
+/**
+ * Todas las etiquetas, que es un catálogo **global** y no por asignatura.
+ *
+ * «Pasar a limpio» o «Entregado» valen en cualquiera, y tenerlas por asignatura obligaría a
+ * recrear las mismas cinco seis veces. Lo que evita que se mezclen es la pantalla: la barra
+ * de una asignatura solo enseña las que tienen algo puesto allí.
+ */
+export function useEtiquetas(): [Etiqueta[], boolean] {
+  const { almacen } = useArchicel();
+  const escuchar = useCallback((cb: (l: Etiqueta[]) => void) => almacen.etiquetas.escuchar(cb), [almacen]);
+  return useLista(escuchar, ordenarEtiquetas, `${almacen.uid ?? ''}|etiquetas`);
 }
 
 /** Las carpetas de una asignatura, todas: el árbol lo arma la pantalla. */

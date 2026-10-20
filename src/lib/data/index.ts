@@ -13,7 +13,7 @@ import { crearAlmacenLocal } from './almacen-local';
 import { conEspejoLocal } from './espejo';
 import type { Almacen, Coleccion, Documento } from './almacen';
 import { TOPES, acortar } from './limites';
-import type { Apunte, Carpeta, ID } from './tipos';
+import type { Apunte, Carpeta, Etiqueta, ID } from './tipos';
 
 export * from './tipos';
 export * from './curso';
@@ -67,7 +67,7 @@ export function crearAlmacen(uid: string | null): Almacen {
  * con una cuenta se añade aquí y en `PASOS`**, y nada más: su marca es suya, así que
  * quien ya migró el resto la recibe en su próximo arranque sin repetir lo anterior.
  */
-export type ParteMigrada = 'eventos' | 'tareas' | 'ajustes' | 'layout' | 'carpetas' | 'apuntes';
+export type ParteMigrada = 'eventos' | 'tareas' | 'ajustes' | 'layout' | 'carpetas' | 'apuntes' | 'etiquetas';
 
 /**
  * La marca de antes, que era una para todo.
@@ -164,6 +164,13 @@ const apunteSubible = (a: Apunte): Apunte => ({
      muy antiguo quizá no. */
   creado: a.creado ?? Date.now(),
 });
+/* Las reglas aceptan hasta doce etiquetas y un nombre de 60. Lo de más se recorta aquí en
+   vez de dejar que la nube rechace la ficha **entera**: perder una etiqueta es molesto,
+   perder el apunte es otra cosa. */
+const etiquetaSubible = (e: Etiqueta): Etiqueta => ({
+  ...e,
+  nombre: acortar(e.nombre, TOPES.nombreEtiqueta),
+});
 
 const PASOS: Record<ParteMigrada, (local: Almacen, nube: Almacen) => Promise<Resultado>> = {
   eventos: (l, n) => subirColeccion(l.eventos, n.eventos),
@@ -172,6 +179,7 @@ const PASOS: Record<ParteMigrada, (local: Almacen, nube: Almacen) => Promise<Res
   layout: (l, n) => subirDocumento(l.layout('escritorio'), n.layout('escritorio')),
   carpetas: (l, n) => subirColeccion(l.carpetas, n.carpetas, carpetaSubible),
   apuntes: (l, n) => subirColeccion(l.apuntes, n.apuntes, apunteSubible),
+  etiquetas: (l, n) => subirColeccion(l.etiquetas, n.etiquetas, etiquetaSubible),
 };
 
 /** Dónde queda constancia de lo que la nube rechazó al migrar una parte. */
