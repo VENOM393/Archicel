@@ -159,12 +159,12 @@ export const RELEVO: Variants = {
 /**
  * El orden del dock, que es el orden del mundo.
  *
- * Las tres secciones están puestas en fila y en este orden. Si el dock las reordena, esta
- * lista va con él: es de donde sale el sentido del viaje, y una transición que empuja a
- * la izquierda mientras el agua del dock viaja a la derecha se lee como un fallo aunque
- * las dos animaciones sean impecables por separado.
+ * Las cuatro secciones están puestas en fila y en este orden. Si el dock las reordena,
+ * esta lista va con él: es de donde sale el sentido del viaje, y una transición que
+ * empuja a la izquierda mientras el agua del dock viaja a la derecha se lee como un fallo
+ * aunque las dos animaciones sean impecables por separado.
  */
-const ORDEN = ['/', '/calendario', '/horario'] as const;
+const ORDEN = ['/', '/calendario', '/horario', '/asignaturas'] as const;
 
 /**
  * Qué pantallas son el detalle de cuál.
@@ -174,10 +174,16 @@ const ORDEN = ['/', '/calendario', '/horario'] as const;
  */
 const DENTRO_DE: Record<string, string> = {
   '/dia': '/calendario',
-  /* Una asignatura cuelga del horario: se llega pulsando una clase. La clave va en la
-     ruta (`/asignatura/geometria`), así que aquí está la raíz y `seccionDe` resuelve por
-     prefijo — si no, cada asignatura nueva habría que añadirla a mano a esta lista. */
-  '/asignatura': '/horario',
+  /* Una asignatura cuelga de la estantería, que es la sección que existe para elegirla.
+     Colgaba del horario cuando la única puerta era pulsar una clase. Esa puerta sigue
+     abierta, y por eso ir del horario a una asignatura pasó a ser un viaje lateral —el
+     mismo que hace el agua del dock al saltar de Horario a Asignaturas— en vez de uno de
+     profundidad. Es correcto: son dos secciones distintas y se nota que lo son.
+
+     La clave va en la ruta (`/asignatura/geometria`), así que aquí está la raíz y
+     `seccionDe` resuelve por prefijo — si no, cada asignatura nueva habría que añadirla
+     a mano a esta lista. */
+  '/asignatura': '/asignaturas',
 };
 
 /**
@@ -355,6 +361,64 @@ export const PIEZA: Variants = {
     y: 0,
     filter: 'blur(0px)',
     transition: { duration: TIEMPO.paso, ease: CURVA.salida },
+  },
+};
+
+/**
+ * Un lomo de la estantería.
+ *
+ * Los libros no aparecen: **se colocan**. Llegan desde abajo, inclinados, y se enderezan
+ * al apoyarse — por eso el giro pivota en el pie (`transform-origin` en la hoja de
+ * estilos, que es una propiedad que Motion no toca) y no en el centro: un libro que gira
+ * sobre su mitad no se posa, flota.
+ *
+ * El `custom` es el índice del lomo, y de él salen la inclinación y la altura de caída.
+ * Alternar el lado es lo que separa una estantería de una fila de rectángulos: seis
+ * libros que caen exactamente igual se leen como una animación; seis que caen cada uno a
+ * su manera se leen como libros.
+ *
+ * Los otros dos estados son los de elegir uno. `elegido` no lleva `y`: mientras el cursor
+ * sigue encima, `whileHover` manda sobre esa propiedad y pelearse con él daría un salto.
+ * Lo que distingue al elegido es la escala y la luz, y la luz la pone el CSS.
+ */
+export const LOMO: Variants = {
+  fuera: (i: number = 0) => ({
+    opacity: 0,
+    y: 38 + (i % 3) * 9,
+    rotate: i % 2 === 0 ? -2.4 : 2.4,
+    filter: 'blur(7px)',
+  }),
+  dentro: {
+    opacity: 1,
+    y: 0,
+    rotate: 0,
+    filter: 'blur(0px)',
+    transition: { duration: TIEMPO.viaje, ease: CURVA.salida },
+  },
+  /* El que se abre crece. Solo escala: mientras el cursor sigue encima, `whileHover`
+     manda sobre `y` y disputárselo daría un salto justo al pulsar. */
+  elegido: { scale: 1.07, filter: 'blur(0px)', transition: MUELLE.vivo },
+  /**
+   * Los demás se retiran hacia la balda.
+   *
+   * Lo que se ve aquí es que **caen**, no que se apagan, y esa es toda la diferencia: el
+   * envoltorio de la página ya está bajando la opacidad de todo a cero en 155 ms, así que
+   * un `opacity: 0` propio encima la apagaba dos veces y a los 90 ms no quedaba nada que
+   * mirar — la estantería desaparecía antes de contar nada.
+   *
+   * La geometría sobrevive a ese fundido: un libro que baja y se encoge se sigue viendo
+   * bajar mientras se va. Por eso aquí hay desplazamiento y escala, y de opacidad solo lo
+   * justo para que se hundan en la sombra.
+   *
+   * Y es corto a propósito. Lo que dure más que la salida de la página no se llega a ver,
+   * solo a pagar en espera después de pulsar.
+   */
+  aparta: {
+    opacity: 0.3,
+    y: 30,
+    scale: 0.965,
+    filter: 'blur(4px)',
+    transition: { duration: 0.14, ease: CURVA.fuera },
   },
 };
 

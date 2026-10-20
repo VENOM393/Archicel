@@ -54,15 +54,37 @@ const SECCIONES = [
   {
     href: '/horario',
     titulo: 'Horario de clases',
-    /* Una asignatura es una vista de detalle del horario: mientras se está en ella el
-       dock sigue señalando aquí, en vez de quedarse sin nada marcado. */
-    tambien: ['/asignatura'],
+    /* Ya no lleva `tambien: ['/asignatura']`: la casa de una asignatura es la estantería,
+       que es la sección que existe para elegirla. Pulsar una clase sigue llevando a su
+       asignatura, pero entonces lo que se enciende es Asignaturas, que es donde se ha
+       ido — señalar Horario desde una pantalla que no cuelga de él era mentira. */
     /* un reloj: el horario responde a "a qué hora", no a "qué día" — esa es la del
        calendario, y con dos rejillas seguidas en el raíl no se distinguirían */
     icono: (
       <>
         <circle cx="12" cy="12" r="9" />
         <path d="M12 7v5.2l3.4 2" />
+      </>
+    ),
+  },
+  {
+    href: '/asignaturas',
+    titulo: 'Asignaturas',
+    /* La página de una asignatura es su detalle: mientras se está dentro, el dock sigue
+       señalando aquí. Por prefijo, así que `/asignatura/geometria` también la enciende. */
+    tambien: ['/asignatura'],
+    /* Tres libros sobre una balda, y el tercero apoyado en los otros.
+       Esa inclinación no es un adorno: con los tres de pie el icono se leía como un
+       gráfico de barras —tres rectángulos sobre una línea son barras, y no hay grosor
+       desigual que lo arregle—. Un libro ladeado no se parece a ningún gráfico.
+       El giro va en el atributo del SVG, que es suyo y no el `transform` que Motion
+       escribe en el botón de fuera. */
+    icono: (
+      <>
+        <rect x="2.9" y="7" width="5.5" height="12" rx="1.2" />
+        <rect x="10.1" y="4.6" width="3.8" height="14.4" rx="1.2" />
+        <rect x="14.9" y="8" width="4" height="11" rx="1.2" transform="rotate(12 14.9 19)" />
+        <path d="M2.2 21.1h19.6" />
       </>
     ),
   },

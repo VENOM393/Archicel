@@ -3161,3 +3161,207 @@
   }
   .marca b{font:600 13.5px/1 var(--ui);letter-spacing:.005em}
   .marca:hover{color:var(--ink-muted)}
+
+
+  /* ═══════════════════════════════════════════════════════
+     ESTANTERÍA — elegir asignatura
+     Seis lomos de pie sobre una balda. El ancho de cada uno son sus
+     horas de clase a la semana; la altura, realismo y nada más.
+     ═══════════════════════════════════════════════════════ */
+
+  /* Dos clases, no una: `.vista.on` también lleva dos y con una sola pierde. Escrito
+     como `.est` el `flex` no llegaría a aplicarse nunca y la página seguiría maquetando
+     en bloque, sin error y sin que se note hasta que algo no cabe. Ya pasó con `.asig`. */
+  .vista.est{display:flex;flex-direction:column;gap:22px;min-width:0;width:100%;max-width:1180px}
+
+  /* ── el alto de la pantalla ──
+     La misma mecánica que la agenda del día y la página de una asignatura: el límite se
+     pone en `.app`, que es quien contiene el dock, y de ahí hacia abajo cada capa reparte
+     lo que le sobra. Una estantería que desplaza es una estantería que no se ve de un
+     vistazo, y verla de un vistazo es toda la razón de que exista.
+
+     `height:100%` y no `auto` en `.body`: con `auto` la columna crece hasta su contenido,
+     `.app` la recorta y los pies de los libros quedan fuera. */
+  .app:has(.est){height:100dvh;overflow:hidden}
+  .app:has(.est) > .body{min-height:0;height:100%}
+  .body:has(.est){display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .body:has(.est) > :not(.pagina){flex:none}
+  .body:has(.est) > .pagina{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+  .vista.est{flex:1 1 auto;min-height:0}
+  .est-cab{flex:none}
+
+  /* ── la balda ──
+     Está puesta desde el primer fotograma y no se anima: los libros llegan a una
+     estantería que ya existe. Si la balda entrara con ellos, lo que se vería aparecer
+     sería una página, y lo que tiene que verse es cómo se llena. */
+  .est-fila{
+    position:relative;flex:1 1 auto;min-height:0;
+    display:flex;align-items:flex-end;justify-content:center;gap:10px;
+    list-style:none;margin:0;padding:0 0 14px;
+  }
+  /* La tabla: una línea clara justo bajo los pies y un canto oscuro debajo. Las dos
+     cosas, no una — con la línea sola los libros se apoyaban en un trazo flotante; el
+     canto es lo que le da grosor a la madera. */
+  /* El canto de la tabla empieza exactamente donde acaban los pies —`bottom` 11 más
+     3 de alto son los 14 del relleno de la fila—, porque dos píxeles de aire entre el
+     libro y la madera bastan para que los seis parezcan flotar. */
+  .est-fila::after{
+    content:'';position:absolute;left:0;right:0;bottom:11px;height:3px;
+    border-radius:1px;
+    background:linear-gradient(90deg,
+      transparent,
+      rgba(255,255,255,.34) 4%,
+      rgba(255,255,255,.62) 50%,
+      rgba(255,255,255,.34) 96%,
+      transparent);
+  }
+  /* Y debajo, el grueso de la madera vista de canto. Sin esto la balda es un trazo
+     flotando y no una tabla en la que se puede apoyar algo. */
+  .est-fila::before{
+    content:'';position:absolute;left:0;right:0;bottom:0;height:11px;
+    background:linear-gradient(180deg,
+      rgba(0,0,0,.78),
+      rgba(0,0,0,.42) 45%,
+      rgba(0,0,0,.10) 80%,
+      transparent);
+    pointer-events:none;
+  }
+
+  /* ── el hueco de cada libro ──
+     `flex:var(--peso)` con base 0: el grosor sale de las horas y se reparte el ancho que
+     haya. Cuatro horas ocupan exactamente el doble que dos, sin que nadie escriba un
+     número. El tope existe para que en una pantalla ancha los libros no se vuelvan
+     puertas. */
+  .est-hueco{
+    flex:var(--peso,2) 1 0;
+    min-width:72px;max-width:226px;
+    display:flex;align-items:flex-end;min-height:0;height:100%;
+  }
+  .est-puerta{
+    display:flex;align-items:flex-end;width:100%;height:100%;
+    text-decoration:none;color:inherit;min-height:0;
+  }
+  .est-puerta:focus-visible{outline:none}
+
+  /* ── el lomo ──
+     El degradado en diagonal no es atmósfera —esa vive en la fotografía y solo ahí—: es
+     la forma del objeto. Un lomo es un cilindro de papel, le da la luz por el centro y se
+     apaga en los cantos, y sin eso lo que queda es un rectángulo de color, que es
+     justamente la tarjeta idéntica que el contrato prohíbe como estructura de pantalla.
+
+     El color va al 17 % sobre carbón. Seis lomos a plena saturación serían un arcoíris y
+     un segundo color saturado por fila; al 17 % el color identifica sin gritar, que es el
+     mismo criterio con el que se tiñen los iconos de los ficheros. */
+  .est-lomo{
+    position:relative;display:flex;flex-direction:column;align-items:center;
+    width:100%;height:var(--alto,96%);min-height:0;
+    padding:13px 8px 11px;
+    border:1px solid color-mix(in srgb,var(--tc) 24%,var(--hairline));
+    border-radius:var(--r-sm) var(--r-sm) 3px 3px;
+    /* Opaco, y no es un detalle: a través de un lomo translúcido se veía la casa, y
+       seis cristales de colores delante de una fotografía no son una estantería — son
+       exactamente el «cristal sobre cristal» que el contrato prohíbe. Un libro tapa lo
+       que tiene detrás; eso es lo que lo convierte en un objeto y no en un panel. */
+    background:
+      linear-gradient(180deg,rgba(255,255,255,.085),rgba(255,255,255,0) 16%),
+      linear-gradient(100deg,
+        rgba(0,0,0,.42) 0%,
+        rgba(0,0,0,.12) 15%,
+        rgba(255,255,255,.07) 52%,
+        rgba(0,0,0,.16) 85%,
+        rgba(0,0,0,.40) 100%),
+      color-mix(in srgb,var(--tc) 21%,#16161B);
+    box-shadow:0 14px 32px rgba(0,0,0,.55),0 3px 8px rgba(0,0,0,.5);
+    /* El giro de la variante pivota en el pie: un libro se posa sobre la balda, no gira
+       sobre su mitad. `transform-origin` no es `transform`, así que puede vivir aquí sin
+       disputarle nada a Motion. */
+    transform-origin:50% 100%;
+    /* El color responde al cursor desde el CSS porque es lo único que Motion no toca en
+       este elemento: de `transform` se ocupa la variante, y una propiedad tiene un dueño. */
+    transition:
+      background-color 260ms var(--ease-soft),
+      border-color 260ms var(--ease-soft),
+      box-shadow 260ms var(--ease-soft);
+  }
+
+  /* Los dos filetes de la encuadernación. Son lo que separa un libro de una pestaña. */
+  .est-filete{
+    flex:none;width:58%;height:1px;
+    background:color-mix(in srgb,var(--tc) 60%,transparent);
+  }
+  /* Sin `margin-bottom:auto` aquí: los márgenes automáticos del nombre son los únicos
+     que reparten el hueco libre, y por eso el título queda centrado entre los dos
+     filetes. Con los dos puestos había tres márgenes repartiéndose el sitio y el nombre
+     terminaba pegado al pie. */
+  .est-filete.arriba{margin-bottom:0}
+
+  /* ── el título, vertical y de abajo arriba ──
+     Como se encuaderna en español: para leerlo se inclina la cabeza a la izquierda. La
+     rotación vive en este elemento y no en el lomo, que lo anima Motion.
+
+     `margin-block:auto` es lo que lo centra entre el filete de arriba y el pie, y
+     `flex:0 1 auto` con `overflow` lo que impide que un nombre largo empuje al código
+     fuera del libro en una pantalla baja. */
+  .est-nombre{
+    /* Márgenes físicos y no lógicos: en `writing-mode: vertical-rl` el eje de bloque
+       corre en horizontal, así que `margin-block:auto` ponía los márgenes a los lados y
+       el título se quedaba pegado a un extremo. Es el fallo que no se ve leyendo el
+       código, porque la propiedad lógica parece la correcta justo hasta que el elemento
+       escribe en vertical. */
+    margin-top:auto;margin-bottom:auto;
+    flex:0 1 auto;min-height:0;
+    writing-mode:vertical-rl;transform:rotate(180deg);
+    font-size:16px;font-weight:600;letter-spacing:-.012em;line-height:1;
+    color:var(--ink);text-shadow:var(--halo);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+
+  .est-pie{flex:none;display:flex;flex-direction:column;align-items:center;gap:9px;width:100%}
+  /* El código es una referencia real de la escuela, así que va en la monoespaciada
+     tabular, igual que en cada clase del horario. */
+  .est-cod{
+    font-family:var(--data);font-size:10.5px;font-variant-numeric:tabular-nums;
+    letter-spacing:.045em;color:var(--ink-subtle);
+  }
+
+  /* ── con el cursor encima, y el elegido ──
+     Se remarca con color, no se ensancha: un libro que crece empuja a sus vecinos y toda
+     la fila baila para señalar uno solo. Lo que sube es la luz; lo que se levanta lo lleva
+     Motion. */
+  .est-puerta:hover .est-lomo,
+  .est-puerta:focus-visible .est-lomo,
+  .est-lomo.es-elegido{
+    border-color:color-mix(in srgb,var(--tc) 52%,var(--hairline-lit));
+    background:
+      linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,0) 16%),
+      linear-gradient(100deg,
+        rgba(0,0,0,.34) 0%,
+        rgba(0,0,0,.07) 15%,
+        rgba(255,255,255,.10) 52%,
+        rgba(0,0,0,.11) 85%,
+        rgba(0,0,0,.32) 100%),
+      color-mix(in srgb,var(--tc) 38%,#17171C);
+    box-shadow:0 22px 46px rgba(0,0,0,.6),0 5px 12px rgba(0,0,0,.5);
+  }
+  .est-puerta:hover .est-filete,
+  .est-puerta:focus-visible .est-filete,
+  .est-lomo.es-elegido .est-filete{background:var(--tc)}
+  .est-puerta:hover .est-cod,
+  .est-puerta:focus-visible .est-cod,
+  .est-lomo.es-elegido .est-cod{color:var(--ink-muted)}
+
+  /* El teclado no tiene cursor, así que el anillo es lo único que dice dónde está. Va
+     fuera del lomo para que no se recorte contra su propio borde. */
+  .est-puerta:focus-visible .est-lomo{
+    outline:2px solid var(--accent-linea);outline-offset:3px;
+  }
+
+  .est-vacia{color:var(--ink-subtle);font-size:14px;margin:0}
+
+  /* En una pantalla estrecha seis lomos no caben con el nombre legible: la fila pasa a
+     desplazarse de lado en vez de aplastarlos. El escritorio es lo que se verifica aquí;
+     esto solo evita que lo otro se vea roto. */
+  @media (max-width:760px){
+    .est-fila{justify-content:flex-start;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+    .est-hueco{flex:none;width:96px}
+  }

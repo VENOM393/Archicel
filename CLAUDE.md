@@ -469,6 +469,34 @@ Cuatro cosas que no se deducen:
 Y una de interfaz: **`onDragStartCapture` y no `onDragStart`**. Motion declara el suyo —el de su
 gesto de arrastre— y tapa el del DOM, que es el que lleva `dataTransfer`.
 
+## La estantería: elegir asignatura
+
+`/asignaturas`, la cuarta sección del dock. Seis lomos de pie sobre una balda, el título
+en vertical y el código al pie. **Es la puerta de las asignaturas**; pulsar una clase en el
+horario sigue llevando a la suya, pero la casa de una asignatura es esta.
+
+Cuatro cosas que no se deducen del código:
+
+- **El ancho de un lomo son sus horas de clase a la semana**, sacadas de `HORARIO` con
+  `horasSemanalesDe`. Cuatro horas es un libro del doble de ancho que dos. Nadie lo lee en
+  ningún sitio: se ve, y resulta ser verdad. La **altura** no es un dato y no finge serlo
+  —sale del código de la asignatura para que no cambie— y está porque en una estantería
+  real los libros no están enrasados.
+- **El lomo es opaco, y eso no es un detalle.** Translúcido se veía la casa a través de los
+  libros, que es el «cristal sobre cristal» que el contrato prohíbe: seis cristales de
+  colores delante de una fotografía no son una estantería. Un libro tapa lo que tiene
+  detrás, y eso es lo que lo convierte en un objeto.
+- **Con el cursor encima se remarca, no se ensancha.** Un libro que crece empuja a sus
+  vecinos y toda la fila baila para señalar uno. Lo que sube es la luz —y esa la lleva el
+  CSS, porque es lo único que Motion no toca aquí—; el levantarse lo lleva `whileHover`.
+- **`margin-block` no centra un texto vertical.** En `writing-mode: vertical-rl` el eje de
+  bloque corre en horizontal, así que `margin-block:auto` pone los márgenes a los lados y
+  el título se queda pegado a un extremo. Van `margin-top` y `margin-bottom` físicos. Es el
+  fallo que no se ve leyendo, porque la propiedad lógica parece la correcta.
+
+Y la del movimiento, que está en [MOVIMIENTO.md § 3.1b](docs/frontend/MOVIMIENTO.md):
+dentro de una página que se va, lo que se ve es la **geometría**, no la opacidad.
+
 ## La página de una asignatura
 
 `/asignatura/[clave]`, una por cada entrada de `ASIGNATURAS`. Se llega pulsando una clase en el
