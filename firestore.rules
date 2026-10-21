@@ -75,7 +75,7 @@ service cloud.firestore {
 
     // las colecciones con forma fija; el comodín de abajo no debe tocarlas
     function estaValidada(coleccion) {
-      return coleccion in ['eventos', 'tareas', 'apuntes', 'carpetas', 'etiquetas', 'ajustes', 'layout'];
+      return coleccion in ['eventos', 'tareas', 'apuntes', 'carpetas', 'etiquetas', 'sesiones', 'ajustes', 'layout'];
     }
 
     // El paso franco del administrador.
@@ -210,6 +210,29 @@ service cloud.firestore {
           && request.resource.data.nombre.size() > 0
           && request.resource.data.color is string
           && request.resource.data.color.size() <= 20;
+      }
+
+      // sesiones: cuánto tiempo se ha estudiado, de qué y cuándo.
+      //
+      // Es el producto de los métodos de estudio. El cronómetro es la excusa: lo que se
+      // pidió fue «ver a qué le he dedicado más tiempo», y eso solo se puede contestar si
+      // cada rato estudiado deja constancia.
+      //
+      // Una fila POR SESIÓN y no una por asignatura y día que se va sumando: desde las
+      // filas sueltas se puede reconstruir el total, pero desde el total no se puede
+      // saber a qué hora rinde mejor. Lo que no se guarda no se recupera.
+      match /sesiones/{sesionId} {
+        allow read, delete: if esPropietario(uid);
+        allow create, update: if esPropietario(uid)
+          && textoCorto(request.resource.data.asignatura, 120)
+          && request.resource.data.asignatura.size() > 0
+          && fechaValida(request.resource.data.fecha)
+          && request.resource.data.minutos is int
+          && request.resource.data.minutos > 0
+          // un día entero: por encima de eso no es una sesión de estudio
+          && request.resource.data.minutos <= 1440
+          && textoCorto(request.resource.data.metodo, 40)
+          && (!('ini' in request.resource.data) || minutosValidos(request.resource.data.ini));
       }
 
       // lo que venga después (asignaturas, proyectos, referencias…): mismo dueño y

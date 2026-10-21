@@ -3517,3 +3517,202 @@
     .est-fila{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
     .est-hueco{flex:none;width:104px}
   }
+
+
+  /* ═══════════════════════════════════════════════════════
+     MÉTODOS DE ESTUDIO — el taller
+     Tres tarjetas que enseñan dentro lo que hacen, y que al
+     pulsarlas crecen hasta la pantalla. El viaje lo hace
+     `layoutId`: aquí no hay una sola medida de posición.
+     ═══════════════════════════════════════════════════════ */
+
+  /* Dos clases, no una: `.vista.on` también lleva dos y con una sola pierde. Ya pasó con
+     `.asig` y con `.est`; escrito `.met` el flex no llegaría a aplicarse nunca. */
+  .vista.met{display:flex;flex-direction:column;gap:18px;min-width:0;width:100%;max-width:none}
+
+  /* El alto de la pantalla, la misma mecánica que las otras dos pantallas llenas. */
+  .app:has(.met){height:100dvh;overflow:hidden}
+  .app:has(.met) > .body{min-height:0;height:100%}
+  .body:has(.met){display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .body:has(.met) > :not(.pagina){flex:none}
+  .body:has(.met) > .pagina{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+  .vista.met{flex:1 1 auto;min-height:0}
+  .met-cab{flex:none}
+
+  .met-titulo{
+    margin:0;font-size:clamp(34px,4.4vw,56px);font-weight:700;
+    letter-spacing:-.042em;line-height:.95;text-shadow:0 2px 18px rgba(0,0,0,.45);
+  }
+  .met-placa{
+    margin:12px 0 0;display:inline-flex;align-items:center;gap:10px;
+    padding:7px 13px;border-radius:var(--r-sm);
+    background:rgba(var(--panel-rgb),.55);border:1px solid var(--hairline);
+    backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+    font-family:var(--data);font-size:12.5px;color:var(--ink-subtle);
+  }
+  .met-placa b{font-weight:500;color:var(--ink)}
+  .met-placa i{width:3px;height:3px;border-radius:999px;background:var(--hairline-lit)}
+
+  /* La zona de trabajo, de borde a borde como las demás. */
+  .met-zona{
+    flex:1 1 auto;min-height:0;min-width:0;display:flex;
+    margin:0 -18px;width:calc(100% + 36px);padding:0 18px 0;
+  }
+  /* La fila lleva **tope de alto y se centra**. Sin el tope, tres tarjetas se estiraban
+     hasta 612 px para enseñar un dibujo de 150 y un párrafo: el nombre quedaba en el
+     sótano y la tarjeta se leía como una pantalla a medio cargar. */
+  .met-taller{
+    flex:1 1 auto;min-height:0;min-width:0;
+    display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+    grid-template-rows:minmax(0,470px);align-content:center;gap:16px;
+  }
+
+  /* ── una tarjeta ──
+     Cristal de la casa: carbón neutro sobre la fotografía. El color del método es un
+     detalle de dentro —el anillo, la escalera— y nunca el relleno de la superficie: tres
+     tarjetas teñidas serían el arcoíris que estas pantallas ya dejaron de ser. */
+  .met-tarjeta{
+    appearance:none;text-align:left;font:inherit;color:inherit;cursor:pointer;
+    display:flex;flex-direction:column;min-width:0;min-height:0;
+    padding:22px;border-radius:var(--r-xl);
+    background:rgba(var(--panel-rgb),.72);border:1px solid var(--hairline);
+    backdrop-filter:blur(26px) saturate(145%);-webkit-backdrop-filter:blur(26px) saturate(145%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.1),
+      inset 0 -1px 0 rgba(0,0,0,.35),
+      0 24px 54px -28px rgba(0,0,0,.95);
+    /* El color responde al cursor desde el CSS porque es lo único que Motion no toca aquí:
+       de `transform` se ocupa `whileHover`, y una propiedad tiene un dueño. */
+    transition:background-color 300ms var(--ease-soft),border-color 300ms var(--ease-soft);
+  }
+  .met-tarjeta:hover{background:rgba(var(--panel-strong-rgb),.78);border-color:var(--hairline-lit)}
+  .met-tarjeta:focus-visible{outline:2px solid var(--accent-linea);outline-offset:3px}
+
+  .met-muestra{flex:1 1 auto;min-height:0;display:grid;place-items:center;color:var(--tc)}
+  /* Las muestras, contenidas: son lo que hace el método en pequeño, no un cartel. A
+     tamaño libre se comían la tarjeta y el nombre quedaba en el sótano. */
+  .met-anillo{width:min(150px,62%);height:auto;display:block}
+  .met-alzado{width:min(172px,72%);height:auto;display:block}
+
+  /* La escalera del repaso: cada peldaño más corto, que es el método dibujado. Al 72 %
+     de su color, porque tres tarjetas a plena saturación vuelven a ser el arcoíris. */
+  .met-escalera{display:flex;flex-direction:column;gap:8px;width:min(188px,76%)}
+  .met-peldano{height:9px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}
+  .met-peldano i{display:block;height:100%;border-radius:999px;transform-origin:left center;opacity:.78}
+
+  .met-nombre{margin:16px 0 6px;font-size:21px;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+  .met-nombre.grande{margin:0;font-size:28px;letter-spacing:-.028em}
+  /* Dos líneas reservadas: una descripción de una línea y otra de dos dejaban los
+     títulos a alturas distintas y la fila se leía desalineada. Es la misma razón por la
+     que el nombre de una celda de apuntes reserva dos. */
+  .met-pie{font-size:13px;line-height:1.5;color:var(--ink-subtle);min-height:3em}
+  .met-ir{
+    margin-top:14px;display:inline-flex;align-items:center;gap:6px;
+    font-size:12.5px;color:var(--accent-linea);
+    opacity:0;transform:translateX(-8px);
+    transition:opacity 260ms var(--ease-soft),transform 380ms var(--ease-out);
+  }
+  .met-tarjeta:hover .met-ir,
+  .met-tarjeta:focus-visible .met-ir{opacity:1;transform:translateX(0)}
+  @media (hover:none){ .met-ir{opacity:1;transform:none} }
+
+  /* ── la tarjeta abierta ──
+     Es la misma caja: comparte `layoutId` con la pequeña, así que no hay dos superficies
+     sino una que crece. De ahí que repita el cristal en vez de heredarlo. */
+  .met-abierto{
+    flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column;
+    padding:22px 24px;border-radius:var(--r-xl);
+    background:rgba(var(--panel-rgb),.72);border:1px solid var(--hairline);
+    backdrop-filter:blur(26px) saturate(145%);-webkit-backdrop-filter:blur(26px) saturate(145%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.1),
+      inset 0 -1px 0 rgba(0,0,0,.35),
+      0 28px 64px -30px rgba(0,0,0,1);
+  }
+  .met-abierto-cab{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+  .met-abierto-cuerpo{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+
+  /* ── el pomodoro ── */
+  .met-pomo{flex:1 1 auto;min-height:0;display:flex;gap:26px;min-width:0}
+  .met-pomo-reloj{
+    flex:0 0 300px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+    padding:18px;border-radius:var(--r-lg);
+    background:rgba(255,255,255,.035);border:1px solid var(--hairline);
+  }
+  .met-pomo-anillo{position:relative;width:216px;height:216px}
+  .met-pomo-anillo svg{width:100%;height:100%;display:block}
+  .met-pomo-cifra{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  }
+  .met-pomo-min{
+    font-family:var(--data);font-size:42px;font-variant-numeric:tabular-nums;
+    letter-spacing:-.025em;color:var(--ink);
+  }
+  .met-pomo-fase{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-subtle)}
+  .met-pomo-que{margin:0;font-size:15px;font-weight:500;color:var(--ink);text-align:center}
+
+  .met-pomo-lados{flex:1 1 auto;min-width:0;min-height:0;display:flex;flex-direction:column;gap:16px}
+
+  .met-ajustes{
+    flex:none;display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;
+    padding:16px 18px;border-radius:var(--r-lg);
+    background:rgba(255,255,255,.035);border:1px solid var(--hairline);
+  }
+  .met-dur{display:flex;flex-direction:column;gap:7px;min-width:0}
+  /* El selector se queda con lo que sobra, pero con suelo: por debajo de 240 px el nombre
+     de una asignatura larga se corta y el desplegable deja de decir qué hay dentro. */
+  .met-dur-asig{flex:1 1 240px;min-width:240px}
+  .met-dur-et{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-subtle)}
+  .met-dur-ops{display:flex;gap:6px}
+  .met-dur-op{
+    appearance:none;font:inherit;cursor:pointer;
+    display:inline-flex;align-items:baseline;gap:4px;padding:7px 11px;border-radius:var(--r-sm);
+    background:rgba(255,255,255,.04);border:1px solid var(--hairline);
+    font-family:var(--data);font-size:11.5px;color:var(--ink-subtle);
+    transition:background-color 220ms var(--ease-soft),border-color 220ms var(--ease-soft),color 220ms var(--ease-soft);
+  }
+  .met-dur-op b{font-weight:500;font-size:13px}
+  .met-dur-op:hover:not(:disabled){border-color:var(--hairline-lit);color:var(--ink-muted)}
+  .met-dur-op.on{background:rgba(255,255,255,.09);border-color:var(--hairline-lit);color:var(--ink)}
+  /* Mientras corre no se cambia la duración: cambiarla a mitad haría que lo que se anote
+     al terminar no fuera lo que de verdad se estudió. */
+  .met-dur-op:disabled{opacity:.42;cursor:not-allowed}
+
+  /* ── el registro, que es el producto ── */
+  .met-registro{
+    flex:1 1 auto;min-height:0;display:flex;flex-direction:column;
+    padding:16px 18px;border-radius:var(--r-lg);
+    background:rgba(255,255,255,.035);border:1px solid var(--hairline);
+  }
+  .met-registro-cab{flex:none;display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
+  .met-registro-cab h3{margin:0;font-size:16px;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+  .met-registro-cab span{font-size:11.5px;color:var(--ink-subtle)}
+  .met-registro-vacio{margin:0;font-size:13px;line-height:1.5;color:var(--ink-subtle);max-width:40ch}
+  .met-registro-pie{margin:12px 0 0;flex:none;font-size:11.5px;color:var(--ink-subtle)}
+
+  .met-filas{list-style:none;margin:0;padding:0;flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:3px}
+  .met-fila{display:grid;grid-template-columns:auto minmax(0,1fr) 110px 74px;align-items:center;gap:12px;padding:7px 4px}
+  .met-punto{width:8px;height:8px;border-radius:999px;background:var(--tc);flex:none}
+  .met-fila-nombre{font-size:13.5px;font-weight:400;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .met-fila-barra{height:9px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden}
+  .met-fila-barra i{display:block;height:100%;border-radius:999px;background:var(--tc);transform-origin:left center}
+  .met-fila-tiempo{
+    font-family:var(--data);font-size:12.5px;font-variant-numeric:tabular-nums;
+    color:var(--ink-muted);text-align:right;
+  }
+
+  /* ── un método que todavía no es ── */
+  .met-pordefinir{max-width:62ch;display:flex;flex-direction:column;gap:14px}
+  .met-pordefinir-txt{margin:0;font-size:15px;line-height:1.55;color:var(--ink-muted)}
+  .met-faltan{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:9px}
+  .met-faltan li{font-size:13.5px;line-height:1.5;color:var(--ink-subtle)}
+  .met-pordefinir-pie{margin:0;font-family:var(--data);font-size:11.5px;color:var(--ink-subtle)}
+
+  /* En estrecho las tres tarjetas se apilan y el pomodoro deja de ser dos columnas. El
+     escritorio es lo que se verifica aquí; esto solo evita que lo otro se vea roto. */
+  @media (max-width:860px){
+    .met-taller{grid-template-columns:1fr;overflow-y:auto}
+    .met-pomo{flex-direction:column}
+    .met-pomo-reloj{flex:none}
+  }

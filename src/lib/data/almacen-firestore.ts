@@ -20,7 +20,7 @@ import {
 
 import { getDb } from '@/lib/firebase/config';
 import { nuevoId, type Almacen, type Coleccion, type Desuscribir, type Documento } from './almacen';
-import type { Ajustes, Apunte, Carpeta, Etiqueta, Evento, ID, Layout, Rango, Tarea } from './tipos';
+import type { Ajustes, Apunte, Carpeta, Etiqueta, Evento, ID, Layout, Rango, Sesion, Tarea } from './tipos';
 
 /**
  * Por qué el campo de orden es un parámetro y no siempre `fecha`.
@@ -145,6 +145,9 @@ export function crearAlmacenFirestore(uid: string): Almacen | null {
        documentos que no tienen el campo por el que se ordena, y devuelve lista vacía sin
        decir nada. Una etiqueta siempre tiene nombre. */
     etiquetas: crearColeccion<Etiqueta>(db, `${raiz}/etiquetas`, 'nombre', []),
+    /* por `fecha`, que toda sesión lleva, y así el rango del almacén funciona sin tocar
+       nada: pedir «este mes» es el mismo `where` que ya usan eventos y tareas. */
+    sesiones: crearColeccion<Sesion>(db, `${raiz}/sesiones`, 'fecha', ['ini']),
     ajustes: crearDocumento<Ajustes>(db, `${raiz}/ajustes/app`),
     layout: (superficie: string) => crearDocumento<Layout>(db, `${raiz}/layout/${superficie}`),
   };

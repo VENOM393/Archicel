@@ -1,6 +1,7 @@
 # Archicel's
 
-App web personal. Hay un prototipo visual completo publicado como artifact; el proyecto Next.js aun no esta creado.
+App web personal, en Next.js y publicada en Vercel. El prototipo visual que la originó sigue
+publicado como artifact y sirve de referencia de dirección, no de código.
 
 ## Producto
 
@@ -596,6 +597,41 @@ Lo que no se deduce leyendo el código:
   lo que se guardó en el equipo antes del cambio a Drive: existe, se puede abrir, pero no se ve.
   Viene de antes de esta pantalla y no se ha tocado aquí.
 
+## Métodos de estudio
+
+`/metodos`, la quinta del dock. Tres tarjetas de cristal y **cada una enseña dentro lo que
+hace**: el anillo del pomodoro, la escalera de repasos, el alzado a trazo. Al pulsar una
+**crece hasta ocupar la pantalla** y dentro va toda la configuración de ese método — no hay
+pantalla de ajustes aparte.
+
+**Hoy funciona el pomodoro.** Los otros dos abren igual y dicen que están por definir: de la
+repetición espaciada quedan decisiones abiertas y de Sketchap no se sabe aún qué es. Un
+método a medias que parece terminado es peor que uno que dice que todavía no está.
+
+Cinco cosas que no se deducen del código:
+
+- **Lo que se guarda es cuándo empezó, nunca cuánto queda.** Es lo que hace que el
+  cronómetro sobreviva a recargar, a cambiar de sección y a cerrar la pestaña. Y el latido
+  **recalcula contra el reloj real** en vez de descontar un segundo: los navegadores
+  estrangulan los temporizadores de fondo, así que un contador que se descuenta a sí mismo
+  vuelve con el número equivocado.
+- **Vive en `localStorage`, no en Firestore**, y no es pereza: es el estado de un aparato en
+  esta ventana. En la nube, arrancar un pomodoro en el portátil pondría el móvil a contar.
+- **Se apunta una fila por sesión, no una por asignatura y día.** Desde las filas sueltas se
+  reconstruye el total; desde el total no se puede saber a qué hora rinde mejor.
+- **Un pomodoro abandonado no cuenta.** Contar los trece minutos sería más fiel al reloj,
+  pero convierte el cronómetro en algo que se empieza y se deja para inflar el total — y
+  entonces la tabla deja de decir la verdad, que es lo único que se le pidió.
+- **El anillo parado está vacío, no lleno.** `restante` vale cero quieto, así que
+  `1 - restante/total` daba la vuelta entera pintada: un pomodoro recién terminado en vez
+  de uno que no ha empezado.
+
+El registro —«a qué le has dedicado tiempo»— **es el producto**; el cronómetro es la excusa.
+Nada de rachas, y el total no se presenta como una meta: es un espejo.
+
+El detalle, con la colección `sesiones` y lo que falta, en
+[docs/frontend/METODOS.md](docs/frontend/METODOS.md).
+
 ## El repositorio
 
 **https://github.com/VENOM393/Archicel** — el repositorio de todo el proyecto: la
@@ -625,6 +661,7 @@ docs/frontend/      SKILLS.md — uso de las skills
                     MOVIMIENTO.md — el sistema de animación (Motion)
                     WIDGETS.md — arquitectura del escritorio y modo edición
                     INSTALACION.md — la app como programa instalable (PWA)
+                    METODOS.md — el taller de métodos de estudio y el pomodoro
 docs/arquitectura/  ARQUITECTURA.md — capas, extensión y rendimiento medido
 docs/data/          FIRESTORE.md — modelo · SEGURIDAD.md — revisión · CUENTAS.md — acceso
 docs/integraciones/  CANVAS.md — API del campus de la UCAM y el motor que la consume

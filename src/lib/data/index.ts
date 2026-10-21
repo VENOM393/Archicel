@@ -67,7 +67,7 @@ export function crearAlmacen(uid: string | null): Almacen {
  * con una cuenta se añade aquí y en `PASOS`**, y nada más: su marca es suya, así que
  * quien ya migró el resto la recibe en su próximo arranque sin repetir lo anterior.
  */
-export type ParteMigrada = 'eventos' | 'tareas' | 'ajustes' | 'layout' | 'carpetas' | 'apuntes' | 'etiquetas';
+export type ParteMigrada = 'eventos' | 'tareas' | 'ajustes' | 'layout' | 'carpetas' | 'apuntes' | 'etiquetas' | 'sesiones';
 
 /**
  * La marca de antes, que era una para todo.
@@ -180,6 +180,7 @@ const PASOS: Record<ParteMigrada, (local: Almacen, nube: Almacen) => Promise<Res
   carpetas: (l, n) => subirColeccion(l.carpetas, n.carpetas, carpetaSubible),
   apuntes: (l, n) => subirColeccion(l.apuntes, n.apuntes, apunteSubible),
   etiquetas: (l, n) => subirColeccion(l.etiquetas, n.etiquetas, etiquetaSubible),
+  sesiones: (l, n) => subirColeccion(l.sesiones, n.sesiones),
 };
 
 /** Dónde queda constancia de lo que la nube rechazó al migrar una parte. */

@@ -159,12 +159,12 @@ export const RELEVO: Variants = {
 /**
  * El orden del dock, que es el orden del mundo.
  *
- * Las cuatro secciones están puestas en fila y en este orden. Si el dock las reordena,
+ * Las cinco secciones están puestas en fila y en este orden. Si el dock las reordena,
  * esta lista va con él: es de donde sale el sentido del viaje, y una transición que
  * empuja a la izquierda mientras el agua del dock viaja a la derecha se lee como un fallo
  * aunque las dos animaciones sean impecables por separado.
  */
-const ORDEN = ['/', '/calendario', '/horario', '/asignaturas'] as const;
+const ORDEN = ['/', '/calendario', '/horario', '/asignaturas', '/metodos'] as const;
 
 /**
  * Qué pantallas son el detalle de cuál.
@@ -495,6 +495,37 @@ export const LETRA: Variants = {
     filter: 'blur(0px)',
     transition: { duration: TIEMPO.paso, ease: CURVA.salida },
   },
+};
+
+/**
+ * Una tarjeta de método que se abre a pantalla.
+ *
+ * **El viaje de la tarjeta no está aquí**, y esa ausencia es el diseño: lo hace `layoutId`.
+ * La tarjeta pequeña y la grande son el mismo `layoutId`, así que Motion mide las dos cajas
+ * en el DOM real y lleva una a la otra él solo. Es el mismo mecanismo que el agua del dock
+ * y la píldora del calendario, y por la misma razón: la posición se **deduce**, no se
+ * calcula, así que no hay forma de que se desincronice.
+ *
+ * Lo que sí está aquí es lo de dentro: el contenido de la tarjeta abierta, que llega
+ * **después** de que la caja haya terminado de crecer. Si entrara a la vez, se leería como
+ * dos cosas pasando encima de la misma, que es como se consigue que algo bien hecho
+ * parezca recargado.
+ */
+export const DENTRO_DEL_METODO: Variants = {
+  fuera: { opacity: 0, y: 14, filter: 'blur(6px)' },
+  dentro: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: { duration: TIEMPO.paso, ease: CURVA.salida, delay: 0.14, staggerChildren: ESCALON },
+  },
+  saliendo: { opacity: 0, y: 6, filter: 'blur(4px)', transition: { duration: 0.12, ease: CURVA.fuera } },
+};
+
+/** Las demás tarjetas mientras una está abierta: se van, no se quedan detrás. */
+export const METODO_APARTADO: Variants = {
+  dentro: { opacity: 1, scale: 1, transition: MUELLE.normal },
+  saliendo: { opacity: 0, scale: 0.97, transition: { duration: TIEMPO.roce, ease: CURVA.fuera } },
 };
 
 /** El velo de las hojas modales. No se mueve: solo aparece y se va. */

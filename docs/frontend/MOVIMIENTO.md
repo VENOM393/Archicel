@@ -62,6 +62,8 @@ Por eso cada variante tiene **tres** estados y no dos: `fuera`, `dentro`, `salie
 | `COLUMNA` | columnas de `/asignaturas` | Suben con muelle y escalonadas, y los dos estados de elegir una |
 | `CELDA` | celdas de la rejilla de apuntes | Entra creciendo; el recolocado lo lleva `layout`, no el alto |
 | `MES` | la rejilla del calendario | Viaja en la dirección en que se navega de mes |
+| `DENTRO_DEL_METODO` | la tarjeta abierta de `/metodos` | El contenido llega **después** de que la caja termine de crecer |
+| `METODO_APARTADO` | las tarjetas que no se pulsaron | Se apartan, no se funden: la elegida tiene que leerse como elegida |
 | `VELO` | telón de las hojas | Solo opacidad |
 | `HOJA` | hojas modales | Sube desde abajo con muelle |
 | `AVISO` | toast | Sube desde abajo, centrado |
@@ -89,7 +91,7 @@ derecha. Un solo movimiento, repartido entre el indicador y la pantalla.
 De ahí que el orden de las secciones viva junto a `viajeEntre` y no en el componente:
 
 ```ts
-const ORDEN = ['/', '/calendario', '/horario', '/asignaturas'];
+const ORDEN = ['/', '/calendario', '/horario', '/asignaturas', '/metodos'];
 ```
 
 **Si el dock se reordena, esta lista va con él.** Es lo único que hay que acordarse de
@@ -101,6 +103,22 @@ de `/horario`, aunque desde el horario también se llegue pulsando una clase. La
 consecuencia es correcta y conviene saberla: ir del horario a una asignatura es un viaje
 **lateral**, no de profundidad, porque son dos secciones distintas y el agua del dock
 también viaja.
+
+### 3.1a · La tarjeta que crece: `layoutId`, y el contenido va detrás
+
+En `/metodos` una tarjeta no se sustituye por una pantalla: **es** la pantalla. La pequeña
+y la abierta comparten `layoutId`, así que Motion encuentra la misma caja en otro sitio
+del DOM y la lleva de una a otra midiendo lo que hay. Es la regla 4.3 otra vez, a tamaño
+de página.
+
+Lo que sí hay que decir es el **orden**: `DENTRO_DEL_METODO` lleva `delay` para que el
+contenido entre **cuando la caja ya ha terminado de crecer**. Sin ese retraso el texto
+aparece mientras la caja todavía viaja y se lee como dos animaciones peleándose por el
+mismo sitio — el contenido sale a tamaño final dentro de una caja que aún no lo es.
+
+Y las tarjetas que no se pulsaron **se apartan** (`METODO_APARTADO`) en vez de
+desvanecerse en bloque. Si las tres se funden a la vez, la que crece no se lee como la
+elegida: se lee como que la pantalla cambió.
 
 ### 3.1b · Una salida que el fundido de la página se tragaba
 

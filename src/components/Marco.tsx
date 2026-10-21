@@ -89,6 +89,20 @@ const SECCIONES = [
       </>
     ),
   },
+  {
+    href: '/metodos',
+    titulo: 'Métodos de estudio',
+    /* un reloj de arena: lo que mide el pomodoro es tiempo que pasa, no una hora del día
+       —esa ya es el reloj del horario— y con dos relojes seguidos en el raíl no se
+       distinguirían */
+    icono: (
+      <>
+        <path d="M6.5 3h11M6.5 21h11" />
+        <path d="M7.5 3v3.2c0 2 1.6 3.4 3 4.4 1 .7 1 1.1 0 1.8-1.4 1-3 2.4-3 4.4V21" />
+        <path d="M16.5 3v3.2c0 2-1.6 3.4-3 4.4-1 .7-1 1.1 0 1.8 1.4 1 3 2.4 3 4.4V21" />
+      </>
+    ),
+  },
 ];
 
 /**

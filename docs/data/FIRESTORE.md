@@ -126,6 +126,23 @@ users/{uid}
     No tiene `asignatura` ni `remoto`: no vive en ninguna carpeta y no tiene bytes en
     ningún sitio. Es el documento más pequeño de la base.
 
+  users/{uid}/sesiones/{sesionId}  ← cuánto se ha estudiado, de qué y cuándo
+    asignatura: "geometria"        ← la clave de ASIGNATURAS, ≤ 120
+    fecha: "2026-10-21"            ← el día en que EMPEZÓ
+    minutos: 25                    ← > 0 y ≤ 1440 (un día entero no es una sesión)
+    metodo: "pomodoro"             ← ≤ 40; hoy solo hay uno
+    ini: 1035                      ← opcional; minutos desde medianoche
+    creado: <timestamp>            ← se ordena por `fecha`, que es obligatorio
+
+    Una fila POR SESIÓN, no una por asignatura y día que se va sumando. Desde las filas
+    sueltas se reconstruye el total; desde el total no se puede saber a qué hora rinde
+    mejor. Lo que no se guarda no se recupera.
+
+    `ini` es lo que deja contestar algún día «¿a qué hora estudias mejor?» sin volver a
+    pedir nada. Es opcional porque una sesión apuntada a mano podría no tenerlo.
+
+    El detalle, en [docs/frontend/METODOS.md](../frontend/METODOS.md).
+
   users/{uid}/asignaturas/{id}     ← lo siguiente que toca
     nombre, color, profesor, progreso
 
@@ -216,6 +233,7 @@ cada colección declara sus campos opcionales en `almacen-firestore.ts`:
 | `apuntes` | `carpeta`, `orden`, `etiquetas` |
 | `carpetas` | `madre`, `etiquetas` |
 | `etiquetas` | — |
+| `sesiones` | `ini` |
 
 El opcional que no llega, o llega `undefined`, se manda como `deleteField()` y desaparece.
 `undefined` necesitaba ese trato de todas formas: Firestore rechaza la escritura entera si lo

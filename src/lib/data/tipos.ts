@@ -199,6 +199,32 @@ export interface Etiqueta {
 }
 
 /**
+ * Una sesión de estudio: cuánto, de qué y cuándo.
+ *
+ * Es lo que producen los métodos de estudio, y la razón de que existan. El cronómetro del
+ * pomodoro es la excusa; lo que se pidió fue **ver a qué se le ha dedicado más tiempo**, y
+ * eso solo se puede contestar si cada rato estudiado deja una fila.
+ *
+ * **Una fila por sesión**, no una por asignatura y día que se va sumando. Desde las filas
+ * sueltas se reconstruye el total cuando haga falta; desde el total no hay manera de saber
+ * a qué hora del día rinde mejor. Lo que no se guarda no se recupera después.
+ */
+export interface Sesion {
+  id: ID;
+  /** La clave de la asignatura en el catálogo del curso. */
+  asignatura: string;
+  fecha: Fecha;
+  /** Lo estudiado de verdad, sin contar descansos. */
+  minutos: number;
+  /** Con qué método. Hoy solo `pomodoro`; mañana los otros dos escriben aquí mismo. */
+  metodo: string;
+  /** A qué hora empezó, en minutos desde medianoche. Para poder decir cuándo rinde mejor. */
+  ini?: number;
+  creado?: number;
+  actualizado?: number;
+}
+
+/**
  * Un apunte: el material de estudio de una asignatura.
  *
  * Esto es una **ficha, no un fichero**. Los bytes viven en el archivador —en Drive todo lo

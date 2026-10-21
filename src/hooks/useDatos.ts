@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useArchicel } from '@/lib/firebase/sesion';
-import { aFecha, deFecha, hoy, type Apunte, type Carpeta, type Etiqueta, type Evento, type Rango, type Tarea } from '@/lib/data';
+import { aFecha, deFecha, hoy, type Apunte, type Carpeta, type Etiqueta, type Evento, type Rango, type Sesion, type Tarea } from '@/lib/data';
 
 /** Ordena por fecha, luego por hora y por último por `id`, que nunca empata. */
 function ordenarEventos(l: Evento[]): Evento[] {
@@ -148,6 +148,26 @@ export function useApuntes(asignatura: string): [Apunte[], boolean] {
 /** Alfabético y sin distinguir mayúsculas, que es como espera verlo cualquiera. */
 function ordenarCarpetas(l: Carpeta[]): Carpeta[] {
   return [...l].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }) || a.id.localeCompare(b.id));
+}
+
+/**
+ * Las sesiones de estudio de un rango.
+ *
+ * De la más reciente a la más vieja, que es como se mira un registro: lo primero que se
+ * quiere ver es lo de hoy. El desempate por `id` evita que dos sesiones del mismo minuto
+ * se intercambien entre renders y React reinicie sus animaciones.
+ */
+function ordenarSesiones(l: Sesion[]): Sesion[] {
+  return [...l].sort((a, b) => b.fecha.localeCompare(a.fecha) || (b.ini ?? 0) - (a.ini ?? 0) || a.id.localeCompare(b.id));
+}
+
+export function useSesiones(rango?: Rango): [Sesion[], boolean] {
+  const { almacen } = useArchicel();
+  const escuchar = useCallback(
+    (cb: (l: Sesion[]) => void, r?: Rango) => almacen.sesiones.escuchar(cb, r),
+    [almacen],
+  );
+  return useLista(escuchar, ordenarSesiones, `${almacen.uid ?? ''}|sesiones|${rango?.desde ?? ''}|${rango?.hasta ?? ''}`, rango);
 }
 
 /** Igual que las carpetas: alfabético, y el desempate por `id` para que la lista no baile. */

@@ -14,12 +14,12 @@ Cuando una idea se construye, se quita de aquí y pasa a su documento propio.
 
 # Métodos de estudio
 
-**Una sección nueva de la aplicación**, con su sitio en el dock. De momento tres métodos:
+**La sección existe** (`/metodos`, quinta del dock). De momento tres métodos:
 
 | Método | Qué es | Estado |
 |---|---|---|
 | **Repetición espaciada** | Planificar repasos que se van separando en el tiempo | idea · § 1 |
-| **Pomodoro** | Cronómetro de estudio y cuánto se le ha dedicado a cada asignatura | idea · § 2 |
+| **Pomodoro** | Cronómetro de estudio y cuánto se le ha dedicado a cada asignatura | **construido** · [METODOS.md](../frontend/METODOS.md) |
 | **Sketchap** | *Pendiente de aclarar qué es* | § 3 |
 
 Lo que tienen en común, y conviene decidirlo una vez para los tres: **todos producen un
@@ -93,67 +93,15 @@ superficie; lo que la llena es el método.
 
 ---
 
-## 2 · Pomodoro
+## 2 · Pomodoro — **construido**
 
-**Estado:** idea · pedida el 21 de octubre de 2026
+Se construyó el 21 de octubre de 2026 y vive en [docs/frontend/METODOS.md](../frontend/METODOS.md).
+Ahí están las seis decisiones que estaban abiertas aquí y cómo se resolvió cada una: que lo
+que se guarda es **cuándo empezó** y no cuánto queda, que se apunta **una fila por
+pomodoro**, que **uno abandonado no cuenta**, y que el descanso encadena solo.
 
-### Qué se pidió
-
-Un **cronómetro pomodoro personalizable**: por defecto **25 minutos de estudio y 5 de
-descanso**, pero que se puedan cambiar.
-
-Y, al lado, una **«tabla bonita»**:
-
-- **Antes de empezar se indica la asignatura.**
-- **El tiempo se va sumando**: tres pomodoros de 25 minutos son 75 minutos de esa
-  asignatura, no tres entradas sueltas.
-- **Con la fecha del día**, para saber cuánto se estudió cada día.
-
-El para qué, en sus palabras:
-
-> «Así podré ir viendo a qué le he dedicado más tiempo en pomodoros»
-
-O sea: el cronómetro es la excusa; **lo que de verdad se pide es el registro**. La tabla no
-es un añadido al pomodoro, es el producto.
-
-### Con qué se conecta
-
-- **`ASIGNATURAS`** da el selector y el color de cada fila sin inventar un tono nuevo.
-- **`SelectorAsignatura`** (`src/components/campos/`) ya existe y ya hace exactamente ese
-  desplegable.
-- **El service worker** (`public/sw.js`) ya está montado, que es lo que haría falta para
-  avisar cuando termina un pomodoro con la pestaña en segundo plano.
-- **`useAhora`** para la fecha, por la regla de siempre.
-- **La receta de colección nueva** de `docs/data/FIRESTORE.md`, que acaba de usarse entera
-  para las etiquetas y está fresca.
-
-### Qué falta decidir
-
-1. **El cronómetro tiene que sobrevivir a navegar.** Si se para al cambiar de pantalla o al
-   recargar, no sirve: veinticinco minutos son muchos para no tocar nada. Lo correcto es
-   guardar **cuándo empezó**, no cuánto queda, y calcular el resto al volver — un
-   contador que vive en memoria se pierde con la pestaña.
-2. **Avisar cuando termina.** Con la pestaña de fondo hace falta una notificación del
-   sistema, y eso pide permiso al navegador. ¿Se pide? ¿Vale con un sonido y el título de
-   la pestaña? Un pomodoro que termina y no avisa es un pomodoro que no termina.
-3. **Dónde vive.** ¿Widget del escritorio, pantalla propia dentro de Métodos de estudio, o
-   un botón en la página de cada asignatura que ya sabe qué asignatura es? Lo tercero
-   quita un paso —no hay que elegirla— pero esconde la función.
-4. **Qué se guarda exactamente.** Lo mínimo es `{ asignatura, fecha, minutos }`. La
-   pregunta es si se guarda **una fila por pomodoro** (más fiel, permite saber a qué hora
-   estudia mejor) o **una fila por asignatura y día** que se va sumando (menos documentos,
-   menos que mantener). Lo primero no se puede reconstruir desde lo segundo.
-5. **Si un pomodoro se abandona a la mitad, ¿cuenta?** Trece minutos de estudio son trece
-   minutos. Pero contarlos convierte el cronómetro en algo que se puede empezar y dejar
-   para inflar el total, y entonces la tabla deja de decir la verdad.
-6. **El descanso, ¿se cuenta?** En el total de estudio no, evidentemente. Pero sí decide si
-   el cronómetro encadena solo al siguiente pomodoro o espera a que lo pulse.
-
-### Qué no hacer
-
-- **Nada de rachas ni de «llevas 3 días sin estudiar».** Vale para los tres métodos.
-- **Que el total no se presente como una meta.** Es un espejo, no un objetivo: la tabla
-  dice a qué le ha dedicado tiempo, no cuánto le falta.
+Lo único que sigue sin decidir de esta lista es **avisar con la pestaña de fondo**: hoy el
+aviso es la tira de la casa y no una notificación del sistema.
 
 ---
 

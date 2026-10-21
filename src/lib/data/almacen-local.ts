@@ -7,7 +7,7 @@
  */
 
 import { enRango, nuevoId, type Almacen, type Coleccion, type Desuscribir, type Documento } from './almacen';
-import type { Ajustes, Apunte, Carpeta, Etiqueta, Evento, ID, Layout, Rango, Tarea } from './tipos';
+import type { Ajustes, Apunte, Carpeta, Etiqueta, Evento, ID, Layout, Rango, Sesion, Tarea } from './tipos';
 
 const CANAL = 'archicel:cambio';
 
@@ -137,6 +137,7 @@ export function crearAlmacenLocal(): Almacen {
     apuntes: crearColeccion<Apunte>('archicel.apuntes.v1'),
     carpetas: crearColeccion<Carpeta>('archicel.carpetas.v1'),
     etiquetas: crearColeccion<Etiqueta>('archicel.etiquetas.v1'),
+    sesiones: crearColeccion<Sesion>('archicel.sesiones.v1'),
     ajustes: crearDocumento<Ajustes>('archicel.ajustes.v1'),
     layout: (superficie: string) => {
       const { actual, anteriores } = clavesLayout(superficie);
