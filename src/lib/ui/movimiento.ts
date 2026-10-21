@@ -462,6 +462,41 @@ export const MES: Variants = {
   }),
 };
 
+/**
+ * Un titular que se escribe solo, letra a letra.
+ *
+ * El contenedor no se mueve: solo reparte. Lo que entra son las letras, y por eso el
+ * escalonado es tan corto — 22 ms. Con el escalonado normal de la casa (52 ms) un nombre
+ * de veinticinco letras tardaría un segundo y cuarto en terminar de aparecer, y entonces
+ * deja de leerse como un titular que llega y empieza a leerse como una máquina de escribir
+ * de los noventa.
+ */
+export const TITULO: Variants = {
+  fuera: {},
+  dentro: { transition: { staggerChildren: 0.022, delayChildren: 0.08 } },
+};
+
+/**
+ * Una letra del titular.
+ *
+ * Sube **en `em`** y no en píxeles: así recorre lo mismo en proporción a su tamaño, y el
+ * titular se comporta igual a 36 px en un portátil que a 62 en una pantalla grande. Con un
+ * número fijo, en la pantalla grande el gesto se queda corto y en la pequeña se pasa.
+ *
+ * El desenfoque es lo que lo convierte en letra que **se enfoca** en vez de letra que sube.
+ * Va flojo —7 px— porque son veinticinco elementos desenfocándose a la vez y el navegador
+ * lo nota.
+ */
+export const LETRA: Variants = {
+  fuera: { opacity: 0, y: '0.5em', filter: 'blur(7px)' },
+  dentro: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: { duration: TIEMPO.paso, ease: CURVA.salida },
+  },
+};
+
 /** El velo de las hojas modales. No se mueve: solo aparece y se va. */
 export const VELO: Variants = {
   fuera: { opacity: 0 },

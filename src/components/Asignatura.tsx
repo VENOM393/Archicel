@@ -28,7 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as mo from 'motion/react-m';
 import { AnimatePresence } from 'motion/react';
 
-import { APARECER, CELDA, ORQUESTA, PIEZA, VELO, HOJA, MUELLE, CURVA, TIEMPO } from '@/lib/ui/movimiento';
+import { APARECER, CELDA, LETRA, ORQUESTA, PIEZA, TITULO, VELO, HOJA, MUELLE, CURVA, TIEMPO } from '@/lib/ui/movimiento';
 import { Icono, TIPOS } from '@/lib/ui/catalogo';
 import { Button } from '@/components/ui/button';
 import { useAhora, useApuntes, useCarpetas, useEtiquetas, useEventos, useTareas } from '@/hooks/useDatos';
@@ -110,6 +110,43 @@ export function Asignatura({ clave }: { clave: ClaveAsignatura }) {
 /* ───────────────────────── la portada ───────────────────────── */
 
 /**
+ * El nombre de la asignatura, escribiéndose letra a letra.
+ *
+ * Cada letra es su propio elemento y entra enfocándose desde abajo, escalonada. El gesto
+ * tarda lo mismo que cualquier otra pieza de la página —no es un número nuevo— pero se
+ * reparte entre las letras en vez de caer sobre el bloque entero, y eso es lo que separa
+ * un titular que aparece de uno que **llega**.
+ *
+ * Dos cosas que no son opcionales:
+ *
+ *   · **Las palabras no se parten.** Cada una es una caja que no se rompe por dentro; lo
+ *     que salta de línea son palabras enteras. Sin eso, un nombre largo se corta a mitad
+ *     de sílaba en cuanto la ventana estrecha.
+ *   · **El lector de pantalla oye el nombre, no veinticinco letras.** El `aria-label` del
+ *     `h1` lleva el texto entero y las letras van ocultas. Sin eso, «Geometría» se lee
+ *     «ge, e, o, eme…», que es peor que no animar nada.
+ *
+ * Y no lleva degradado: el contrato prohíbe el texto con degradado y tiene razón — el
+ * énfasis sale del peso y del tamaño, que aquí son 700 y 62 px.
+ */
+function TituloAnimado({ texto }: { texto: string }) {
+  const palabras = texto.split(' ');
+  return (
+    <mo.h1 className="asig-h1" variants={TITULO} aria-label={texto}>
+      {palabras.map((palabra, p) => (
+        <span className="asig-palabra" key={`${p}-${palabra}`} aria-hidden="true">
+          {[...palabra].map((letra, i) => (
+            <mo.span className="asig-glifo" key={`${p}-${i}`} variants={LETRA}>
+              {letra}
+            </mo.span>
+          ))}
+        </span>
+      ))}
+    </mo.h1>
+  );
+}
+
+/**
  * Dónde está esta clase: el aula, en corto.
  *
  * `aula` viene como `'P5_2_A03 · Aula 3, 2ª planta, Pab. 5'`: el código oficial, y detrás
@@ -158,15 +195,22 @@ function Portada({ clave, ahora, nApuntes }: { clave: ClaveAsignatura; ahora: Da
             tell más reconocible de una interfaz generada, y aquí no hacía falta — el color
             de la asignatura ya está en el código y en los bloques del horario. */}
         <div className="asig-titulo">
-          <h1>{asig.nombre}</h1>
-          <p className="asig-datos">
-            <span className="asig-codigo">{asig.codigo}</span>
-            <i aria-hidden="true" />
+          <TituloAnimado texto={asig.nombre} />
+          {/*
+            Sin el código de la escuela.
+
+            Era el primer dato que se leía debajo del nombre y no se usa para nada: nadie
+            busca «16009», se busca «Geometría». Sigue donde hace falta —en cada clase del
+            horario, que es donde identifica— y aquí dejaba el sitio de honor ocupado por
+            una referencia administrativa.
+          */}
+          <p className="asig-placa">
+            <i className="asig-punto" aria-hidden="true" />
             <span>
               {/* Sin decimales de más: 2,5 h se escribe así y no `2.5`. */}
               <b>{horas.toLocaleString('es-ES')}</b> h a la semana
             </span>
-            <i aria-hidden="true" />
+            <i className="asig-sep" aria-hidden="true" />
             <span>
               <b>{nApuntes}</b> {nApuntes === 1 ? 'apunte' : 'apuntes'}
             </span>

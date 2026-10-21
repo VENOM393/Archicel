@@ -7,6 +7,7 @@
  * reinicia el shader ni vuelve a cargar la fotografía.
  */
 
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as m from 'motion/react-m';
 import { AnimatePresence } from 'motion/react';
@@ -160,13 +161,18 @@ export function Marco({ children }: { children: ReactNode }) {
             {/* El saludo vive en el widget de bienvenida del escritorio, que es donde
                 tiene sentido. Repetirlo en la cabecera de todas las paginas lo convertia
                 en ruido: se lee una vez al entrar y estorba las otras veinte. */}
-            <span className="marca" aria-hidden="true">
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            {/* El logo lleva al escritorio.
+                Era un `span` con `aria-hidden`: ni se podía pulsar ni existía para un lector
+                de pantalla. Que la marca de una aplicación vuelva al principio es lo que
+                todo el mundo intenta sin pensarlo, y no hacer nada al pulsarla se lee como
+                que la página está medio rota. */}
+            <Link href="/" className="marca" prefetch aria-label="Ir al escritorio">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M3 20 12 4l9 16" />
                 <path d="M7.5 20 12 11l4.5 9" />
               </svg>
               <b>Archicel</b>
-            </span>
+            </Link>
             <span className="hueco" />
             <div className="tools">
               {/* Solo se pinta cuando el navegador ofrece instalar; el resto del tiempo
