@@ -56,6 +56,87 @@ import {
 
 type Clave = 'pomodoro' | 'repaso' | 'boceto';
 
+/* ───────────────────────── el cronómetro, visto desde fuera ─────────────────────────
+   Esto vive aquí arriba y no dentro de `Pomodoro` porque **la tarjeta cerrada también
+   tiene que saberlo**. Con el taller a la vista, un pomodoro corriendo era invisible: se
+   arrancaba, se navegaba a otra sección, se volvía, y la pantalla estaba exactamente igual
+   que antes de empezar. El único estado que de verdad importa era el único que no se veía.
+*/
+
+/** Lo que se recuerda entre recargas. Guarda **cuándo empezó**, nunca cuánto queda. */
+interface EnMarcha {
+  asignatura: string;
+  /** Milisegundos desde la época. Lo que queda se calcula; un contador en memoria se pierde. */
+  arranque: number;
+  /** Minutos de esta fase. */
+  largo: number;
+  fase: 'estudio' | 'descanso';
+}
+
+const RECORDADO = 'archicel.pomodoro.v1';
+/** Las pestañas se enteran por `storage`; dentro de esta, por este aviso. */
+const LATIDO = 'archicel:pomodoro';
+
+function leerMarcha(): EnMarcha | null {
+  try {
+    const crudo = localStorage.getItem(RECORDADO);
+    if (!crudo) return null;
+    const g = JSON.parse(crudo) as EnMarcha;
+    return g && typeof g.arranque === 'number' && typeof g.largo === 'number' ? g : null;
+  } catch {
+    /* almacenamiento bloqueado o contenido corrupto: no hay nada corriendo */
+    return null;
+  }
+}
+
+function escribirMarcha(m: EnMarcha | null) {
+  try {
+    if (m) localStorage.setItem(RECORDADO, JSON.stringify(m));
+    else localStorage.removeItem(RECORDADO);
+  } catch {}
+  window.dispatchEvent(new Event(LATIDO));
+}
+
+/** Segundos que quedan de `m`, contra el reloj real. Nunca negativo. */
+function quedanDe(m: EnMarcha): number {
+  return Math.max(0, m.largo * 60 - Math.floor((Date.now() - m.arranque) / 1000));
+}
+
+/**
+ * Lo que hay corriendo ahora mismo, para quien solo quiera mirarlo.
+ *
+ * El latido **solo late si hay algo que contar**: sin pomodoro no hay `setInterval`, así
+ * que el taller quieto no despierta a React una vez por segundo para no cambiar nada.
+ */
+function useMarcha(): { marcha: EnMarcha | null; restante: number } {
+  const [marcha, setMarcha] = useState<EnMarcha | null>(null);
+  const [restante, setRestante] = useState(0);
+
+  useEffect(() => {
+    const mirar = () => setMarcha(leerMarcha());
+    mirar();
+    window.addEventListener(LATIDO, mirar);
+    window.addEventListener('storage', mirar);
+    return () => {
+      window.removeEventListener(LATIDO, mirar);
+      window.removeEventListener('storage', mirar);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!marcha) {
+      setRestante(0);
+      return;
+    }
+    const tic = () => setRestante(quedanDe(marcha));
+    tic();
+    const t = setInterval(tic, 1000);
+    return () => clearInterval(t);
+  }, [marcha]);
+
+  return { marcha, restante };
+}
+
 /* ───────────────────────── el catálogo de métodos ───────────────────────── */
 
 interface Metodo {
@@ -95,6 +176,7 @@ const METODOS: Metodo[] = [
 export function Metodos() {
   const [abierto, setAbierto] = useState<Clave | null>(null);
   const ahora = useAhora(30_000);
+  const { marcha, restante } = useMarcha();
 
   /* Lo de los últimos treinta días: es lo que llena el registro y el resumen de arriba. */
   const rango = useMemo(() => {
@@ -130,6 +212,17 @@ export function Metodos() {
           <span>
             <b>{enHoras(minutosSemana)}</b> esta semana
           </span>
+          {/* La placa suma lo terminado, así que un pomodoro a mitad no aparecería en
+              ninguna de las dos cifras. Aquí es donde hay que decirlo. */}
+          {marcha && (
+            <>
+              <i aria-hidden="true" />
+              <span className="met-placa-vivo">
+                <em aria-hidden="true" />
+                <b>{reloj(restante)}</b> {marcha.fase === 'estudio' ? 'estudiando' : 'de descanso'}
+              </span>
+            </>
+          )}
         </p>
       </mo.div>
 
@@ -145,7 +238,14 @@ export function Metodos() {
           {abierto === null ? (
             <mo.div className="met-taller" key="taller" variants={METODO_APARTADO} animate="dentro" exit="saliendo">
               {METODOS.map((m) => (
-                <Tarjeta key={m.clave} metodo={m} alAbrir={() => setAbierto(m.clave)} sesiones={sesiones} />
+                <Tarjeta
+                  key={m.clave}
+                  metodo={m}
+                  alAbrir={() => setAbierto(m.clave)}
+                  sesiones={sesiones}
+                  marcha={m.clave === 'pomodoro' ? marcha : null}
+                  restante={restante}
+                />
               ))}
             </mo.div>
           ) : (
@@ -165,14 +265,30 @@ export function Metodos() {
 
 /* ───────────────────────── una tarjeta cerrada ───────────────────────── */
 
-function Tarjeta({ metodo, alAbrir, sesiones }: { metodo: Metodo; alAbrir: () => void; sesiones: Sesion[] }) {
+function Tarjeta({
+  metodo,
+  alAbrir,
+  sesiones,
+  marcha,
+  restante,
+}: {
+  metodo: Metodo;
+  alAbrir: () => void;
+  sesiones: Sesion[];
+  /** Solo la tarjeta del pomodoro lo recibe, y solo si hay uno corriendo. */
+  marcha: EnMarcha | null;
+  restante: number;
+}) {
+  /* Corriendo, el color de la tarjeta es el de la asignatura y no el del método: lo que
+     identifica un pomodoro vivo es de QUÉ es, no que sea un pomodoro. */
+  const asig = marcha ? ASIGNATURAS[marcha.asignatura as ClaveAsignatura] : undefined;
   return (
     <mo.button
       type="button"
-      className="met-tarjeta"
+      className={`met-tarjeta${marcha ? ' viva' : ''}`}
       /* El mismo `layoutId` que la versión abierta: de aquí sale el viaje. */
       layoutId={`met-${metodo.clave}`}
-      style={{ ['--tc' as string]: `var(--c-${metodo.color})` }}
+      style={{ ['--tc' as string]: asig ? `var(--c-${asig.color})` : `var(--c-${metodo.color})` }}
       onClick={alAbrir}
       whileHover={{ y: -10, transition: MUELLE.vivo }}
       whileFocus={{ y: -10, transition: MUELLE.vivo }}
@@ -180,19 +296,56 @@ function Tarjeta({ metodo, alAbrir, sesiones }: { metodo: Metodo; alAbrir: () =>
       transition={MUELLE.normal}
     >
       <mo.span className="met-muestra" layoutId={`met-muestra-${metodo.clave}`} aria-hidden="true">
-        <Muestra clave={metodo.clave} sesiones={sesiones} />
+        {marcha ? <AnilloVivo marcha={marcha} restante={restante} /> : <Muestra clave={metodo.clave} sesiones={sesiones} />}
       </mo.span>
       <mo.h2 className="met-nombre" layoutId={`met-nombre-${metodo.clave}`}>
         {metodo.nombre}
       </mo.h2>
-      <span className="met-pie">{metodo.pie}</span>
+      <span className="met-pie">
+        {marcha ? `${marcha.fase === 'estudio' ? 'Estudiando' : 'Descansando'} · ${asig?.nombre ?? marcha.asignatura}` : metodo.pie}
+      </span>
       <span className="met-ir">
-        {metodo.listo ? 'Empezar' : 'Ver'}
+        {marcha ? 'Volver' : metodo.listo ? 'Empezar' : 'Ver'}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="m10 6 6 6-6 6" />
         </svg>
       </span>
     </mo.button>
+  );
+}
+
+/**
+ * El anillo de la tarjeta cuando hay un pomodoro corriendo.
+ *
+ * Es el **mismo dibujo** que la muestra decorativa, con el número de verdad dentro. La
+ * tarjeta no cambia de forma al arrancar: lo que cambia es que empieza a decir la verdad.
+ */
+function AnilloVivo({ marcha, restante }: { marcha: EnMarcha; restante: number }) {
+  const vuelta = 2 * Math.PI * 70;
+  const total = marcha.largo * 60;
+  const tanto = total > 0 ? 1 - restante / total : 0;
+  return (
+    <span className="met-vivo">
+      <svg viewBox="0 0 160 160" className="met-anillo" aria-hidden="true">
+        <circle cx="80" cy="80" r="70" fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="9" />
+        <circle
+          cx="80"
+          cy="80"
+          r="70"
+          fill="none"
+          stroke="var(--tc)"
+          strokeWidth="9"
+          strokeLinecap="round"
+          strokeDasharray={vuelta}
+          strokeDashoffset={vuelta * (1 - tanto)}
+          transform="rotate(-90 80 80)"
+          /* El avance lo lleva el CSS, igual que en la tarjeta abierta: Motion no toca
+             esta propiedad, y una propiedad tiene un dueño. */
+          style={{ transition: 'stroke-dashoffset 950ms var(--ease-out)' }}
+        />
+      </svg>
+      <span className="met-vivo-cifra">{reloj(restante)}</span>
+    </span>
   );
 }
 
@@ -339,18 +492,6 @@ function PorDefinir({ metodo }: { metodo: Metodo }) {
 
 /* ───────────────────────── el pomodoro ───────────────────────── */
 
-/** Lo que se recuerda entre recargas. Guarda **cuándo empezó**, nunca cuánto queda. */
-interface EnMarcha {
-  asignatura: string;
-  /** Milisegundos desde la época. Lo que queda se calcula; un contador en memoria se pierde. */
-  arranque: number;
-  /** Minutos de esta fase. */
-  largo: number;
-  fase: 'estudio' | 'descanso';
-}
-
-const RECORDADO = 'archicel.pomodoro.v1';
-
 function Pomodoro({ sesiones, ahora }: { sesiones: Sesion[]; ahora: Date | null }) {
   const { almacen } = useArchicel();
   const { avisar } = useUI();
@@ -370,17 +511,10 @@ function Pomodoro({ sesiones, ahora }: { sesiones: Sesion[]; ahora: Date | null 
    * muchos para no tocar nada.
    */
   useEffect(() => {
-    try {
-      const crudo = localStorage.getItem(RECORDADO);
-      if (!crudo) return;
-      const g = JSON.parse(crudo) as EnMarcha;
-      if (g && typeof g.arranque === 'number' && typeof g.largo === 'number') {
-        setMarcha(g);
-        if (g.fase === 'estudio') setEstudio(g.largo);
-      }
-    } catch {
-      /* almacenamiento bloqueado o contenido corrupto: se empieza de cero */
-    }
+    const g = leerMarcha();
+    if (!g) return;
+    setMarcha(g);
+    if (g.fase === 'estudio') setEstudio(g.largo);
   }, []);
 
   const guardarSesion = useCallback(
@@ -413,9 +547,8 @@ function Pomodoro({ sesiones, ahora }: { sesiones: Sesion[]; ahora: Date | null 
       return;
     }
     const mirar = () => {
-      const pasado = Math.floor((Date.now() - marcha.arranque) / 1000);
-      const quedan = marcha.largo * 60 - pasado;
-      setRestante(Math.max(0, quedan));
+      const quedan = quedanDe(marcha);
+      setRestante(quedan);
       if (quedan <= 0) {
         void guardarSesion(marcha);
         const siguiente: EnMarcha = {
@@ -425,9 +558,7 @@ function Pomodoro({ sesiones, ahora }: { sesiones: Sesion[]; ahora: Date | null 
           fase: marcha.fase === 'estudio' ? 'descanso' : 'estudio',
         };
         setMarcha(siguiente);
-        try {
-          localStorage.setItem(RECORDADO, JSON.stringify(siguiente));
-        } catch {}
+        escribirMarcha(siguiente);
         avisar(marcha.fase === 'estudio' ? 'Pomodoro terminado. Descansa.' : 'Descanso terminado.');
       }
     };
@@ -441,17 +572,13 @@ function Pomodoro({ sesiones, ahora }: { sesiones: Sesion[]; ahora: Date | null 
     const nueva: EnMarcha = { asignatura, arranque: Date.now(), largo: estudio, fase: 'estudio' };
     anotado.current = null;
     setMarcha(nueva);
-    try {
-      localStorage.setItem(RECORDADO, JSON.stringify(nueva));
-    } catch {}
+    escribirMarcha(nueva);
   };
 
   const parar = () => {
     setMarcha(null);
     anotado.current = null;
-    try {
-      localStorage.removeItem(RECORDADO);
-    } catch {}
+    escribirMarcha(null);
   };
 
   const total = (marcha?.largo ?? estudio) * 60;

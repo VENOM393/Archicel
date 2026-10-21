@@ -3587,6 +3587,17 @@
     transition:background-color 300ms var(--ease-soft),border-color 300ms var(--ease-soft);
   }
   .met-tarjeta:hover{background:rgba(var(--panel-strong-rgb),.78);border-color:var(--hairline-lit)}
+  /* Con un pomodoro corriendo la tarjeta se levanta un poco del resto: el filete toma el
+     color de la asignatura y hay un rescoldo. Nada más — teñir la superficie entera sería
+     el segundo saturado que el contrato prohíbe, y además un cartel. */
+  .met-tarjeta.viva{
+    border-color:color-mix(in srgb,var(--tc) 46%,transparent);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.1),
+      inset 0 -1px 0 rgba(0,0,0,.35),
+      0 0 0 1px color-mix(in srgb,var(--tc) 14%,transparent),
+      0 24px 54px -28px rgba(0,0,0,.95);
+  }
   .met-tarjeta:focus-visible{outline:2px solid var(--accent-linea);outline-offset:3px}
 
   .met-muestra{flex:1 1 auto;min-height:0;display:grid;place-items:center;color:var(--tc)}
@@ -3600,6 +3611,26 @@
   .met-escalera{display:flex;flex-direction:column;gap:8px;width:min(188px,76%)}
   .met-peldano{height:9px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}
   .met-peldano i{display:block;height:100%;border-radius:999px;transform-origin:left center;opacity:.78}
+
+  /* El anillo de verdad en la tarjeta cerrada: el mismo dibujo, con la cifra dentro. */
+  .met-vivo{position:relative;display:grid;place-items:center;width:min(150px,62%)}
+  .met-vivo .met-anillo{width:100%}
+  .met-vivo-cifra{
+    position:absolute;
+    font-family:var(--data);font-size:27px;font-variant-numeric:tabular-nums;
+    letter-spacing:-.025em;color:var(--ink);
+  }
+
+  /* El trocito de la placa que dice que hay uno corriendo. */
+  .met-placa-vivo{display:inline-flex;align-items:center;gap:7px;color:var(--ink)}
+  .met-placa-vivo em{
+    width:6px;height:6px;border-radius:999px;background:var(--accent-linea);
+    /* Un latido lento. Es CSS y no Motion a propósito: no tiene estados, solo respira,
+       y `MotionConfig reducedMotion="user"` no alcanza aquí — por eso el `@media`. */
+    animation:met-latir 2.4s var(--ease-soft) infinite;
+  }
+  @keyframes met-latir{0%,100%{opacity:1}50%{opacity:.28}}
+  @media (prefers-reduced-motion:reduce){.met-placa-vivo em{animation:none}}
 
   .met-nombre{margin:16px 0 6px;font-size:21px;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
   .met-nombre.grande{margin:0;font-size:28px;letter-spacing:-.028em}

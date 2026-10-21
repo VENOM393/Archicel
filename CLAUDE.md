@@ -625,6 +625,12 @@ Cinco cosas que no se deducen del código:
 - **El anillo parado está vacío, no lleno.** `restante` vale cero quieto, así que
   `1 - restante/total` daba la vuelta entera pintada: un pomodoro recién terminado en vez
   de uno que no ha empezado.
+- **Con la tarjeta cerrada también se ve.** Un pomodoro corriendo era invisible desde el
+  taller: se arrancaba, se navegaba, se volvía, y la pantalla estaba igual que antes de
+  empezar. Ahora la tarjeta enseña el anillo **de verdad** con la cifra dentro y toma el
+  color de la asignatura, y la placa de arriba dice «24:57 estudiando» — que hace falta
+  porque la placa suma **lo terminado** y uno a mitad no salía en ninguna de sus cifras.
+  De ahí que el estado del cronómetro viva fuera de `Pomodoro`.
 
 El registro —«a qué le has dedicado tiempo»— **es el producto**; el cronómetro es la excusa.
 Nada de rachas, y el total no se presenta como una meta: es un espejo.

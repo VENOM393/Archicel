@@ -110,6 +110,35 @@ cada segundo y sin esa marca un tic de más duplicaría la fila.
 - `stroke-dashoffset` se anima **desde el CSS** (`transition`), no desde Motion: es una
   propiedad que Motion no toca aquí, y una propiedad tiene un dueño.
 
+### Con la tarjeta cerrada también se ve
+
+Es el arreglo que la primera versión pedía a gritos: se arrancaba un pomodoro, se cerraba
+la tarjeta, y **el taller quedaba exactamente igual que antes de empezar**. El único
+estado que de verdad importa era el único que no se veía.
+
+Corriendo, la tarjeta del pomodoro:
+
+- cambia su anillo decorativo por **el de verdad**, con la cifra dentro. No cambia de
+  forma al arrancar: empieza a decir la verdad;
+- toma **el color de la asignatura**, no el del método — lo que identifica un pomodoro
+  vivo es de qué es, no que sea un pomodoro;
+- dice «Estudiando · Matemáticas Aplicadas I» donde antes iba su descripción, y «Volver»
+  donde iba «Empezar».
+
+Y la placa de la cabecera gana «24:57 estudiando» con un punto que late. Hace falta porque
+la placa suma **lo terminado**, así que un pomodoro a mitad no aparecía en ninguna de sus
+dos cifras.
+
+El filete y un rescoldo, nada más. Teñir la superficie entera sería el segundo saturado que
+el contrato prohíbe, y además un cartel.
+
+**Por qué el estado vive fuera de `Pomodoro`.** `leerMarcha`/`escribirMarcha`/`useMarcha`
+están al principio del fichero porque la tarjeta cerrada también los necesita, y
+`escribirMarcha` lanza un aviso (`archicel:pomodoro`) para que dentro de la misma pestaña
+todo el mundo se entere — `storage` solo avisa a **las otras**. El latido de `useMarcha`
+**solo late si hay algo que contar**: sin pomodoro no hay `setInterval`, así que el taller
+quieto no despierta a React una vez por segundo para no cambiar nada.
+
 ### Las duraciones se bloquean mientras corre
 
 Cambiar el largo a mitad haría que lo que se anota al terminar no fuera lo que de verdad se
