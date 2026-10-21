@@ -630,6 +630,7 @@ docs/data/          FIRESTORE.md — modelo · SEGURIDAD.md — revisión · CUE
 docs/integraciones/  CANVAS.md — API del campus de la UCAM y el motor que la consume
                     DRIVE.md — dónde viven los apuntes de cada asignatura
 docs/design/        DESIGN.md — contrato visual
+docs/ideas/         IDEAS.md — lo que se quiere hacer algún día, con sus preguntas abiertas
 docs/tooling/       DESPLIEGUE.md — publicar en Vercel
                     agent-teams/ — la tubería de agentes (jefe, desarrollador, revisor, integrador)
 README.md           la cara del repositorio
