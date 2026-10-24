@@ -993,7 +993,20 @@
   .prio-btn[data-p="media"][aria-pressed="true"]{color:var(--c-ambar)}
   .prio-btn[data-p="baja"][aria-pressed="true"]{color:var(--c-menta)}
 
-  .hoja-pie{display:flex;gap:10px;margin-top:22px}
+  /* Guardar y Cancelar se quedan pegados abajo.
+     En una ventana baja —la de Celeste mide 841 px— la hoja se desborda y se desplaza, y
+     el pie se iba debajo del pliegue: el diálogo parecía no tener forma de aceptarse. La
+     hoja es el contenedor que se desplaza, así que `sticky` cuelga de ella sin tocar
+     nada más.
+     El relleno y el fondo son lo que impide que el contenido se vea pasar por debajo de
+     los botones; los márgenes negativos devuelven la banda al ancho completo de la hoja,
+     cuyo acolchado es de 26 px. */
+  .hoja-pie{
+    position:sticky;bottom:calc(-24px - env(safe-area-inset-bottom,0px));z-index:1;
+    display:flex;gap:10px;margin:22px -26px calc(-24px - env(safe-area-inset-bottom,0px));
+    padding:14px 26px calc(24px + env(safe-area-inset-bottom,0px));
+    background:linear-gradient(180deg, rgba(9,9,12,0), rgba(9,9,12,.92) 26%, rgba(9,9,12,.96));
+  }
   .hoja-pie button{
     flex:1;height:46px;border-radius:var(--r-lg);border:0;font:inherit;font-size:14.5px;font-weight:600;cursor:pointer;
     transition:transform 200ms var(--ease-soft),filter 200ms
@@ -1722,6 +1735,9 @@
   .asig-celda:hover .asig-mandos,
   .asig-mandos:focus-within{opacity:1}
   .asig-accion:hover{color:var(--ink);border-color:var(--hairline-lit)}
+  /* Con nota puesta, la estrella se enciende del color de su tramo: el mando dice ya si
+     hay nota, y no hace falta abrirlo para saberlo. */
+  .asig-accion.con-nota{color:var(--tn);border-color:color-mix(in srgb,var(--tn) 45%,var(--hairline))}
   .asig-endrive:hover{color:var(--ink);border-color:var(--hairline-lit)}
   /* Renombrar no comparte color con borrar: compartían clase y el lápiz se encendía en
      rojo — el gesto más inofensivo de la celda avisando como el más grave. */
@@ -1729,6 +1745,39 @@
   /* Sin cursor no hay forma de borrar nada: en táctil se quedan puestos. */
   @media (hover:none){
     .asig-mandos{opacity:1}
+  }
+
+  /* ── la nota del profesor ──
+     Cuatro tramos, y **ni un color nuevo**: salen de los mismos `--c-*` que las
+     asignaturas y los iconos de fichero. El contrato prohíbe meter un segundo saturado al
+     sistema, y aquí reutilizar basta — rojo, ámbar, verde y violeta ya significan lo que
+     tienen que significar sin explicarlo. */
+  .suspenso{--tn:var(--c-rojo)}
+  .aprobado{--tn:var(--c-ambar)}
+  .notable{--tn:var(--c-verde)}
+  .sobresaliente{--tn:var(--c-violeta)}
+
+  /* La insignia va sobre la lámina, arriba a la IZQUIERDA: a la derecha chocaba con los
+     mandos, que aparecen justo ahí al pasar el cursor. */
+  .asig-nota{
+    position:absolute;top:7px;left:7px;z-index:2;
+    min-width:26px;padding:3px 7px;border-radius:999px;
+    display:inline-flex;align-items:center;justify-content:center;
+    font-family:var(--data);font-size:12px;font-variant-numeric:tabular-nums;font-weight:500;
+    color:var(--tn);
+    background:rgba(10,10,13,.8);
+    border:1px solid color-mix(in srgb,var(--tn) 52%,transparent);
+    box-shadow:0 2px 10px -4px rgba(0,0,0,.8);
+  }
+
+  .asig-nota-editor{display:flex;flex:none}
+  .asig-nota-campo{
+    width:58px;height:28px;padding:0 8px;flex:none;
+    border-radius:var(--r-sm);border:1px solid var(--accent-linea);
+    background:rgba(10,10,13,.92);
+    font-family:var(--data);font-size:12.5px;font-variant-numeric:tabular-nums;
+    color:var(--ink);text-align:center;
+    outline:none;box-shadow:0 0 0 3px rgba(122,166,232,.16);
   }
 
   .asig-vacio{
@@ -2749,7 +2798,14 @@
   .acceso-fila-label{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .acceso-fila-label label{margin-bottom:7px}
 
-  .campo{
+  /* El campo de texto del acceso.
+     **Se llamaba `.campo` y pisaba al de las hojas**, que es el *grupo* de un campo y no
+     el campo: le metía `height:44px` a una caja con seis botones dentro, y el diálogo de
+     nuevo evento salía con los grupos montados unos encima de otros. Dos reglas con el
+     mismo nombre y significados distintos; gana la de abajo, en silencio y sin error.
+     Es la tercera colisión así en este fichero —antes `.asig-fila` y `.asig-letra`—, y
+     la lección es la misma: un nombre genérico pertenece a quien lo usó primero. */
+  .acceso-campo{
     width:100%;height:44px;padding:0 14px;border-radius:12px;
     font:400 14px/1 var(--ui);color:var(--ink);
     background:rgba(255,255,255,.035);
@@ -2758,22 +2814,22 @@
   }
   /* Sin rebajar la opacidad: a .72 el texto de ejemplo caía a 3.3:1 sobre el panel y
      dejaba de leerse, que es justo lo contrario de para lo que está. */
-  .campo::placeholder{color:var(--ink-subtle);opacity:1}
-  .campo:hover{border-color:var(--hairline-lit)}
-  .campo:focus-visible,.campo:focus{
+  .acceso-campo::placeholder{color:var(--ink-subtle);opacity:1}
+  .acceso-campo:hover{border-color:var(--hairline-lit)}
+  .acceso-campo:focus-visible,.acceso-campo:focus{
     outline:none;border-color:var(--accent-linea);
     background:rgba(255,255,255,.055);
     box-shadow:0 0 0 3px rgba(122,166,232,.16);
   }
   /* el relleno automático de Chrome pinta un amarillo que no es de esta casa */
-  .campo:-webkit-autofill,.campo:-webkit-autofill:focus{
+  .acceso-campo:-webkit-autofill,.acceso-campo:-webkit-autofill:focus{
     -webkit-text-fill-color:var(--ink);
     -webkit-box-shadow:0 0 0 1000px rgba(30,34,42,.98) inset;
     caret-color:var(--ink);
   }
 
   .acceso-clave{position:relative}
-  .acceso-clave .campo{padding-right:44px}
+  .acceso-clave .acceso-campo{padding-right:44px}
   .acceso-ojo{
     position:absolute;right:5px;top:50%;transform:translateY(-50%);
     width:34px;height:34px;display:grid;place-items:center;border-radius:9px;cursor:pointer;

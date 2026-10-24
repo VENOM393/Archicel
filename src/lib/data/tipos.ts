@@ -290,6 +290,20 @@ export interface Apunte {
    * reescribir nada de lo que la lleva, igual que pasa con las carpetas.
    */
   etiquetas?: ID[];
+  /**
+   * La nota que le puso el profesor, de 0 a 10 y con un decimal.
+   *
+   * **`calificacion` y no `nota`**, aunque en español una nota sea esto: `Evento.nota`
+   * ya existe en este mismo fichero y es un texto de observaciones. Dos campos hermanos
+   * con el mismo nombre y significados distintos es exactamente lo que acaba de costar
+   * un diálogo roto con `.campo`.
+   *
+   * Es de la **lámina**, no de la asignatura: por eso vive en el apunte. Opcional de
+   * verdad —la mayoría de lo que se sube no se corrige— y por eso va también a la lista
+   * de opcionales de `almacen-firestore.ts`: sin eso, quitar una nota la dejaba puesta
+   * en la nube.
+   */
+  calificacion?: number;
   creado?: number;
   actualizado?: number;
 }

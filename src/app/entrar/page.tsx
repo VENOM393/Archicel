@@ -174,7 +174,7 @@ export default function Entrar() {
                   <Input
                     id="correo"
                     ref={primerCampo}
-                    className="campo"
+                    className="acceso-campo"
                     type="email"
                     inputMode="email"
                     value={correo}
@@ -195,7 +195,7 @@ export default function Entrar() {
                   <div className="acceso-clave">
                     <Input
                       id="clave"
-                      className="campo"
+                      className="acceso-campo"
                       type={verClave ? 'text' : 'password'}
                       value={contrasena}
                       onChange={(e) => setContrasena(e.target.value)}

@@ -138,7 +138,7 @@ export function crearAlmacenFirestore(uid: string): Almacen | null {
     eventos: crearColeccion<Evento>(db, `${raiz}/eventos`, 'fecha', ['materia', 'nota']),
     tareas: crearColeccion<Tarea>(db, `${raiz}/tareas`, 'fecha', ['asignatura', 'progreso']),
     /* por `creado`: un apunte no tiene fecha de calendario, tiene momento de subida */
-    apuntes: crearColeccion<Apunte>(db, `${raiz}/apuntes`, 'creado', ['carpeta', 'orden', 'etiquetas']),
+    apuntes: crearColeccion<Apunte>(db, `${raiz}/apuntes`, 'creado', ['carpeta', 'orden', 'etiquetas', 'calificacion']),
     /* por `nombre`: una carpeta no tiene fecha que importe, tiene sitio en una lista */
     carpetas: crearColeccion<Carpeta>(db, `${raiz}/carpetas`, 'nombre', ['madre', 'etiquetas']),
     /* por `nombre` y **nunca por uno opcional**: Firestore excluye de la consulta los

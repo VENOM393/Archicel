@@ -167,7 +167,14 @@ service cloud.firestore {
           && (!('cuenta' in request.resource.data.remoto) || textoCorto(request.resource.data.remoto.cuenta, 320))
           && (!('carpeta' in request.resource.data) || textoCorto(request.resource.data.carpeta, 200))
           && (!('orden' in request.resource.data) || request.resource.data.orden is number)
-          && (!('etiquetas' in request.resource.data) || listaCorta(request.resource.data.etiquetas, 12));
+          && (!('etiquetas' in request.resource.data) || listaCorta(request.resource.data.etiquetas, 12))
+          // la nota del profesor: de 0 a 10. `is number` y no `is int` porque un 7,5 es
+          // una nota corriente y la mitad de las que va a haber llevan decimal.
+          // Se llama `calificacion` porque `nota` ya es, en los eventos, un texto.
+          && (!('calificacion' in request.resource.data)
+              || (request.resource.data.calificacion is number
+                  && request.resource.data.calificacion >= 0
+                  && request.resource.data.calificacion <= 10));
       }
 
       // carpetas: el esqueleto con el que la usuaria se organiza dentro de una asignatura.
@@ -260,11 +267,18 @@ service cloud.firestore {
 
       // lo que venga después (asignaturas, proyectos, referencias…): mismo dueño y
       // tamaño acotado, pero SIN pisar las colecciones validadas de arriba.
+      //
+      // **`delete` va aparte de `create, update`, y no es cosmetica.** En Firestore
+      // `write` cubre los tres, pero en un borrado `request.resource` es null: la
+      // condicion del tamano reventaba y el borrado quedaba denegado siempre. El efecto
+      // era que en una coleccion que cayera aqui se podia crear y no borrar, que es un
+      // fallo que no se encuentra leyendo y aparece el dia que alguien pulsa la equis.
       match /{coleccion}/{docId} {
         allow read: if esPropietario(uid) && !estaValidada(coleccion);
-        allow write: if esPropietario(uid)
+        allow create, update: if esPropietario(uid)
           && !estaValidada(coleccion)
           && request.resource.data.keys().size() <= 50;
+        allow delete: if esPropietario(uid) && !estaValidada(coleccion);
       }
     }
 

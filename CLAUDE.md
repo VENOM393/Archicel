@@ -78,8 +78,14 @@ Antes de tocar nada estructural, dos documentos:
 - [docs/data/SEGURIDAD.md](docs/data/SEGURIDAD.md) — la revisión de seguridad, qué protege
   cada capa y por qué no se cifra el contenido extremo a extremo.
 
-Tres reglas que salieron de esa revisión y que no se saltan:
+Cuatro reglas que salieron de esa revisión y que no se saltan:
 
+0. **En `firestore.rules`, `delete` nunca va dentro de un `allow write` que mire
+   `request.resource`.** `write` cubre los tres verbos, pero en un borrado
+   `request.resource` es **null** y la condición revienta: se deniega todo borrado. Pasó
+   en el comodín del final y el efecto fue que en una colección recién estrenada se podían
+   crear documentos y no borrarlos. No se encuentra leyendo; aparece el día que alguien
+   pulsa la equis.
 1. **Ningún dato de la usuaria se convierte en HTML.** Nada de `dangerouslySetInnerHTML`
    con títulos, notas o asignaturas: una tarea llamada `<img onerror=…>` se ejecutaba.
 2. **Al añadir una colección, su nombre va en `estaValidada` de `firestore.rules`.** Los
@@ -582,6 +588,25 @@ Lo que no se deduce leyendo el código:
 - **El cristal de la columna lo lleva el contenedor, no la rejilla del mes.** Al revés, la cabecera
   del mes quedaba sobre la fotografía desnuda: media columna era un panel y la otra media no.
 
+**Cada apunte puede llevar la nota que le puso el profesor**, de 0 a 10 con un decimal, en
+cuatro tramos de color: rojo hasta 4,9, ámbar hasta 6,9, verde hasta 8,9 y violeta de 9 en
+adelante. Se pone con la estrella de los mandos de la celda y sale como una insignia sobre
+la lámina; dejar el campo vacío la quita.
+
+Cuatro cosas que no se deducen:
+
+- **Se llama `calificacion` y no `nota`.** `Evento.nota` ya existe en `tipos.ts` y es un
+  texto de observaciones. Dos campos hermanos con el mismo nombre y significados distintos
+  es justo lo que acaba de costar el diálogo de nuevo evento roto.
+- **El campo es `type="text"`, no `type="number"`.** Un campo numérico **descarta la coma**
+  sin decir nada —`value` vuelve vacío—, así que teclear «7,5» no escribía nada. Y la coma
+  no es un capricho: es lo que da la tecla decimal de un teclado español.
+- **`calificacion` va a la lista de opcionales de `almacen-firestore.ts`**, como todo
+  opcional nuevo. Sin esa línea, quitar una nota la dejaba puesta en la nube y la pantalla
+  decía una cosa y Firestore otra hasta recargar.
+- **Ni un color nuevo.** Los cuatro tramos salen de los `--c-*` de la casa, los mismos que
+  usan las asignaturas y los iconos de fichero.
+
 - **La interfaz no habla con el almacenamiento.** Habla con `Archivador`, en `src/lib/archivo/`. Es
   el mismo patrón que el almacén y por el mismo motivo: el día que Drive se sustituya por otra cosa,
   se escribe otro archivador y ninguna pantalla se entera.
@@ -691,6 +716,20 @@ Cosas que no se deducen mirando:
   publica. No se despliega a mano desde el portátil — eso deja una versión viva que no está
   en ningún commit. Las variables de entorno y el dominio que hay que autorizar en Firebase,
   en [docs/tooling/DESPLIEGUE.md](docs/tooling/DESPLIEGUE.md).
+
+## Un nombre genérico es de quien lo usó primero
+
+Van tres colisiones de clase CSS en `archicel.css`, las tres con el mismo síntoma —algo
+que se ve mal sin que nada dé error— y las tres encontradas mirando, no leyendo:
+
+| Clase | Qué pasó |
+|---|---|
+| `.asig-fila` | dos significados distintos en la misma pantalla |
+| `.asig-letra` | el título animado heredó los estilos de las letras del raíl del horario |
+| `.campo` | era el **grupo** de un campo en las hojas y el **input** en la pantalla de acceso; ganaba el segundo y le metía `height:44px` a una caja con seis botones dentro, así que el diálogo de nuevo evento salía con los grupos montados unos encima de otros |
+
+El fichero es uno solo y no hay módulos de CSS, así que **gana la regla de abajo, en
+silencio**. Antes de llamar algo `.campo`, `.fila`, `.caja` o `.titulo`, se busca.
 
 ## Estructura
 

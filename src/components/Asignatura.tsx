@@ -807,6 +807,27 @@ function Apuntes({
   );
 
   /**
+   * Pone o quita la nota de un apunte.
+   *
+   * No toca el archivador: la calificación es de la ficha, no del fichero. Drive no tiene
+   * dónde ponerla y no haría falta aunque lo tuviera.
+   *
+   * `undefined` la quita, y eso llega limpio a la nube **porque `calificacion` está en
+   * la lista de opcionales de `almacen-firestore.ts`**: sin esa línea, `merge` habría
+   * conservado la nota vieja y la pantalla diría una cosa y la nube otra hasta recargar.
+   */
+  const calificar = useCallback(
+    async (a: Apunte, valor: number | undefined) => {
+      try {
+        await almacen.apuntes.guardar({ ...a, calificacion: valor });
+      } catch (e) {
+        avisar(explicar(e).motivo);
+      }
+    },
+    [almacen, avisar],
+  );
+
+  /**
    * Mueve un apunte o una carpeta a otra carpeta. `hasta` en `null` es la raíz.
    *
    * Lo único delicado es mover una carpeta dentro de sí misma o de una hija suya, que
@@ -1230,6 +1251,7 @@ function Apuntes({
                 alBautizar={(n) => void renombrar(a, n)}
                 alCancelar={() => setRenombrando(null)}
                 alBorrar={() => setConfirmando({ objetivo: { tipo: 'apunte', a }, modo: 'borrar' })}
+                alCalificar={(v) => void calificar(a, v)}
               />
             ))}
           </AnimatePresence>
@@ -1905,6 +1927,7 @@ function Celda({
   alBautizar,
   alCancelar,
   alBorrar,
+  alCalificar,
 }: {
   apunte: Apunte;
   porEtiqueta: Map<string, Etiqueta>;
@@ -1916,6 +1939,8 @@ function Celda({
   alBautizar: (n: string) => void;
   alCancelar: () => void;
   alBorrar: () => void;
+  /** `undefined` la quita. */
+  alCalificar: (valor: number | undefined) => void;
 }) {
   const tipo = tipoDeFichero(apunte.tipo, apunte.nombre);
   const enDrive = apunte.remoto.proveedor === 'drive';
@@ -1952,6 +1977,11 @@ function Celda({
         <>
           <button type="button" className="asig-abrir" onClick={alAbrir} onFocus={posarse} title={apunte.nombre} disabled={yendo}>
             <Miniatura apunte={apunte} tipo={tipo} />
+            {apunte.calificacion !== undefined && (
+              <span className={`asig-nota ${bandaDe(apunte.calificacion)}`} title={`Nota: ${enNota(apunte.calificacion)}`}>
+                {enNota(apunte.calificacion)}
+              </span>
+            )}
             <span className="asig-nombre">{apunte.nombre}</span>
             <span className="asig-meta">
               {yendo ? 'A la papelera…' : `${tipo.nombre} · ${pesoLegible(apunte.tam)}`}
@@ -1977,11 +2007,121 @@ function Celda({
                 </svg>
               </a>
             )}
+            <PonerNota valor={apunte.calificacion} que={apunte.nombre} alGuardar={alCalificar} />
             <BotonesDeFila alRenombrar={alRenombrar} alBorrar={alBorrar} que={apunte.nombre} />
           </span>
         </>
       )}
     </mo.li>
+  );
+}
+
+/* ───────────────────────── la nota del profesor ─────────────────────────
+   Cuatro tramos, los que pidió Cristian: suspenso, aprobado, notable y sobresaliente.
+   **Salen de los `--c-*` de la casa**, los mismos que usan las asignaturas y los iconos
+   de fichero: el contrato prohíbe meter un color nuevo y aquí no hace falta ninguno.
+*/
+function bandaDe(n: number): string {
+  if (n < 5) return 'suspenso';
+  if (n < 7) return 'aprobado';
+  if (n < 9) return 'notable';
+  return 'sobresaliente';
+}
+
+/** «7,5» y no «7.5»: es español, y «8» y no «8,0». */
+function enNota(n: number): string {
+  return (Math.round(n * 10) / 10).toLocaleString('es-ES', { maximumFractionDigits: 1 });
+}
+
+/**
+ * Poner, cambiar o quitar la nota, sin salir de la celda.
+ *
+ * Un campo de número y no una fila de botones: de 0 a 10 con un decimal son ciento un
+ * valores, y una rejilla de ciento un botones no es una interfaz. Enter guarda, Escape
+ * cancela — el mismo trato que renombrar, que está dos líneas más abajo en esta celda.
+ */
+function PonerNota({
+  valor,
+  que,
+  alGuardar,
+}: {
+  valor: number | undefined;
+  que: string;
+  alGuardar: (v: number | undefined) => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [texto, setTexto] = useState('');
+  const campo = useRef<HTMLInputElement>(null);
+
+  const abrir = () => {
+    setTexto(valor === undefined ? '' : String(valor));
+    setAbierto(true);
+  };
+
+  useEffect(() => {
+    if (abierto) campo.current?.select();
+  }, [abierto]);
+
+  const confirmar = () => {
+    /* La coma es lo que se teclea en español y lo que `type="number"` no acepta; se
+       traduce aquí en vez de obligar a escribir un punto que nadie escribe. */
+    const limpio = texto.trim().replace(',', '.');
+    setAbierto(false);
+    if (limpio === '') {
+      if (valor !== undefined) alGuardar(undefined);
+      return;
+    }
+    const n = Number(limpio);
+    /* Fuera de rango no se guarda y no se avisa: el campo ya lo acota y lo único que
+       puede pasar es que alguien escriba 100 queriendo 10. Cerrar sin cambiar es la
+       respuesta menos molesta. */
+    if (!Number.isFinite(n) || n < 0 || n > 10) return;
+    if (n !== valor) alGuardar(Math.round(n * 10) / 10);
+  };
+
+  if (!abierto) {
+    return (
+      <button
+        type="button"
+        className={`asig-accion${valor !== undefined ? ` con-nota ${bandaDe(valor)}` : ''}`}
+        onClick={abrir}
+        title={valor === undefined ? 'Poner nota' : `Cambiar la nota de ${que}`}
+        aria-label={valor === undefined ? `Poner nota a ${que}` : `Cambiar la nota de ${que}`}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3.4 14.6 9l6 .8-4.4 4.2 1.1 6-5.3-2.9L6.7 20l1.1-6L3.4 9.8 9.4 9Z" />
+        </svg>
+      </button>
+    );
+  }
+
+  return (
+    <span className="asig-nota-editor">
+      {/*
+        **`type="text"` y no `type="number"`**, que es lo que parecía correcto.
+        Un campo numérico **descarta la coma** sin decir nada: `value` vuelve vacío, así
+        que teclear «7,5» no escribía nada. Y la coma no es un capricho — es lo que da la
+        tecla decimal de un teclado español. Con texto entran las dos y `confirmar` las
+        traduce; el rango lo comprueba él, que de todas formas tenía que hacerlo.
+        `inputMode="decimal"` deja el teclado numérico donde lo haya.
+      */}
+      <input
+        ref={campo}
+        type="text"
+        inputMode="decimal"
+        maxLength={4}
+        className="asig-nota-campo"
+        value={texto}
+        placeholder="—"
+        aria-label={`Nota de ${que}, de 0 a 10`}
+        onChange={(e) => setTexto(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') confirmar();
+          if (e.key === 'Escape') setAbierto(false);
+        }}
+        onBlur={confirmar}
+      />
+    </span>
   );
 }
 

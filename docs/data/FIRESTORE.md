@@ -104,6 +104,11 @@ users/{uid}
     remoto: { proveedor: "drive" | "local", id: "<id en Drive>" }
     carpeta: "<carpetaId>"         ← opcional; sin él, la raíz de la asignatura
     orden: 3                       ← opcional; hoy no hay interfaz que lo escriba
+    calificacion: 8.5              ← opcional; la nota del profesor, de 0 a 10
+
+      Se llama `calificacion` y no `nota` porque `Evento.nota` ya existe y es un texto
+      de observaciones. Dos campos hermanos con el mismo nombre y significados distintos
+      es exactamente la clase de cosa que costó un diálogo roto con `.campo`.
     creado / actualizado: <timestamp>   ← se ordena por `creado`
 
   users/{uid}/carpetas/{carpetaId} ← el árbol con el que se organiza cada asignatura
@@ -210,6 +215,24 @@ Lo que hacen:
 
 ---
 
+### El comodín del final: `delete` va aparte de `create, update`
+
+En Firestore **`allow write` cubre create, update y delete**, pero en un borrado
+`request.resource` es **null**. El comodín del final llevaba
+
+```
+allow write: if esPropietario(uid) && !estaValidada(coleccion)
+  && request.resource.data.keys().size() <= 50;
+```
+
+y esa última condición revienta en un borrado, así que **denegaba todos los borrados** de
+cualquier colección que cayera ahí. El efecto es de los que no se encuentran leyendo: se
+puede crear y no se puede borrar, y solo aparece el día que alguien pulsa la equis.
+
+Pasó con `bloques` recién estrenada: las reglas publicadas aún no la conocían, cayó en el
+comodín, y Celeste podía colocar bloques en el plan y no quitarlos. Ahora el comodín tiene
+su `allow delete` aparte, **y da igual que una colección nueva tarde en tener su `match`**.
+
 ## 4 · Índices
 
 Firestore crea solo los de un campo, que cubren casi todo. Harán falta índices compuestos cuando
@@ -252,6 +275,8 @@ cada colección declara sus campos opcionales en `almacen-firestore.ts`:
 | `etiquetas` | — |
 | `sesiones` | `ini` |
 | `bloques` | — |
+
+Y `apuntes` lleva además `calificacion`, la nota del profesor.
 
 El opcional que no llega, o llega `undefined`, se manda como `deleteField()` y desaparece.
 `undefined` necesitaba ese trato de todas formas: Firestore rechaza la escritura entera si lo

@@ -446,11 +446,14 @@ function Abierto({
         <mo.h2 className="met-nombre grande" layoutId={`met-nombre-${metodo.clave}`}>
           {metodo.nombre}
         </mo.h2>
+        {/* «Volver» con flecha y no «Cerrar» con equis: esto no cierra nada —la tarjeta
+            se encoge y vuelve a su sitio en el taller—, y una equis promete que algo
+            desaparece. La flecha además dice hacia dónde. */}
         <Button type="button" variant="outline" size="sm" onClick={cerrar}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M18 6 6 18M6 6l12 12" />
+            <path d="M19 12H5M11 18l-6-6 6-6" />
           </svg>
-          Cerrar
+          Volver
         </Button>
       </div>
 
@@ -892,8 +895,8 @@ function Planificador({ ahora }: { ahora: Date | null }) {
       try {
         /* El documento entero, nunca un trozo: `merge` conserva lo que no se manda. */
         await almacen.bloques.guardar(b);
-      } catch {
-        avisar('No se pudo guardar el plan.');
+      } catch (e) {
+        avisar(porQue(e, 'No se pudo guardar el plan.'));
       }
     },
     [almacen, avisar],
@@ -903,8 +906,8 @@ function Planificador({ ahora }: { ahora: Date | null }) {
     async (id: string) => {
       try {
         await almacen.bloques.borrar(id);
-      } catch {
-        avisar('No se pudo quitar el bloque.');
+      } catch (e) {
+        avisar(porQue(e, 'No se pudo quitar el bloque.'));
       }
     },
     [almacen, avisar],
@@ -1074,6 +1077,22 @@ function Planificador({ ahora }: { ahora: Date | null }) {
       </mo.div>
     </div>
   );
+}
+
+/**
+ * Un fallo del almacén, contado de forma que se pueda arreglar.
+ *
+ * `permission-denied` tiene una sola causa real aquí —las reglas publicadas no conocen
+ * todavía esta colección— y un «no se pudo» genérico esconde justo eso. Costó una ronda:
+ * se podían crear bloques y no borrarlos, porque el comodín de las reglas metía el
+ * borrado en un `allow write` cuya condición mira `request.resource`, que en un borrado
+ * es nulo.
+ */
+function porQue(e: unknown, generico: string): string {
+  const codigo = typeof e === 'object' && e !== null && 'code' in e ? String((e as { code: unknown }).code) : '';
+  if (codigo.includes('permission-denied')) return 'La nube no acepta este cambio todavía. Hay que publicar las reglas de Firestore.';
+  if (codigo.includes('unavailable')) return 'Sin conexión con la nube. Vuelve a intentarlo.';
+  return generico;
 }
 
 function nombreDe(f: Franja): string {
