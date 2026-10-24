@@ -126,6 +126,23 @@ users/{uid}
     No tiene `asignatura` ni `remoto`: no vive en ninguna carpeta y no tiene bytes en
     ningún sitio. Es el documento más pequeño de la base.
 
+  users/{uid}/bloques/{bloqueId}   ← el plan de un día, repartido en cuatro partes
+    fecha: "2026-10-24"            ← el día que se planea
+    franja: "manana"               ← manana | mediodia | tarde | noche
+    asignatura: "geometria"        ← la clave de ASIGNATURAS, ≤ 120
+    minutos: 90                    ← 15 a 120, múltiplo de 15
+    creado / actualizado: <timestamp>   ← se ordena por `fecha`
+
+    **La franja NO es una hora del reloj**, y de ahí sale todo lo demás: «mañana» no es
+    «de 9 a 11». Por eso esto no es una `Tarea` —que sí ocupa una franja medida en
+    minutos desde medianoche— y por eso no sale en la agenda del día ni en el mes.
+
+    El tope de dos horas por franja **lo vigila la pantalla, no las reglas**: una regla
+    solo ve el documento que se escribe, nunca la suma de los que ya están. Lo que sí
+    acotan las reglas es que ninguno solo pase de 120.
+
+    El detalle, en [docs/frontend/METODOS.md](../frontend/METODOS.md) § 3.
+
   users/{uid}/sesiones/{sesionId}  ← cuánto se ha estudiado, de qué y cuándo
     asignatura: "geometria"        ← la clave de ASIGNATURAS, ≤ 120
     fecha: "2026-10-21"            ← el día en que EMPEZÓ
@@ -234,6 +251,7 @@ cada colección declara sus campos opcionales en `almacen-firestore.ts`:
 | `carpetas` | `madre`, `etiquetas` |
 | `etiquetas` | — |
 | `sesiones` | `ini` |
+| `bloques` | — |
 
 El opcional que no llega, o llega `undefined`, se manda como `deleteField()` y desaparece.
 `undefined` necesitaba ese trato de todas formas: Firestore rechaza la escritura entera si lo

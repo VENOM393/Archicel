@@ -523,6 +523,34 @@ export const DENTRO_DEL_METODO: Variants = {
 };
 
 /** Las demás tarjetas mientras una está abierta: se van, no se quedan detrás. */
+/**
+ * Una de las cuatro partes del día del planificador.
+ *
+ * Suben escalonadas, de la mañana a la noche: la pantalla se escribe en el orden en que
+ * se vive el día. El escalón lo reparte el contenedor, que declara `staggerChildren` —
+ * estas solo dicen de dónde vienen.
+ */
+/**
+ * El contenedor de las cuatro partes del día: solo reparte el escalón.
+ *
+ * Hace falta porque `staggerChildren` alcanza a los **hijos directos** y nada más. La
+ * rejilla del planificador es nieta del cuerpo de la tarjeta, así que sin esto las cuatro
+ * columnas heredaban el estado «dentro» y entraban las cuatro a la vez.
+ */
+export const REPARTO: Variants = {
+  dentro: { transition: { staggerChildren: ESCALON } },
+};
+
+export const FRANJA: Variants = {
+  fuera: { opacity: 0, y: 22, filter: 'blur(7px)' },
+  dentro: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: { ...MUELLE.denso, opacity: { duration: TIEMPO.paso, ease: CURVA.salida } },
+  },
+};
+
 export const METODO_APARTADO: Variants = {
   dentro: { opacity: 1, scale: 1, transition: MUELLE.normal },
   saliendo: { opacity: 0, scale: 0.97, transition: { duration: TIEMPO.roce, ease: CURVA.fuera } },

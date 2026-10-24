@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useArchicel } from '@/lib/firebase/sesion';
-import { aFecha, deFecha, hoy, type Apunte, type Carpeta, type Etiqueta, type Evento, type Rango, type Sesion, type Tarea } from '@/lib/data';
+import { aFecha, deFecha, hoy, type Apunte, type Bloque, type Carpeta, type Etiqueta, type Evento, type Rango, type Sesion, type Tarea } from '@/lib/data';
 
 /** Ordena por fecha, luego por hora y por último por `id`, que nunca empata. */
 function ordenarEventos(l: Evento[]): Evento[] {
@@ -168,6 +168,33 @@ export function useSesiones(rango?: Rango): [Sesion[], boolean] {
     [almacen],
   );
   return useLista(escuchar, ordenarSesiones, `${almacen.uid ?? ''}|sesiones|${rango?.desde ?? ''}|${rango?.hasta ?? ''}`, rango);
+}
+
+/**
+ * El plan de un día, por orden de colocación dentro de cada franja.
+ *
+ * Por `creado` y no por asignatura: dentro de una franja el orden es el que ella puso, y
+ * reordenar alfabéticamente le movería las barras bajo los dedos cada vez que suelta una.
+ */
+function ordenarBloques(l: Bloque[]): Bloque[] {
+  return [...l].sort((a, b) => (a.creado ?? 0) - (b.creado ?? 0) || a.id.localeCompare(b.id));
+}
+
+/**
+ * Los bloques de **un solo día**.
+ *
+ * El rango es ese día de punta a punta, así que la escucha trae lo justo: planear el
+ * martes no baja el resto del mes. `fecha` sin más vale como `desde` y `hasta` porque
+ * el rango del almacén es inclusivo por los dos lados.
+ */
+export function useBloques(fecha: string | null): [Bloque[], boolean] {
+  const { almacen } = useArchicel();
+  const rango = useMemo(() => (fecha ? { desde: fecha, hasta: fecha } : undefined), [fecha]);
+  const escuchar = useCallback(
+    (cb: (l: Bloque[]) => void, r?: Rango) => almacen.bloques.escuchar(cb, r),
+    [almacen],
+  );
+  return useLista(escuchar, ordenarBloques, `${almacen.uid ?? ''}|bloques|${fecha ?? ''}`, rango);
 }
 
 /** Igual que las carpetas: alfabético, y el desempate por `id` para que la lista no baile. */

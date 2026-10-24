@@ -188,6 +188,32 @@ export interface Carpeta {
  * No tiene `asignatura` ni `remoto`: una etiqueta no vive en ninguna carpeta y no tiene
  * bytes en ningún sitio. Es el documento más pequeño de la base.
  */
+/**
+ * Las cuatro partes del día del planificador.
+ *
+ * **No son horas del reloj y es a propósito.** «Mañana» no significa «de 9 a 11»: las
+ * horas concretas las sabe ella y cambian cada día. Esa es justo la diferencia con una
+ * `Tarea`, que sí ocupa una franja medida en minutos desde medianoche, y la razón de que
+ * esto no se guarde como tarea y no aparezca en la agenda del día ni en el calendario.
+ */
+export type Franja = 'manana' | 'mediodia' | 'tarde' | 'noche';
+
+/** Cuánto dura cada parte del día. Es el tope que la pantalla hace respetar. */
+export const MINUTOS_POR_FRANJA = 120;
+
+/** Un rato de estudio planeado: qué asignatura, en qué parte de qué día, y cuánto. */
+export interface Bloque {
+  id: ID;
+  fecha: Fecha;
+  franja: Franja;
+  /** La clave de la asignatura en el catálogo del curso. */
+  asignatura: string;
+  /** Múltiplo de 15, entre 15 y `MINUTOS_POR_FRANJA`. La suma de la franja no se pasa. */
+  minutos: number;
+  creado?: number;
+  actualizado?: number;
+}
+
 export interface Etiqueta {
   id: ID;
   /** Lo escribe ella: se pinta como texto, nunca como HTML. Tope en `TOPES.nombreEtiqueta`. */

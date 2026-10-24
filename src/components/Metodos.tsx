@@ -27,30 +27,38 @@
  * todavía no está.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as mo from 'motion/react-m';
 import { AnimatePresence } from 'motion/react';
 
 import {
+  CELDA,
   DENTRO_DEL_METODO,
+  FRANJA,
   METODO_APARTADO,
   MUELLE,
   ORQUESTA,
   PIEZA,
+  REPARTO,
   CURVA,
   TIEMPO,
 } from '@/lib/ui/movimiento';
 import { Button } from '@/components/ui/button';
 import { SelectorAsignatura } from '@/components/campos/SelectorAsignatura';
-import { useAhora, useSesiones } from '@/hooks/useDatos';
+import { useAhora, useBloques, useSesiones } from '@/hooks/useDatos';
 import { useArchicel } from '@/lib/firebase/sesion';
 import { nuevoId } from '@/lib/data/almacen';
 import { useUI } from '@/lib/ui/contexto';
 import {
   ASIGNATURAS,
   CLAVES_ASIGNATURA,
+  MINUTOS_POR_FRANJA,
   aFecha,
+  deFecha,
+  hoy,
+  type Bloque,
   type ClaveAsignatura,
+  type Franja,
   type Sesion,
 } from '@/lib/data';
 
@@ -158,9 +166,9 @@ const METODOS: Metodo[] = [
   {
     clave: 'repaso',
     nombre: 'Repetición espaciada',
-    pie: 'Repasa hoy, mañana, a los tres días… Cada vez más lejos, y se queda.',
+    pie: 'Reparte el día en cuatro partes de dos horas y coloca en cada una lo que toca.',
     color: 'azul',
-    listo: false,
+    listo: true,
   },
   {
     clave: 'boceto',
@@ -449,6 +457,8 @@ function Abierto({
       <mo.div className="met-abierto-cuerpo" variants={DENTRO_DEL_METODO} initial="fuera" animate="dentro" exit="saliendo">
         {metodo.clave === 'pomodoro' ? (
           <Pomodoro sesiones={sesiones} ahora={ahora} />
+        ) : metodo.clave === 'repaso' ? (
+          <Planificador ahora={ahora} />
         ) : (
           <PorDefinir metodo={metodo} />
         )}
@@ -775,4 +785,450 @@ function cuando(fecha: string, ahora: Date): string {
   ayer.setDate(ayer.getDate() - 1);
   if (fecha === aFecha(ayer)) return 'ayer';
   return fecha.slice(8) + '/' + fecha.slice(5, 7);
+}
+
+/* ───────────────────────── el planificador del día ─────────────────────────
+   La superficie del método de repasos: cuatro partes del día, dos horas cada una, y
+   dentro de cada una las asignaturas que toquen. Se reparte arrastrando.
+
+   **Por qué un bloque no es una `Tarea`**, que era la decisión que quedaba abierta: una
+   tarea ocupa una franja del reloj —`ini` y `fin` en minutos desde medianoche— y esto
+   ocupa una *parte del día*. «Mañana» no es «de 9 a 11»: las horas las sabe ella y
+   cambian. Hacerlo tarea habría obligado a inventarle un horario que nadie pidió, y
+   además habría mezclado «estudiar física» con «gimnasio» en la agenda del día y en el
+   mes del calendario.
+*/
+
+interface Parte {
+  clave: Franja;
+  nombre: string;
+  icono: ReactNode;
+}
+
+/** Las cuatro, en el orden en que se vive el día. */
+const PARTES: Parte[] = [
+  {
+    clave: 'manana',
+    nombre: 'Mañana',
+    /* un sol saliendo por detrás de la línea del horizonte */
+    icono: (
+      <>
+        <path d="M3 18h18" />
+        <path d="M7.5 18a4.5 4.5 0 0 1 9 0" />
+        <path d="M12 6.5V4M5.6 9.1 4.2 7.7M18.4 9.1l1.4-1.4" />
+      </>
+    ),
+  },
+  {
+    clave: 'mediodia',
+    nombre: 'Mediodía',
+    /* el sol entero, arriba del todo */
+    icono: (
+      <>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 3.2V5M12 19v1.8M3.2 12H5M19 12h1.8M5.9 5.9 7.2 7.2M16.8 16.8l1.3 1.3M18.1 5.9l-1.3 1.3M7.2 16.8l-1.3 1.3" />
+      </>
+    ),
+  },
+  {
+    clave: 'tarde',
+    nombre: 'Tarde',
+    /* el mismo horizonte que la mañana, con la flecha al revés: el sol baja */
+    icono: (
+      <>
+        <path d="M3 18h18" />
+        <path d="M7.5 18a4.5 4.5 0 0 1 9 0" />
+        <path d="M12 4v3.9M9.7 5.6 12 7.9l2.3-2.3" />
+      </>
+    ),
+  },
+  {
+    clave: 'noche',
+    nombre: 'Noche',
+    icono: <path d="M20 14.2A8.2 8.2 0 0 1 9.8 4 8.4 8.4 0 1 0 20 14.2Z" />,
+  },
+];
+
+/** El escalón mínimo. Media hora y hora y media salen de aquí sin teclear nada. */
+const PASO = 15;
+
+/**
+ * El tipo de arrastre del planificador, distinto del de los apuntes.
+ *
+ * Con el mismo tipo, soltar un apunte sobre una parte del día habría parecido válido
+ * hasta el instante en que no pasara nada. Dos tipos y la diana ni siquiera se enciende.
+ */
+const TIPO_BLOQUE = 'application/x-archicel-bloque';
+
+function Planificador({ ahora }: { ahora: Date | null }) {
+  const { almacen } = useArchicel();
+  const { avisar } = useUI();
+
+  /* Empieza en hoy, pero **cuando el cliente sabe qué día es**: la página se
+     prerrenderiza y el servidor no conoce la fecha de la usuaria. A partir de ahí manda
+     ella con las flechas, y por eso el día no se recalcula cada vez que `ahora` late. */
+  const [dia, setDia] = useState<string | null>(null);
+  useEffect(() => {
+    setDia((d) => d ?? (ahora ? aFecha(ahora) : null));
+  }, [ahora]);
+
+  const [bloques, listo] = useBloques(dia);
+
+  /** Lo que hay en cada parte del día, y cuánto lleva ocupado. */
+  const porFranja = useMemo(() => {
+    const m = new Map<Franja, { lista: Bloque[]; usados: number }>();
+    for (const p of PARTES) m.set(p.clave, { lista: [], usados: 0 });
+    for (const b of bloques) {
+      const f = m.get(b.franja);
+      if (!f) continue;
+      f.lista.push(b);
+      f.usados += b.minutos;
+    }
+    return m;
+  }, [bloques]);
+
+  const guardar = useCallback(
+    async (b: Bloque) => {
+      try {
+        /* El documento entero, nunca un trozo: `merge` conserva lo que no se manda. */
+        await almacen.bloques.guardar(b);
+      } catch {
+        avisar('No se pudo guardar el plan.');
+      }
+    },
+    [almacen, avisar],
+  );
+
+  const quitar = useCallback(
+    async (id: string) => {
+      try {
+        await almacen.bloques.borrar(id);
+      } catch {
+        avisar('No se pudo quitar el bloque.');
+      }
+    },
+    [almacen, avisar],
+  );
+
+  /** Minutos libres en una franja, sin contar lo que ya ocupa `salvo` si está en ella. */
+  const libreEn = useCallback(
+    (f: Franja, salvo?: Bloque) => {
+      const usados = porFranja.get(f)?.usados ?? 0;
+      return MINUTOS_POR_FRANJA - usados + (salvo && salvo.franja === f ? salvo.minutos : 0);
+    },
+    [porFranja],
+  );
+
+  /**
+   * Meter una asignatura en una parte del día: se lleva **todo lo que quede libre**.
+   *
+   * Que una asignatura sola ocupe las dos horas es el caso corriente —«por la mañana, dos
+   * horas de mates»—, así que es lo que pasa sin tocar nada más. Para partir el bloque se
+   * encoge con el «−» y en el hueco que aparece entra la siguiente.
+   */
+  const colocar = useCallback(
+    (clave: string, f: Franja) => {
+      const libre = libreEn(f);
+      if (libre < PASO) {
+        avisar('Esa parte del día ya está llena.');
+        return;
+      }
+      void guardar({
+        id: nuevoId('b'),
+        fecha: dia ?? hoy(),
+        franja: f,
+        asignatura: clave,
+        minutos: libre,
+        creado: Date.now(),
+      });
+    },
+    [dia, guardar, libreEn, avisar],
+  );
+
+  /** Mudar un bloque de una parte del día a otra. */
+  const mudar = useCallback(
+    (b: Bloque, f: Franja) => {
+      if (b.franja === f) return;
+      const libre = libreEn(f, b);
+      if (libre < PASO) {
+        avisar(`En ${nombreDe(f)} no queda sitio.`);
+        return;
+      }
+      /* Si no cabe entero se muda **recortado** en vez de negarse, y la pantalla lo dice.
+         Negar el gesto dejaría arrastrando contra un muro sin saber cuánto hay que
+         liberar antes de volver a intentarlo. */
+      const minutos = Math.min(b.minutos, libre);
+      if (minutos < b.minutos) avisar(`Solo cabía ${enHoras(minutos)}: se movió recortado.`);
+      void guardar({ ...b, franja: f, minutos, actualizado: Date.now() });
+    },
+    [guardar, libreEn, avisar],
+  );
+
+  const estirar = useCallback(
+    (b: Bloque, delta: number) => {
+      const minutos = b.minutos + delta;
+      if (minutos < PASO || minutos > libreEn(b.franja, b)) return;
+      void guardar({ ...b, minutos, actualizado: Date.now() });
+    },
+    [guardar, libreEn],
+  );
+
+  const mover = (pasos: number) => {
+    if (!dia) return;
+    const d = deFecha(dia);
+    d.setDate(d.getDate() + pasos);
+    setDia(aFecha(d));
+  };
+
+  const esHoy = Boolean(ahora && dia === aFecha(ahora));
+  const repartido = bloques.reduce((n, b) => n + b.minutos, 0);
+
+  return (
+    <div className="pl">
+      <div className="pl-barra-dia">
+        <button type="button" className="pl-flecha" onClick={() => mover(-1)} aria-label="Día anterior">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m14 6-6 6 6 6" />
+          </svg>
+        </button>
+
+        {/* Mientras el cliente no sepa qué día es, el hueco se reserva en vez de pintar
+            una fecha del servidor que cambiaría sola al hidratar. */}
+        <p className="pl-fecha">
+          {dia ? (
+            <>
+              {diaLargo(dia)}
+              {esHoy && <span className="pl-hoy">hoy</span>}
+            </>
+          ) : (
+            <span className="pl-fecha-espera" aria-hidden="true" />
+          )}
+        </p>
+
+        <button type="button" className="pl-flecha" onClick={() => mover(1)} aria-label="Día siguiente">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m10 6 6 6-6 6" />
+          </svg>
+        </button>
+
+        {!esHoy && ahora && (
+          <button type="button" className="pl-volver" onClick={() => setDia(aFecha(ahora))}>
+            Volver a hoy
+          </button>
+        )}
+
+        <span className="pl-total">
+          <b>{enHoras(repartido)}</b> de {enHoras(MINUTOS_POR_FRANJA * PARTES.length)} repartidas
+        </span>
+      </div>
+
+      {/* De aquí se arrastran las asignaturas a las partes del día. */}
+      <div className="pl-paleta">
+        {CLAVES_ASIGNATURA.map((k) => {
+          const a = ASIGNATURAS[k];
+          return (
+            <span
+              key={k}
+              className="pl-chip"
+              draggable
+              style={{ ['--tc' as string]: `var(--c-${a.color})` }}
+              /* `onDragStartCapture` y no `onDragStart`: Motion declara el suyo —el de su
+                 gesto de arrastre— y tapa el del DOM, que es el que lleva `dataTransfer`. */
+              onDragStartCapture={(e) => e.dataTransfer.setData(TIPO_BLOQUE, `n:${k}`)}
+            >
+              <i aria-hidden="true" />
+              {a.nombre}
+            </span>
+          );
+        })}
+      </div>
+
+      <mo.div className="pl-rejilla" variants={REPARTO}>
+        {PARTES.map((p) => {
+          const usados = porFranja.get(p.clave)?.usados ?? 0;
+          return (
+            <ParteDelDia
+              key={p.clave}
+              parte={p}
+              bloques={porFranja.get(p.clave)?.lista ?? []}
+              usados={usados}
+              libre={MINUTOS_POR_FRANJA - usados}
+              listo={listo}
+              alSoltar={(carga) => {
+                const i = carga.indexOf(':');
+                const que = carga.slice(0, i);
+                const valor = carga.slice(i + 1);
+                if (que === 'n') {
+                  colocar(valor, p.clave);
+                } else {
+                  const b = bloques.find((x) => x.id === valor);
+                  if (b) mudar(b, p.clave);
+                }
+              }}
+              alColocar={(clave) => colocar(clave, p.clave)}
+              estirar={estirar}
+              quitar={quitar}
+            />
+          );
+        })}
+      </mo.div>
+    </div>
+  );
+}
+
+function nombreDe(f: Franja): string {
+  return PARTES.find((p) => p.clave === f)?.nombre.toLowerCase() ?? 'esa parte del día';
+}
+
+/** Una de las cuatro columnas: la cabecera, la pista de dos horas y lo que queda libre. */
+function ParteDelDia({
+  parte,
+  bloques,
+  usados,
+  libre,
+  listo,
+  alSoltar,
+  alColocar,
+  estirar,
+  quitar,
+}: {
+  parte: Parte;
+  bloques: Bloque[];
+  usados: number;
+  libre: number;
+  listo: boolean;
+  alSoltar: (carga: string) => void;
+  alColocar: (clave: string) => void;
+  estirar: (b: Bloque, delta: number) => void;
+  quitar: (id: string) => void;
+}) {
+  const [encima, setEncima] = useState(false);
+  const [eligiendo, setEligiendo] = useState(false);
+
+  return (
+    <mo.section
+      className={`pl-parte${encima ? ' diana' : ''}`}
+      variants={FRANJA}
+      onDragOver={(e) => {
+        /* Solo lo nuestro: un fichero arrastrado del escritorio no es un bloque, y sin
+           esta comprobación la diana se encendía para algo que no se podía soltar. */
+        if (!e.dataTransfer.types.includes(TIPO_BLOQUE)) return;
+        e.preventDefault();
+        setEncima(true);
+      }}
+      onDragLeave={() => setEncima(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setEncima(false);
+        const carga = e.dataTransfer.getData(TIPO_BLOQUE);
+        if (carga) alSoltar(carga);
+      }}
+    >
+      <header className="pl-cab">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          {parte.icono}
+        </svg>
+        <h3>{parte.nombre}</h3>
+        <span className={`pl-cuenta${usados === MINUTOS_POR_FRANJA ? ' llena' : ''}`}>
+          {enHoras(usados)}
+          <i aria-hidden="true">/</i>
+          {enHoras(MINUTOS_POR_FRANJA)}
+        </span>
+      </header>
+
+      {/* La pista **son** las dos horas: lo que ocupa cada bloque es su parte del alto, y
+          el hueco libre mide lo que falta. Las proporciones se leen sin leer un número,
+          que es la misma idea que el ancho de las columnas de `/asignaturas`. */}
+      <div className="pl-pista">
+        {bloques.map((b) => (
+          <Barra key={b.id} bloque={b} estirar={estirar} quitar={quitar} />
+        ))}
+
+        {libre >= PASO && (
+          <mo.div className="pl-libre" layout style={{ flexGrow: libre }} variants={CELDA}>
+            {eligiendo ? (
+              <div className="pl-elegir">
+                {CLAVES_ASIGNATURA.map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className="pl-elegir-op"
+                    style={{ ['--tc' as string]: `var(--c-${ASIGNATURAS[k].color})` }}
+                    onClick={() => {
+                      alColocar(k);
+                      setEligiendo(false);
+                    }}
+                  >
+                    <i aria-hidden="true" />
+                    {ASIGNATURAS[k].nombre}
+                  </button>
+                ))}
+                <button type="button" className="pl-elegir-no" onClick={() => setEligiendo(false)}>
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              /* Botón además de diana. Arrastrar es el gesto que se pidió, pero una
+                 superficie que SOLO acepta arrastres no se usa con el teclado y no se
+                 descubre sola: hay que saber ya que se puede arrastrar algo hasta ahí. */
+              <button type="button" className="pl-libre-btn" onClick={() => setEligiendo(true)}>
+                <span className="pl-libre-signo" aria-hidden="true">+</span>
+                <span className="pl-libre-txt">{listo ? `${enHoras(libre)} sin repartir` : 'Cargando…'}</span>
+              </button>
+            )}
+          </mo.div>
+        )}
+      </div>
+    </mo.section>
+  );
+}
+
+/** Un rato de estudio dentro de una parte del día. Su alto **son** sus minutos. */
+function Barra({
+  bloque,
+  estirar,
+  quitar,
+}: {
+  bloque: Bloque;
+  estirar: (b: Bloque, delta: number) => void;
+  quitar: (id: string) => void;
+}) {
+  const a = ASIGNATURAS[bloque.asignatura as ClaveAsignatura];
+  return (
+    <mo.div
+      className="pl-barra"
+      layout
+      variants={CELDA}
+      draggable
+      onDragStartCapture={(e) => e.dataTransfer.setData(TIPO_BLOQUE, `b:${bloque.id}`)}
+      style={{
+        ['--tc' as string]: a ? `var(--c-${a.color})` : 'var(--hairline-lit)',
+        flexGrow: bloque.minutos,
+      }}
+      transition={MUELLE.normal}
+    >
+      <span className="pl-barra-que">{a?.nombre ?? bloque.asignatura}</span>
+      <span className="pl-barra-cuanto">{enHoras(bloque.minutos)}</span>
+
+      <span className="pl-mandos">
+        <button type="button" onClick={() => estirar(bloque, -PASO)} aria-label="Quitar quince minutos">
+          −
+        </button>
+        <button type="button" onClick={() => estirar(bloque, PASO)} aria-label="Añadir quince minutos">
+          +
+        </button>
+        <button type="button" className="pl-quita" onClick={() => quitar(bloque.id)} aria-label="Quitar del plan">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </span>
+    </mo.div>
+  );
+}
+
+/** «Martes, 27 de octubre». Con mayúscula, que es el principio de una frase. */
+function diaLargo(f: string): string {
+  const t = deFecha(f).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  return t.charAt(0).toUpperCase() + t.slice(1);
 }

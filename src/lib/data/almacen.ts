@@ -43,6 +43,7 @@ export interface Almacen {
   readonly carpetas: Coleccion<import('./tipos').Carpeta>;
   readonly etiquetas: Coleccion<import('./tipos').Etiqueta>;
   readonly sesiones: Coleccion<import('./tipos').Sesion>;
+  readonly bloques: Coleccion<import('./tipos').Bloque>;
   readonly ajustes: Documento<Ajustes>;
   /** Una disposición por superficie: `layout('escritorio')`. */
   layout(superficie: string): Documento<Layout>;

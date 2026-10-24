@@ -604,11 +604,44 @@ hace**: el anillo del pomodoro, la escalera de repasos, el alzado a trazo. Al pu
 **crece hasta ocupar la pantalla** y dentro va toda la configuración de ese método — no hay
 pantalla de ajustes aparte.
 
-**Hoy funciona el pomodoro.** Los otros dos abren igual y dicen que están por definir: de la
-repetición espaciada quedan decisiones abiertas y de Sketchap no se sabe aún qué es. Un
-método a medias que parece terminado es peor que uno que dice que todavía no está.
+**Funcionan dos: el pomodoro y el planificador del día.** Sketchap abre igual y dice que
+está por definir, porque no se sabe aún qué es — un método a medias que parece terminado es
+peor que uno que dice que todavía no está.
 
-Cinco cosas que no se deducen del código:
+### El planificador del día
+
+Dentro de «Repetición espaciada»: una tabla de **un día** con cuatro partes —mañana,
+mediodía, tarde, noche— de **dos horas cada una**, y dentro las asignaturas que toquen. Se
+reparte **arrastrando** y con flechas se pasa de un día a otro.
+
+**Está la tabla, no el método.** Que los repasos se vayan separando —hoy, mañana, a los
+tres días— lo decide hoy ella a mano; lo que falta para que sea repetición espaciada de
+verdad son tres decisiones en `docs/ideas/IDEAS.md` § 1.
+
+Cuatro cosas que no se deducen del código:
+
+- **Un bloque no es una `Tarea`, y ese era el nudo.** Una tarea ocupa una franja del reloj
+  (`ini`/`fin` en minutos desde medianoche); un bloque ocupa una **parte del día**.
+  «Mañana» no es «de 9 a 11» —las horas las sabe ella, lo dijo explícitamente— y hacerlo
+  tarea habría obligado a inventarle un horario que nadie pidió, además de mezclar
+  «estudiar física» con «gimnasio» en la agenda y en el mes.
+- **La pista son las dos horas.** Cada bloque ocupa su parte del alto con
+  `flex-grow: minutos`: media hora ocupa un cuarto de la columna sin que nadie calcule
+  nada. Es la misma idea que el ancho de las columnas de `/asignaturas`.
+- **Cuatro columnas en fila, no la cuadrícula 2×2 de la referencia.** El día corre de
+  izquierda a derecha como se vive, y así cada columna puede ser esa pista vertical.
+  Volver al 2×2 es cambiar `grid-template-columns` y nada más; en estrecho ya lo hace.
+- **El tope de dos horas lo vigila la pantalla, no las reglas.** Una regla de Firestore
+  solo ve el documento que se escribe, nunca la suma de los que ya están en la franja. Lo
+  que sí acotan es que ninguno solo pase de 120.
+
+Y la de interfaz: **el planificador tiene su propio tipo de arrastre**
+(`application/x-archicel-bloque`). Con el de los apuntes, soltar un apunte sobre una parte
+del día habría parecido válido hasta el instante en que no pasara nada.
+
+### El pomodoro
+
+Seis cosas que no se deducen del código:
 
 - **Lo que se guarda es cuándo empezó, nunca cuánto queda.** Es lo que hace que el
   cronómetro sobreviva a recargar, a cambiar de sección y a cerrar la pestaña. Y el latido

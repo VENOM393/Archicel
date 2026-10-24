@@ -8,10 +8,12 @@ luego otro sitio donde pasan las cosas.
 Al pulsar una **crece hasta ocupar la pantalla**, y dentro va toda la configuración de ese
 método. No hay pantalla de ajustes aparte: se configura donde se usa.
 
-**Estado: el pomodoro funciona entero.** Los otros dos abren igual y dicen que están por
-definir. De la repetición espaciada quedan decisiones abiertas —sobre todo quién decide
-cuándo toca repasar— y de Sketchap no se sabe todavía qué es. Un método a medias que
-parece terminado es peor que uno que dice que aún no está.
+**Estado: funcionan dos de los tres.** El pomodoro entero (§ 2) y el planificador del día
+(§ 3). Sketchap abre igual y dice que está por definir, porque no se sabe todavía qué es:
+un método a medias que parece terminado es peor que uno que dice que aún no está.
+
+Del planificador, ojo con lo que es y lo que no: **está la tabla, no el método**. Que los
+repasos se vayan separando lo decide hoy ella a mano.
 
 Ficheros: `src/components/Metodos.tsx`, `src/app/metodos/page.tsx`, las reglas `.met-*` de
 `src/styles/archicel.css`, la colección `sesiones` del almacén.
@@ -152,7 +154,90 @@ haría falta poco. Es la decisión 2 de IDEAS § 2 y no se ha tomado.
 
 ---
 
-## 3 · El registro
+## 3 · El planificador del día
+
+`Repetición espaciada` abre una **tabla de un día**: cuatro partes —mañana, mediodía,
+tarde, noche—, **dos horas cada una**, y dentro de cada una las asignaturas que toquen.
+Se reparte arrastrando, y con flechas se pasa de un día a otro.
+
+**Lo que hay construido es la superficie, no el método.** El método es que los repasos se
+vayan separando —hoy, mañana, a los tres días—, y eso lo decide hoy ella a mano. Lo que
+falta para que sea repetición espaciada de verdad está en `docs/ideas/IDEAS.md` § 1.
+
+### Un bloque no es una `Tarea`, y ese era el nudo
+
+Era la primera decisión abierta. Una `Tarea` ocupa **una franja del reloj** (`ini` y `fin`
+en minutos desde medianoche); un bloque ocupa **una parte del día**. «Mañana» no es «de 9
+a 11»: las horas las sabe ella y cambian —lo dijo explícitamente, que de eso no nos
+preocupáramos—. Hacerlo tarea habría obligado a inventarle un horario que nadie pidió.
+
+Y habría mezclado «estudiar física» con «gimnasio» en la agenda del día y en el mes del
+calendario, que es exactamente la separación que esas pantallas ya cuidan.
+
+El precio es la receta entera de colección nueva: tipo, almacén, reglas, migración y hook.
+Sale a cuenta.
+
+### La pista **son** las dos horas
+
+Cada columna es una pista vertical y cada bloque ocupa su parte del alto, con `flex-grow:
+minutos`. Media hora ocupa un cuarto de la columna sin que nadie calcule nada y sin
+escribir un número en ninguna parte. Es la misma idea que el ancho de las columnas de
+`/asignaturas`, que son sus horas de clase a la semana.
+
+**Cuatro columnas en fila y no la cuadrícula 2×2 de la referencia.** La referencia era un
+tablero de Notion con cuatro tarjetas en 2×2; en fila, el día corre de izquierda a derecha
+como se vive, y además cada columna puede ser esa pista vertical — en 2×2 la pista sería
+horizontal y la proporción se lee peor. Volver al 2×2 es cambiar `grid-template-columns`
+por `repeat(2,1fr)` y nada más; en ventana estrecha ya lo hace.
+
+### Soltar una asignatura se lleva todo lo libre
+
+Que una sola ocupe las dos horas es el caso corriente —«por la mañana, dos horas de
+mates»—, así que es lo que pasa sin tocar nada más. Para partir el bloque se encoge con el
+«−» y en el hueco que aparece entra la siguiente. El escalón es de **15 minutos**, que es
+lo que hace que media hora y hora y media salgan sin teclear.
+
+**Mudar un bloque que no cabe entero lo recorta en vez de negarse**, y la pantalla lo dice.
+Negar el gesto dejaría arrastrando contra un muro sin saber cuánto hay que liberar antes de
+volver a intentarlo.
+
+**El tope de dos horas lo vigila la pantalla, no las reglas.** Una regla de Firestore solo
+ve el documento que se escribe, nunca la suma de los que ya están en la franja. Lo que sí
+acotan las reglas es que ninguno solo pase de 120. Se dice en vez de fingir que está
+cubierto.
+
+### Tres cosas de interfaz que no se deducen
+
+- **Su propio tipo de arrastre** (`application/x-archicel-bloque`), distinto del de los
+  apuntes. Con el mismo tipo, soltar un apunte sobre una parte del día habría parecido
+  válido hasta el instante en que no pasara nada; con dos, la diana ni se enciende.
+- **`onDragStartCapture` y no `onDragStart`**, la de siempre: Motion declara el suyo y tapa
+  el del DOM, que es el que lleva `dataTransfer`.
+- **El hueco libre es botón además de diana.** Arrastrar es el gesto que se pidió, pero una
+  superficie que *solo* acepta arrastres no se usa con el teclado y no se descubre sola:
+  hay que saber ya que se puede arrastrar algo hasta ahí.
+
+Y una de color: **el relleno de una barra va al 7 %**. Al 13 % una columna partida en dos
+era media pantalla azul y media verde — el «segundo color saturado» que el contrato
+prohíbe. Lo que identifica es el filete de 3 px de la izquierda, a plena intensidad.
+
+### La colección `bloques`
+
+| campo | tipo | |
+|---|---|---|
+| `fecha` | `YYYY-MM-DD` | el día que se planea |
+| `franja` | `'manana' \| 'mediodia' \| 'tarde' \| 'noche'` | una parte del día, **no una hora** |
+| `asignatura` | `string` | la clave de `ASIGNATURAS`, ≤ 120 |
+| `minutos` | `int` | 15 a 120, múltiplo de 15 |
+
+Sin opcionales: los cuatro son obligatorios. Se ordena por `fecha`, que lo es. Está en
+`estaValidada` de `firestore.rules` con su `match`, y en `PASOS` para que lo planeado sin
+cuenta suba al entrar.
+
+`useBloques(fecha)` escucha **un solo día**: planear el martes no baja el resto del mes.
+---
+
+## 4 · El registro
 
 «A qué le has dedicado tiempo», últimos 30 días, agregado por asignatura con una barra
 proporcional a la mayor. Es **el producto**: el cronómetro es la excusa. Lo que se pidió
@@ -166,7 +251,7 @@ Dos cosas que no se tocan:
 
 ---
 
-## 4 · La colección `sesiones`
+## 5 · La colección `sesiones`
 
 | campo | tipo | |
 |---|---|---|
@@ -194,9 +279,15 @@ cuenta suba al entrar.
 
 ---
 
-## 5 · Lo que falta
+## 6 · Lo que falta
 
-- **Repetición espaciada**: cinco decisiones abiertas en `docs/ideas/IDEAS.md` § 1.
+- **Repetición espaciada, el método.** La tabla está (§ 3); lo que no está es que los
+  repasos **se separen solos**. Quedan tres decisiones en `docs/ideas/IDEAS.md` § 1: quién
+  dice cuándo toca repasar, qué es la unidad que se repasa —una asignatura, un tema, una
+  etiqueta— y qué pasa con el repaso de un día en que no estudió.
+- **Comparar lo planeado con lo hecho.** El planificador escribe `bloques` y el pomodoro
+  escribe `sesiones`: cruzarlos diría «planeaste 2 h de mates y echaste 50 min». Sale casi
+  gratis y todavía no está.
 - **Sketchap**: falta saber qué es. Apuntarlo mal es peor que dejarlo en blanco, porque
   luego se construye lo apuntado.
 - **Avisar con la pestaña de fondo** (§ 2 de este documento).

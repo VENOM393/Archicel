@@ -18,7 +18,7 @@ Cuando una idea se construye, se quita de aquí y pasa a su documento propio.
 
 | Método | Qué es | Estado |
 |---|---|---|
-| **Repetición espaciada** | Planificar repasos que se van separando en el tiempo | idea · § 1 |
+| **Repetición espaciada** | Planificar repasos que se van separando en el tiempo | **la tabla, construida** · [METODOS.md](../frontend/METODOS.md) |
 | **Pomodoro** | Cronómetro de estudio y cuánto se le ha dedicado a cada asignatura | **construido** · [METODOS.md](../frontend/METODOS.md) |
 | **Sketchap** | *Pendiente de aclarar qué es* | § 3 |
 
@@ -28,68 +28,36 @@ pregunta «¿a qué le he dedicado más tiempo este mes?» se contesta sola y un
 
 ---
 
-## 1 · Repetición espaciada
+## 1 · Repetición espaciada — **la tabla está, el método no**
 
-**Estado:** idea · pedida el 21 de octubre de 2026
+Construida el 24 de octubre de 2026. La superficie vive en
+[docs/frontend/METODOS.md](../frontend/METODOS.md) § 3: cuatro partes del día de dos horas,
+asignaturas que se arrastran, un día cada vez.
 
-### Qué se pidió
+Se resolvieron dos de las cinco decisiones:
 
-Una **tabla diaria** dividida en las **cuatro partes del día** (mañana, mediodía, tarde,
-noche). Cada bloque dura **2 horas fijas**, y dentro de cada uno ella reparte las
-asignaturas como quiera respetando ese tope:
+- **Un bloque es una entidad nueva, no una `Tarea`** (decisión 1). Una tarea ocupa una
+  franja del reloj; esto ocupa una *parte del día*, y «mañana» no es «de 9 a 11» — las
+  horas las sabe ella. Hacerlo tarea habría obligado a inventarle un horario y habría
+  mezclado «estudiar física» con «gimnasio» en la agenda y en el mes.
+- **Las cuatro partes no llevan horas** (decisión 4), por lo mismo y porque él lo pidió
+  así: «cada apartado es de 2 horas, pero eso ya lo tengo que saber yo».
 
-> «por la mañana 2 h de mates, por el mediodía 1 h física y 1 h dibujo, pero respetando
-> siempre las 2 h»
+**Siguen abiertas las tres que convierten la tabla en el método**, y son las que importan:
 
-Dos cosas que pidió explícitamente:
+1. **Quién decide cuándo toca repasar.** Hoy lo coloca ella a mano, así que esto es una
+   agenda bonita y no repetición espaciada. ¿Propone la aplicación —1 día, 3 días, 1
+   semana, 2 semanas— y ella acepta o mueve? Eso es lo que haría que el método funcionara.
+2. **Qué se repasa.** ¿Una asignatura entera, un tema, un apunte? Con las **etiquetas** que
+   ya existen, «Tema 3» podría ser la unidad — y eso las convertiría de golpe en algo más
+   que un filtro.
+3. **Qué pasa si un día no estudia.** El repaso que no se hizo, ¿se arrastra, se pierde, o
+   reinicia la cuenta? Es la decisión que separa una herramienta que acompaña de una que
+   regaña.
 
-- **Mover las asignaturas arrastrando** dentro de cada bloque, e indicar cuántas horas le
-  dedica a cada una.
-- **Moverse entre días con flechas**, viendo qué día es, para poder organizarse qué
-  asignaturas toca cada día.
-
-Y el porqué del método, que es lo que no hay que perder de vista:
-
-> «comenzar con repasos o estudios seguidos de la asignatura como al día siguiente etc y
-> luego ir posponiéndolo para mejorar nuestra memoria»
-
-Es decir: no es un horario, es un **calendario de repasos que se van separando**. Primero
-hoy, luego mañana, luego a los tres días, luego a la semana. La tabla diaria es la
-superficie; lo que la llena es el método.
-
-### Con qué se conecta
-
-- **`Tarea`** (`src/lib/data/tipos.ts`) ya es casi esto: tiene `fecha`, `ini`, `fin` en
-  minutos, `asignatura?`, `hecha` y `progreso`. Un bloque de estudio **podría ser una
-  tarea**, y entonces aparecería sola en la agenda del día y en la vista de semana del
-  calendario, que ya existen y ya la saben pintar.
-- **La vista Semana de `/calendario`** ya reparte tareas por día y hora. Es el pariente más
-  cercano a lo que se pide.
-- **`ASIGNATURAS` y sus colores** (`src/lib/data/curso.ts`) dan el catálogo y el color de
-  cada bloque sin inventar nada.
-- **El arrastre** del panel de apuntes (`TIPO_ARRASTRE`, dianas con anillo) es el mismo
-  gesto y se puede reutilizar entero.
-- **`useAhora`** para saber qué día es hoy, nunca `new Date()` en el render.
-
-### Qué falta decidir
-
-1. **¿Un bloque de estudio es una `Tarea` o una entidad nueva?** Si es una tarea, sale
-   gratis en el calendario y en la agenda del día, pero hereda cosas que no le pegan
-   (`icono`, `color` propio) y mezcla «estudiar física» con «gimnasio» en las mismas
-   listas. Si es nueva, hace falta colección, reglas de Firestore, migración y hooks — la
-   receta entera de `docs/data/FIRESTORE.md`.
-2. **Quién decide cuándo toca repasar.** Es el corazón del método y no se pidió explícito:
-   ¿lo propone la aplicación (1 día, 3 días, 1 semana, 2 semanas…) y ella acepta o mueve?
-   ¿O lo coloca ella a mano y la aplicación solo lo recuerda? Lo primero es lo que hace
-   que el método funcione; lo segundo es una agenda bonita.
-3. **Qué se repasa.** ¿Una asignatura entera, un tema, o un apunte concreto? Con las
-   **etiquetas** que ya existen, «Tema 3» podría ser la unidad de repaso — eso las
-   convertiría de golpe en algo más que un filtro.
-4. **Las cuatro partes del día: ¿a qué horas?** Mañana/mediodía/tarde/noche necesitan
-   franjas concretas para poder convivir con el horario de clase, que ya ocupa de 9 a 14.
-5. **Qué pasa si un día no estudia.** El repaso que no se hizo, ¿se arrastra al día
-   siguiente, se pierde, o reinicia la cuenta? Es la decisión que separa una herramienta
-   que acompaña de una que regaña.
+Y una que ha aparecido al construirlo: **el planificador escribe `bloques` y el pomodoro
+escribe `sesiones`**. Cruzarlos diría «planeaste 2 h de mates y echaste 50 min». Sale casi
+gratis; falta decidir si ese espejo ayuda o regaña.
 
 ---
 

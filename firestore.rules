@@ -75,7 +75,7 @@ service cloud.firestore {
 
     // las colecciones con forma fija; el comodín de abajo no debe tocarlas
     function estaValidada(coleccion) {
-      return coleccion in ['eventos', 'tareas', 'apuntes', 'carpetas', 'etiquetas', 'sesiones', 'ajustes', 'layout'];
+      return coleccion in ['eventos', 'tareas', 'apuntes', 'carpetas', 'etiquetas', 'sesiones', 'bloques', 'ajustes', 'layout'];
     }
 
     // El paso franco del administrador.
@@ -233,6 +233,29 @@ service cloud.firestore {
           && request.resource.data.minutos <= 1440
           && textoCorto(request.resource.data.metodo, 40)
           && (!('ini' in request.resource.data) || minutosValidos(request.resource.data.ini));
+      }
+
+      // bloques: el plan de un día, repartido en las cuatro partes de la jornada.
+      //
+      // Es la superficie del metodo de repasos: cada franja dura dos horas y dentro de
+      // ella se reparten asignaturas. La franja NO es una hora del reloj —manana no es
+      // "de 9 a 11"— y por eso esto no es una tarea: una tarea ocupa una franja concreta
+      // del dia y esto ocupa una parte del dia, que es otra cosa.
+      //
+      // El tope de dos horas lo vigila la pantalla y no las reglas: una regla solo ve el
+      // documento que se escribe, nunca la suma de los que ya estan en la franja. Se dice
+      // en vez de fingir que esta cubierto; lo que si se acota aqui es que ninguno solo
+      // pueda pasarse de las dos horas.
+      match /bloques/{bloqueId} {
+        allow read, delete: if esPropietario(uid);
+        allow create, update: if esPropietario(uid)
+          && fechaValida(request.resource.data.fecha)
+          && request.resource.data.franja in ['manana', 'mediodia', 'tarde', 'noche']
+          && textoCorto(request.resource.data.asignatura, 120)
+          && request.resource.data.asignatura.size() > 0
+          && request.resource.data.minutos is int
+          && request.resource.data.minutos >= 15
+          && request.resource.data.minutos <= 120;
       }
 
       // lo que venga después (asignaturas, proyectos, referencias…): mismo dueño y

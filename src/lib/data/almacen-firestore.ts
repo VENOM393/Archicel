@@ -20,7 +20,7 @@ import {
 
 import { getDb } from '@/lib/firebase/config';
 import { nuevoId, type Almacen, type Coleccion, type Desuscribir, type Documento } from './almacen';
-import type { Ajustes, Apunte, Carpeta, Etiqueta, Evento, ID, Layout, Rango, Sesion, Tarea } from './tipos';
+import type { Ajustes, Apunte, Bloque, Carpeta, Etiqueta, Evento, ID, Layout, Rango, Sesion, Tarea } from './tipos';
 
 /**
  * Por qué el campo de orden es un parámetro y no siempre `fecha`.
@@ -148,6 +148,10 @@ export function crearAlmacenFirestore(uid: string): Almacen | null {
     /* por `fecha`, que toda sesión lleva, y así el rango del almacén funciona sin tocar
        nada: pedir «este mes» es el mismo `where` que ya usan eventos y tareas. */
     sesiones: crearColeccion<Sesion>(db, `${raiz}/sesiones`, 'fecha', ['ini']),
+    /* Sin opcionales: los cuatro campos de un bloque son obligatorios. Se ordena por
+       `fecha`, que lo es — ordenar por un opcional haría que Firestore excluyera en
+       silencio los documentos que no lo llevan y devolviera una lista vacía. */
+    bloques: crearColeccion<Bloque>(db, `${raiz}/bloques`, 'fecha', []),
     ajustes: crearDocumento<Ajustes>(db, `${raiz}/ajustes/app`),
     layout: (superficie: string) => crearDocumento<Layout>(db, `${raiz}/layout/${superficie}`),
   };

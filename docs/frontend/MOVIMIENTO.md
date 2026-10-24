@@ -64,6 +64,8 @@ Por eso cada variante tiene **tres** estados y no dos: `fuera`, `dentro`, `salie
 | `MES` | la rejilla del calendario | Viaja en la dirección en que se navega de mes |
 | `DENTRO_DEL_METODO` | la tarjeta abierta de `/metodos` | El contenido llega **después** de que la caja termine de crecer |
 | `METODO_APARTADO` | las tarjetas que no se pulsaron | Se apartan, no se funden: la elegida tiene que leerse como elegida |
+| `REPARTO` | la rejilla del planificador | Solo reparte el escalón entre sus hijas (ver abajo) |
+| `FRANJA` | cada parte del día | Suben escalonadas, de la mañana a la noche |
 | `VELO` | telón de las hojas | Solo opacidad |
 | `HOJA` | hojas modales | Sube desde abajo con muelle |
 | `AVISO` | toast | Sube desde abajo, centrado |
@@ -119,6 +121,17 @@ mismo sitio — el contenido sale a tamaño final dentro de una caja que aún no
 Y las tarjetas que no se pulsaron **se apartan** (`METODO_APARTADO`) en vez de
 desvanecerse en bloque. Si las tres se funden a la vez, la que crece no se lee como la
 elegida: se lee como que la pantalla cambió.
+
+### 3.1c · `staggerChildren` solo alcanza a los hijos directos
+
+Es la trampa que cuesta media hora y no se ve leyendo. `DENTRO_DEL_METODO` declara
+`staggerChildren` y escalona lo que cuelga de él; la rejilla del planificador es **nieta**
+del cuerpo de la tarjeta, así que sus cuatro columnas heredaban el estado «dentro» —eso sí
+baja por el árbol— pero entraban las cuatro a la vez.
+
+Lo arregla `REPARTO`, que no anima nada: existe solo para declarar el escalón en el nivel
+donde están las hermanas. Si un día hiciera falta otro nivel más, es la misma pieza otra
+vez.
 
 ### 3.1b · Una salida que el fundido de la página se tragaba
 
