@@ -27,7 +27,7 @@
  * todavía no está.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as mo from 'motion/react-m';
 import { AnimatePresence } from 'motion/react';
 
@@ -46,6 +46,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { SelectorAsignatura } from '@/components/campos/SelectorAsignatura';
 import { useAhora, useBloques, useSesiones } from '@/hooks/useDatos';
+/* El cronómetro vive en su propio sitio desde que el modo foco del escritorio tiene que
+   enseñar **el mismo** pomodoro: dos motores sobre el mismo `localStorage` es la forma
+   más rápida de que uno apunte una sesión y el otro no. */
+import { useMarcha, usePomodoro, type EnMarcha } from '@/hooks/usePomodoro';
 import { useArchicel } from '@/lib/firebase/sesion';
 import { nuevoId } from '@/lib/data/almacen';
 import { useUI } from '@/lib/ui/contexto';
@@ -63,87 +67,6 @@ import {
 } from '@/lib/data';
 
 type Clave = 'pomodoro' | 'repaso' | 'boceto';
-
-/* ───────────────────────── el cronómetro, visto desde fuera ─────────────────────────
-   Esto vive aquí arriba y no dentro de `Pomodoro` porque **la tarjeta cerrada también
-   tiene que saberlo**. Con el taller a la vista, un pomodoro corriendo era invisible: se
-   arrancaba, se navegaba a otra sección, se volvía, y la pantalla estaba exactamente igual
-   que antes de empezar. El único estado que de verdad importa era el único que no se veía.
-*/
-
-/** Lo que se recuerda entre recargas. Guarda **cuándo empezó**, nunca cuánto queda. */
-interface EnMarcha {
-  asignatura: string;
-  /** Milisegundos desde la época. Lo que queda se calcula; un contador en memoria se pierde. */
-  arranque: number;
-  /** Minutos de esta fase. */
-  largo: number;
-  fase: 'estudio' | 'descanso';
-}
-
-const RECORDADO = 'archicel.pomodoro.v1';
-/** Las pestañas se enteran por `storage`; dentro de esta, por este aviso. */
-const LATIDO = 'archicel:pomodoro';
-
-function leerMarcha(): EnMarcha | null {
-  try {
-    const crudo = localStorage.getItem(RECORDADO);
-    if (!crudo) return null;
-    const g = JSON.parse(crudo) as EnMarcha;
-    return g && typeof g.arranque === 'number' && typeof g.largo === 'number' ? g : null;
-  } catch {
-    /* almacenamiento bloqueado o contenido corrupto: no hay nada corriendo */
-    return null;
-  }
-}
-
-function escribirMarcha(m: EnMarcha | null) {
-  try {
-    if (m) localStorage.setItem(RECORDADO, JSON.stringify(m));
-    else localStorage.removeItem(RECORDADO);
-  } catch {}
-  window.dispatchEvent(new Event(LATIDO));
-}
-
-/** Segundos que quedan de `m`, contra el reloj real. Nunca negativo. */
-function quedanDe(m: EnMarcha): number {
-  return Math.max(0, m.largo * 60 - Math.floor((Date.now() - m.arranque) / 1000));
-}
-
-/**
- * Lo que hay corriendo ahora mismo, para quien solo quiera mirarlo.
- *
- * El latido **solo late si hay algo que contar**: sin pomodoro no hay `setInterval`, así
- * que el taller quieto no despierta a React una vez por segundo para no cambiar nada.
- */
-function useMarcha(): { marcha: EnMarcha | null; restante: number } {
-  const [marcha, setMarcha] = useState<EnMarcha | null>(null);
-  const [restante, setRestante] = useState(0);
-
-  useEffect(() => {
-    const mirar = () => setMarcha(leerMarcha());
-    mirar();
-    window.addEventListener(LATIDO, mirar);
-    window.addEventListener('storage', mirar);
-    return () => {
-      window.removeEventListener(LATIDO, mirar);
-      window.removeEventListener('storage', mirar);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!marcha) {
-      setRestante(0);
-      return;
-    }
-    const tic = () => setRestante(quedanDe(marcha));
-    tic();
-    const t = setInterval(tic, 1000);
-    return () => clearInterval(t);
-  }, [marcha]);
-
-  return { marcha, restante };
-}
 
 /* ───────────────────────── el catálogo de métodos ───────────────────────── */
 
@@ -506,92 +429,12 @@ function PorDefinir({ metodo }: { metodo: Metodo }) {
 /* ───────────────────────── el pomodoro ───────────────────────── */
 
 function Pomodoro({ sesiones, ahora }: { sesiones: Sesion[]; ahora: Date | null }) {
-  const { almacen } = useArchicel();
-  const { avisar } = useUI();
-
-  const [estudio, setEstudio] = useState(25);
-  const [descanso, setDescanso] = useState(5);
+  const { marcha, restante, estudio, setEstudio, descanso, setDescanso, arrancar: lanzar, parar } = usePomodoro();
   const [asignatura, setAsignatura] = useState<string | undefined>(CLAVES_ASIGNATURA[0]);
-  const [marcha, setMarcha] = useState<EnMarcha | null>(null);
-  const [restante, setRestante] = useState(0);
-  const anotado = useRef<number | null>(null);
 
-  /**
-   * Al montar se lee lo recordado y se calcula lo que queda **desde el arranque**.
-   *
-   * Es lo que hace que el pomodoro sobreviva a recargar y a cambiar de pantalla. Un
-   * contador que vive en memoria se pierde con la pestaña, y veinticinco minutos son
-   * muchos para no tocar nada.
-   */
-  useEffect(() => {
-    const g = leerMarcha();
-    if (!g) return;
-    setMarcha(g);
-    if (g.fase === 'estudio') setEstudio(g.largo);
-  }, []);
-
-  const guardarSesion = useCallback(
-    async (m: EnMarcha) => {
-      if (m.fase !== 'estudio' || anotado.current === m.arranque) return;
-      anotado.current = m.arranque;
-      const inicio = new Date(m.arranque);
-      try {
-        await almacen.sesiones.guardar({
-          id: nuevoId('s'),
-          asignatura: m.asignatura,
-          fecha: aFecha(inicio),
-          minutos: m.largo,
-          metodo: 'pomodoro',
-          ini: inicio.getHours() * 60 + inicio.getMinutes(),
-          creado: Date.now(),
-        });
-      } catch {
-        avisar('No se pudo apuntar la sesión.');
-      }
-    },
-    [almacen, avisar],
-  );
-
-  /* El latido. Se recalcula contra el reloj real, no se descuenta un segundo cada vez:
-     si la pestaña se queda dormida, al volver el número es el correcto y no uno viejo. */
-  useEffect(() => {
-    if (!marcha) {
-      setRestante(0);
-      return;
-    }
-    const mirar = () => {
-      const quedan = quedanDe(marcha);
-      setRestante(quedan);
-      if (quedan <= 0) {
-        void guardarSesion(marcha);
-        const siguiente: EnMarcha = {
-          asignatura: marcha.asignatura,
-          arranque: Date.now(),
-          largo: marcha.fase === 'estudio' ? descanso : estudio,
-          fase: marcha.fase === 'estudio' ? 'descanso' : 'estudio',
-        };
-        setMarcha(siguiente);
-        escribirMarcha(siguiente);
-        avisar(marcha.fase === 'estudio' ? 'Pomodoro terminado. Descansa.' : 'Descanso terminado.');
-      }
-    };
-    mirar();
-    const t = setInterval(mirar, 1000);
-    return () => clearInterval(t);
-  }, [marcha, descanso, estudio, guardarSesion, avisar]);
-
+  /* Arrancar necesita una asignatura; el hook solo sabe de tiempo. */
   const arrancar = () => {
-    if (!asignatura) return;
-    const nueva: EnMarcha = { asignatura, arranque: Date.now(), largo: estudio, fase: 'estudio' };
-    anotado.current = null;
-    setMarcha(nueva);
-    escribirMarcha(nueva);
-  };
-
-  const parar = () => {
-    setMarcha(null);
-    anotado.current = null;
-    escribirMarcha(null);
+    if (asignatura) lanzar(asignatura);
   };
 
   const total = (marcha?.largo ?? estudio) * 60;

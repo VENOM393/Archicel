@@ -9,6 +9,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+
+import { Enfoque } from '@/components/Foco';
 import * as m from 'motion/react-m';
 import { AnimatePresence } from 'motion/react';
 import { useState, type ReactNode } from 'react';
@@ -192,6 +194,16 @@ export function Marco({ children }: { children: ReactNode }) {
               {/* Solo se pinta cuando el navegador ofrece instalar; el resto del tiempo
                   no devuelve nada y la cabecera queda como estaba. */}
               <Instalable />
+              {/* El foco, solo en el escritorio y con la misma salida que el lápiz: dos
+                  cosas que aparecen al lado del avatar en cada viaje, y una de ellas sin
+                  animar se leería como un parpadeo y no como un botón que se va. */}
+              <AnimatePresence>
+                {ruta === '/' && (
+                  <m.div key="foco" className="lapiz-hueco" variants={HUECO} initial="fuera" animate="dentro" exit="saliendo">
+                    <Enfoque />
+                  </m.div>
+                )}
+              </AnimatePresence>
               {/* El lápiz solo existe en el escritorio, así que aparece y desaparece en
                   cada viaje entre secciones — dos veces por navegación, justo al lado
                   del avatar, que no se mueve. Sin salida se lee como un parpadeo del

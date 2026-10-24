@@ -717,6 +717,35 @@ Cosas que no se deducen mirando:
   en ningún commit. Las variables de entorno y el dominio que hay que autorizar en Firebase,
   en [docs/tooling/DESPLIEGUE.md](docs/tooling/DESPLIEGUE.md).
 
+## Modo foco
+
+La píldora **Foco** de la barra del escritorio abre **el mismo pomodoro** de `/metodos` a
+pantalla completa, con lo de esa asignatura delante: qué viene —la entrega o el examen más
+cercano— y los últimos apuntes con su nota. Nada más; un modo foco con una barra lateral de
+atajos no es un modo foco.
+
+Cinco cosas que no se deducen:
+
+- **No hay un segundo cronómetro.** El motor vive en `src/hooks/usePomodoro.ts` y lo usan
+  las dos pantallas. Si hay uno corriendo, el foco se abre sobre él; si se para en el foco,
+  se para en Métodos, y al revés. Dos motores sobre el mismo `localStorage` es la forma más
+  rápida de que uno apunte una sesión y el otro no.
+- **El id de la sesión sale del arranque** (`p<arranque>`), no de `nuevoId`. Durante una
+  transición de página el App Router tiene montadas la pantalla que sale y la que entra: si
+  las dos ven terminar el mismo pomodoro con un id aleatorio cada una, el registro cuenta la
+  sesión dos veces. Con el arranque dentro del id escriben el mismo documento.
+- **Salir del foco no para el cronómetro.** Escape cierra la pantalla; estudiar sigue. Por
+  eso la píldora **enseña la cuenta** cuando hay algo corriendo: desde el escritorio se ve
+  cuánto queda sin ir a ninguna parte.
+- **La pantalla va a `body` por un portal y el botón no.** El botón vive dentro de un
+  envoltorio que Motion anima, y un ancestro con `transform` se convierte en el bloque
+  contenedor de todo lo `fixed` de dentro: el telón se resolvía contra ese trocito de
+  cabecera y un widget del escritorio quedaba **por encima** del foco, comiéndose los clics.
+  Es la misma trampa que obligó a portar el visor de apuntes.
+- **La asignatura y el largo solo se eligen antes de empezar.** A mitad, lo que se anote al
+  terminar no sería lo que de verdad se estudió — la misma razón por la que el pomodoro
+  bloquea sus duraciones.
+
 ## Un nombre genérico es de quien lo usó primero
 
 Van tres colisiones de clase CSS en `archicel.css`, las tres con el mismo síntoma —algo

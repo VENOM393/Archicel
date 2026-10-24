@@ -141,6 +141,20 @@ todo el mundo se entere — `storage` solo avisa a **las otras**. El latido de `
 **solo late si hay algo que contar**: sin pomodoro no hay `setInterval`, así que el taller
 quieto no despierta a React una vez por segundo para no cambiar nada.
 
+### El motor no vive aquí
+
+Desde que el **modo foco** del escritorio tiene que enseñar el mismo pomodoro, el
+cronómetro está en `src/hooks/usePomodoro.ts` y las dos pantallas lo usan. Lo que las
+mantiene de acuerdo no es que se hablen: es que **el estado no está en ninguna de las
+dos**, está en `localStorage`, y cada una lo lee.
+
+De ahí sale una decisión que no se deduce: **el id de la sesión se deriva del arranque**
+(`p<arranque>`) en vez de ser aleatorio. Durante una transición de página el App Router
+tiene montadas la pantalla que sale y la que entra; si las dos ven terminar el mismo
+pomodoro con un id propio, el registro cuenta la sesión dos veces.
+
+El modo foco está en `CLAUDE.md`, § «Modo foco».
+
 ### Las duraciones se bloquean mientras corre
 
 Cambiar el largo a mitad haría que lo que se anota al terminar no fuera lo que de verdad se
