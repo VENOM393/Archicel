@@ -5,6 +5,16 @@
  *
  * Arriba, los eventos importantes de esa fecha; debajo, las tareas colocadas en su franja.
  * Tocar un hueco crea una tarea a esa hora.
+ *
+ * ## Y los bloques de estudio del planificador
+ *
+ * Lo que se reparte en «Repetición espaciada» sale aquí **si tiene hora**, al lado de las
+ * tareas y con su propia pinta. No se copia a ninguna parte: esta pantalla **lee** la
+ * colección `bloques`, así que es el mismo documento visto desde otro sitio. Copiarlo a
+ * una `Tarea` habría dado dos verdades que se separan en cuanto se toca una.
+ *
+ * De ahí que arrastrarlo aquí cambie el plan: mover el bloque de las cinco a las siete
+ * escribe `ini` en el bloque, y el planificador lo enseña a las siete.
  */
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
@@ -16,10 +26,10 @@ import { ORQUESTA, PIEZA } from '@/lib/ui/movimiento';
 import { HojaEvento, type PeticionEvento } from '@/components/HojaEvento';
 import { HojaTarea, type PeticionTarea } from '@/components/HojaTarea';
 import { Button } from '@/components/ui/button';
-import { useEventos, useTareas } from '@/hooks/useDatos';
+import { useBloques, useEventos, useTareas } from '@/hooks/useDatos';
 import { cargar, descargar, esDeLaAgenda, minutosEn } from '@/lib/ui/arrastre';
 import { useArchicel } from '@/lib/firebase/sesion';
-import { NOMBRE_PROGRESO, aFecha, hhmm, progresoDe, type Prioridad, type Tarea } from '@/lib/data';
+import { ASIGNATURAS, NOMBRE_PROGRESO, aFecha, hhmm, progresoDe, type ClaveAsignatura, type Prioridad, type Tarea } from '@/lib/data';
 import { ALTO_HORA, DIA_FIN, DIA_INICIO, Icono, Nivel, TIPOS } from '@/lib/ui/catalogo';
 
 export default function PaginaDia() {
@@ -92,6 +102,18 @@ function Dia() {
   };
 
   /* la casilla alterna entre hecha y sin empezar; los demás estados se eligen en la hoja */
+  /* Los bloques del planificador de este día. Solo salen los que tienen hora: uno sin
+     ella está en el plan, pero nadie ha dicho en qué franja del reloj va. */
+  const [bloquesDelDia] = useBloques(fechaSel);
+  const bloques = useMemo(() => bloquesDelDia.filter((b) => b.ini !== undefined), [bloquesDelDia]);
+
+  /** Mover un bloque de hora es cambiar el plan: se escribe en `bloques`, no en otro sitio. */
+  const moverBloque = (id: string, minutos: number) => {
+    const b = bloques.find((x) => x.id === id);
+    if (!b || b.ini === minutos) return;
+    almacen.bloques.guardar({ ...b, ini: minutos, actualizado: Date.now() }).catch(() => {});
+  };
+
   /* Dónde está el cursor mientras se arrastra, en minutos. Se pinta una línea ahí: sin
      ella se suelta a ciegas, porque la pieza arrastrada la dibuja el navegador y no sigue
      la rejilla. */
@@ -304,6 +326,7 @@ function Dia() {
             const minutos = minutosDelGesto(e, c.agarre ?? 0);
             if (minutos === null) return;
             if (c.que === 'tarea') moverTarea(c.id, minutos);
+            if (c.que === 'bloque') moverBloque(c.id, minutos);
           }}
         >
           <div className="horas">
@@ -375,6 +398,33 @@ function Dia() {
             )}
           </div>
 
+          {/* Los bloques van en su propia capa, detrás de las tareas y pegados al borde
+              izquierdo: no son tareas y no compiten por el mismo carril. Lo que se ve es
+              que el rato de estudio está debajo y lo que haya que hacer, encima. */}
+          <div className="capa-bloques">
+            {bloques.map((b) => {
+              const a = ASIGNATURAS[b.asignatura as ClaveAsignatura];
+              const top = (((b.ini as number) - DIA_INICIO * 60) / 60) * ALTO_HORA;
+              const alto = Math.max(22, (b.minutos / 60) * ALTO_HORA - 3);
+              return (
+                <article
+                  key={b.id}
+                  className="bloque-dia"
+                  draggable
+                  onDragStartCapture={(e) => {
+                    const caja = e.currentTarget.getBoundingClientRect();
+                    cargar(e.dataTransfer, { que: 'bloque', id: b.id, agarre: e.clientY - caja.top });
+                  }}
+                  style={{ ['--tc' as string]: a ? `var(--c-${a.color})` : 'var(--hairline-lit)', top, height: alto }}
+                  title={`Estudiar ${a?.nombre ?? b.asignatura} · ${hhmm(b.ini as number)} · arrástralo a otra hora`}
+                >
+                  <span className="bd-que">{a?.nombre ?? b.asignatura}</span>
+                  <span className="bd-cuando">{hhmm(b.ini as number)}</span>
+                </article>
+              );
+            })}
+          </div>
+
           {soltarEn !== null && (
             <div className="soltar-aqui" style={{ top: ((soltarEn - DIA_INICIO * 60) / 60) * ALTO_HORA }}>
               <span>{hhmm(soltarEn)}</span>
@@ -385,7 +435,7 @@ function Dia() {
             <div className="ahora" style={{ top: ((minAhora - DIA_INICIO * 60) / 60) * ALTO_HORA }} />
           )}
 
-          {tareas.length === 0 && (
+          {tareas.length === 0 && bloques.length === 0 && (
             <div className="vacio" style={{ display: 'grid' }}>
               Nada planificado todavía.
               <br />

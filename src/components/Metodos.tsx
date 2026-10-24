@@ -59,6 +59,7 @@ import {
   MINUTOS_POR_FRANJA,
   aFecha,
   deFecha,
+  hhmm,
   hoy,
   type Bloque,
   type ClaveAsignatura,
@@ -699,6 +700,20 @@ const PARTES: Parte[] = [
 const PASO = 15;
 
 /**
+ * La hora que se propone al poner una por primera vez, por parte del día.
+ *
+ * Es una propuesta y **no un límite**: nada impide mover «mañana» a las once de la noche,
+ * porque las horas las sabe ella y cambian. Lo que evita es empezar siempre en 00:00 y
+ * tener que teclear la hora entera cada vez.
+ */
+const HORA_SUGERIDA: Record<Franja, number> = {
+  manana: 9 * 60,
+  mediodia: 13 * 60,
+  tarde: 17 * 60,
+  noche: 21 * 60,
+};
+
+/**
  * El tipo de arrastre del planificador, distinto del de los apuntes.
  *
  * Con el mismo tipo, soltar un apunte sobre una parte del día habría parecido válido
@@ -810,6 +825,22 @@ function Planificador({ ahora }: { ahora: Date | null }) {
     [guardar, libreEn, avisar],
   );
 
+  /**
+   * Pone o quita la hora de un bloque. `undefined` la quita.
+   *
+   * Un bloque con hora **sale en la agenda del día**; uno sin ella sigue valiendo, está en
+   * el plan pero no ocupa una franja del reloj porque nadie ha dicho cuál. Quitarla llega
+   * limpia a la nube porque `ini` está en la lista de opcionales de
+   * `almacen-firestore.ts`: sin esa línea, `merge` habría conservado la vieja.
+   */
+  const aLaHora = useCallback(
+    (b: Bloque, ini: number | undefined) => {
+      if (ini === b.ini) return;
+      void guardar({ ...b, ini, actualizado: Date.now() });
+    },
+    [guardar],
+  );
+
   const estirar = useCallback(
     (b: Bloque, delta: number) => {
       const minutos = b.minutos + delta;
@@ -914,6 +945,7 @@ function Planificador({ ahora }: { ahora: Date | null }) {
               alColocar={(clave) => colocar(clave, p.clave)}
               estirar={estirar}
               quitar={quitar}
+              aLaHora={aLaHora}
             />
           );
         })}
@@ -953,6 +985,7 @@ function ParteDelDia({
   alColocar,
   estirar,
   quitar,
+  aLaHora,
 }: {
   parte: Parte;
   bloques: Bloque[];
@@ -963,6 +996,7 @@ function ParteDelDia({
   alColocar: (clave: string) => void;
   estirar: (b: Bloque, delta: number) => void;
   quitar: (id: string) => void;
+  aLaHora: (b: Bloque, ini: number | undefined) => void;
 }) {
   const [encima, setEncima] = useState(false);
   const [eligiendo, setEligiendo] = useState(false);
@@ -1003,7 +1037,7 @@ function ParteDelDia({
           que es la misma idea que el ancho de las columnas de `/asignaturas`. */}
       <div className="pl-pista">
         {bloques.map((b) => (
-          <Barra key={b.id} bloque={b} estirar={estirar} quitar={quitar} />
+          <Barra key={b.id} bloque={b} estirar={estirar} quitar={quitar} aLaHora={aLaHora} sugerida={HORA_SUGERIDA[parte.clave]} />
         ))}
 
         {libre >= PASO && (
@@ -1050,12 +1084,18 @@ function Barra({
   bloque,
   estirar,
   quitar,
+  aLaHora,
+  sugerida,
 }: {
   bloque: Bloque;
   estirar: (b: Bloque, delta: number) => void;
   quitar: (id: string) => void;
+  aLaHora: (b: Bloque, ini: number | undefined) => void;
+  /** La hora que se propone al ponerla por primera vez en esta parte del día. */
+  sugerida: number;
 }) {
   const a = ASIGNATURAS[bloque.asignatura as ClaveAsignatura];
+  const [poniendoHora, setPoniendoHora] = useState(false);
   return (
     <mo.div
       className="pl-barra"
@@ -1070,9 +1110,55 @@ function Barra({
       transition={MUELLE.normal}
     >
       <span className="pl-barra-que">{a?.nombre ?? bloque.asignatura}</span>
-      <span className="pl-barra-cuanto">{enHoras(bloque.minutos)}</span>
+
+      <span className="pl-barra-pie">
+        {poniendoHora ? (
+          /*
+            `type="time"` y no un campo de texto: lo pinta el sistema en el formato de
+            aquí, acepta el teclado y no hay coma ni punto que traducir — que es justo lo
+            que costó una ronda en la nota de un apunte.
+          */
+          <input
+            type="time"
+            className="pl-hora-campo"
+            autoFocus
+            defaultValue={hhmm(bloque.ini ?? sugerida)}
+            aria-label="A qué hora"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setPoniendoHora(false);
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+            }}
+            onBlur={(e) => {
+              setPoniendoHora(false);
+              const v = e.target.value;
+              if (!v) return;
+              const [h, m] = v.split(':').map(Number);
+              if (Number.isFinite(h) && Number.isFinite(m)) aLaHora(bloque, h * 60 + m);
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className={`pl-hora${bloque.ini === undefined ? ' sin' : ''}`}
+            onClick={() => setPoniendoHora(true)}
+            title={bloque.ini === undefined ? 'Ponerle hora para que salga en la agenda del día' : 'Cambiar la hora'}
+          >
+            {bloque.ini === undefined ? 'Sin hora' : hhmm(bloque.ini)}
+          </button>
+        )}
+        <span className="pl-barra-cuanto">{enHoras(bloque.minutos)}</span>
+      </span>
 
       <span className="pl-mandos">
+        {bloque.ini !== undefined && (
+          <button type="button" onClick={() => aLaHora(bloque, undefined)} aria-label="Quitar la hora" title="Quitar la hora">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.5" />
+              <path d="M12 7.6V12l2.6 1.8" />
+              <path d="M4.6 4.6 19.4 19.4" />
+            </svg>
+          </button>
+        )}
         <button type="button" onClick={() => estirar(bloque, -PASO)} aria-label="Quitar quince minutos">
           −
         </button>

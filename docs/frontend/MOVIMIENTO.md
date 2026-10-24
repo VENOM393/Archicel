@@ -318,6 +318,29 @@ interfaz sin desplazamientos, no una interfaz que no le diga cuándo algo ha cam
 
 ---
 
+### 4.5 · Unos fotogramas sin `to` aterrizan en el estilo del elemento
+
+La regla «una animación de entrada nunca debe ser lo que decide si algo se ve» tiene una
+forma concreta en CSS que no se ve leyendo, y costó que las tareas de la agenda del día
+estuvieran **invisibles desde `c5fb98c`**:
+
+```css
+.tarea{ opacity:0; animation:tareaIn 460ms var(--ease-out) backwards }
+@keyframes tareaIn{ from{ opacity:0; transform:translateY(6px) } }
+```
+
+A `tareaIn` le falta el `to`. Cuando unos fotogramas no lo declaran, **el destino es el
+valor que tiene el propio elemento** — que aquí era `opacity:0`. La tarea animaba de
+invisible a invisible, y `backwards` tampoco conserva nada al terminar. Estaba en el DOM,
+con su sitio y su tamaño correctos, y no se veía.
+
+La salida es la de siempre: **el estado de reposo es el estado final**. Sin `opacity:0` en
+la regla base, el destino de la animación es el valor inicial —opaca, sin desplazar— y lo
+que se pierde si la animación no corre es el movimiento, no el contenido.
+
+Se encontró mirando la pantalla, no leyendo el código: el DOM decía que la tarea estaba
+ahí y la captura decía que no.
+
 ## 5 · Las tres trampas que dejaron la aplicación en blanco
 
 Las tres se descubrieron el mismo día, las tres daban el mismo síntoma —una pantalla que no se

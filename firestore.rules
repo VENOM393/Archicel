@@ -249,6 +249,9 @@ service cloud.firestore {
       // "de 9 a 11"— y por eso esto no es una tarea: una tarea ocupa una franja concreta
       // del dia y esto ocupa una parte del dia, que es otra cosa.
       //
+      // `ini` no contradice lo anterior: es opcional y dice a que hora DE esa parte, si
+      // ella quiere decirlo. El bloque que la lleva sale ademas en la agenda del dia.
+      //
       // El tope de dos horas lo vigila la pantalla y no las reglas: una regla solo ve el
       // documento que se escribe, nunca la suma de los que ya estan en la franja. Se dice
       // en vez de fingir que esta cubierto; lo que si se acota aqui es que ninguno solo
@@ -262,7 +265,9 @@ service cloud.firestore {
           && request.resource.data.asignatura.size() > 0
           && request.resource.data.minutos is int
           && request.resource.data.minutos >= 15
-          && request.resource.data.minutos <= 120;
+          && request.resource.data.minutos <= 120
+          // a que hora exactamente, si ella lo ha dicho. Minutos desde medianoche.
+          && (!('ini' in request.resource.data) || minutosValidos(request.resource.data.ini));
       }
 
       // lo que venga después (asignaturas, proyectos, referencias…): mismo dueño y

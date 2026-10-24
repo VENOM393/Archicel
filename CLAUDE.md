@@ -749,9 +749,40 @@ Cinco cosas que no se deducen:
   sobre una casilla habría encendido la diana para después no hacer nada — y una diana que
   se enciende es una promesa.
 
+Y en la agenda del día se mueven además **los bloques de estudio del planificador**, que
+es lo que los sincroniza: ver § siguiente.
+
 Y una de reparto: **el mes solo deja arrastrar si recibe `alMover`**. El mes de una
 asignatura es una columna estrecha en modo puntos, y arrastrar un punto de 6 px sería una
 promesa que el gesto no puede cumplir. El vocabulario común está en `src/lib/ui/arrastre.ts`.
+
+## El plan tiene hora, y la agenda del día la enseña
+
+Un bloque de «Repetición espaciada» puede llevar **a qué hora** se hace (`ini`, minutos
+desde medianoche, opcional). El que la lleva **sale en la agenda del día**; el que no,
+sigue en el plan pero sin sitio en el reloj — y la barra lo dice con «Sin hora», porque si
+no, no salir en la otra pantalla sería un misterio.
+
+Cuatro cosas que no se deducen:
+
+- **`ini` no contradice que la franja no sea una hora del reloj**, que es lo que dice este
+  documento más arriba. Son dos cosas que conviven: la **franja** dice en qué parte del día
+  va y sigue siendo la unidad con la que se organiza —con su tope de dos horas—; `ini` dice
+  a qué hora **de esa parte**, cuando ella quiera decirlo.
+- **`/dia` lee `bloques`; no los copia.** Es el mismo documento visto desde otro sitio.
+  Copiarlo a una `Tarea` habría dado dos verdades que se separan en cuanto se toca una.
+  De ahí que arrastrar el bloque en la agenda **cambie el plan**: escribe `ini` en el
+  bloque, y el planificador lo enseña movido.
+- **Un bloque es una banda de fondo, no una pieza que compita por un carril.** La primera
+  versión ocupaba el 34 % de la izquierda y se solapaba con las tareas. Ahora ocupa el
+  ancho entero muy flojito con su rótulo a la derecha, y las tareas van encima a plena
+  intensidad: el rato de estudio es el fondo y lo que hay que hacer va delante.
+- **La hora se pone con `type="time"`**, que lo pinta el sistema en el formato de aquí y no
+  tiene coma ni punto que traducir — que es justo lo que costó una ronda en la nota de un
+  apunte.
+
+Y una propuesta que no es un límite: al ponerla por primera vez se ofrece 9:00, 13:00,
+17:00 o 21:00 según la parte del día. Nada impide mover «mañana» a las once de la noche.
 
 ## Modo foco
 

@@ -210,6 +210,19 @@ export interface Bloque {
   asignatura: string;
   /** Múltiplo de 15, entre 15 y `MINUTOS_POR_FRANJA`. La suma de la franja no se pasa. */
   minutos: number;
+  /**
+   * A qué hora exactamente, en minutos desde medianoche. **Opcional.**
+   *
+   * Y no contradice que `franja` no sea una hora del reloj: son dos cosas distintas que
+   * conviven. La franja dice **en qué parte del día** va —y sigue siendo la unidad con la
+   * que se organiza el plan, con su tope de dos horas—; `ini` dice **a qué hora** de esa
+   * parte, cuando ella quiera decirlo.
+   *
+   * Lo que cambia es que un bloque con hora **sale en la agenda del día**. Uno sin hora
+   * sigue valiendo: está en el plan, pero no ocupa una franja del reloj porque nadie ha
+   * dicho cuál.
+   */
+  ini?: number;
   creado?: number;
   actualizado?: number;
 }

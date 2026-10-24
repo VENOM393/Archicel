@@ -747,11 +747,25 @@
     background:color-mix(in srgb,var(--tc) 20%,transparent);
     border:1px solid color-mix(in srgb,var(--tc) 42%,transparent);
     color:var(--ink);display:flex;gap:9px;align-items:flex-start;
-    opacity:0;transform:translateY(8px) scale(.98);
+    /*
+      **El estado de reposo NO lleva `opacity:0`**, y esa línea era un fallo de verdad:
+      las tareas de la agenda del día llevaban invisibles desde `c5fb98c`.
+
+      `@keyframes tareaIn` solo declara `from`. Cuando a unos fotogramas les falta el
+      `to`, el destino es **el valor que tiene el propio elemento** — que aquí era
+      `opacity:0`. Así que la tarea animaba de invisible a invisible, y `backwards`
+      tampoco conserva nada al terminar. Estaba en el DOM, con su sitio y su tamaño
+      correctos, y no se veía.
+
+      Es exactamente la regla que este proyecto tiene escrita: *una animación de entrada
+      nunca debe ser lo que decide si algo se ve*. Sin estilo de reposo, el destino de la
+      animación es el valor inicial —opaca, sin desplazar— y si la animación no corre, lo
+      que se pierde es el movimiento y no la tarea.
+    */
     animation:tareaIn 460ms var(--ease-out) backwards;
     transition:transform 220ms var(--ease-soft),box-shadow 220ms,border-color 220ms
   }
-  @keyframes tareaIn{from{opacity:0;transform:translateY(6px)}}
+  @keyframes tareaIn{from{opacity:0;transform:translateY(6px) scale(.98)}}
   .tarea:hover{transform:translateY(-2px);box-shadow:0 12px 26px -16px rgba(0,0,0,.6);
     border-color:color-mix(in srgb,var(--tc) 75%,transparent)}
   .tarea .ico{
@@ -1020,7 +1034,7 @@
   @media (max-width:700px){
     .semana{gap:4px}
     .sem-dia{padding:8px 2px}
-    .capa-tareas{left:56px;right:6px}
+    .capa-tareas,.capa-bloques{left:56px;right:6px}
     .hora{grid-template-columns:56px 1fr}
   }
 
@@ -3798,6 +3812,66 @@
 
 
 
+
+
+  /* ── la hora de un bloque del planificador ── */
+  .pl-barra-pie{display:flex;align-items:center;gap:8px;min-width:0}
+  .pl-hora{
+    appearance:none;font:inherit;cursor:pointer;
+    padding:1px 7px;border-radius:999px;flex:none;
+    background:rgba(0,0,0,.26);border:1px solid color-mix(in srgb,var(--tc) 36%,transparent);
+    font-family:var(--data);font-size:11px;font-variant-numeric:tabular-nums;color:var(--ink);
+    transition:background-color 200ms var(--ease-soft),border-color 200ms var(--ease-soft),color 200ms var(--ease-soft);
+  }
+  .pl-hora:hover{background:rgba(0,0,0,.42);border-color:color-mix(in srgb,var(--tc) 60%,transparent)}
+  /* Sin hora se dice, no se esconde: un bloque sin ella **no sale en la agenda del día**,
+     y eso hay que poder saberlo sin abrir la otra pantalla. */
+  .pl-hora.sin{border-style:dashed;border-color:var(--hairline);color:var(--ink-subtle)}
+
+  .pl-hora-campo{
+    width:86px;height:22px;padding:0 6px;flex:none;
+    border-radius:var(--r-sm);border:1px solid var(--accent-linea);
+    background:rgba(10,10,13,.92);
+    font-family:var(--data);font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--ink);
+    outline:none;box-shadow:0 0 0 3px rgba(122,166,232,.16);
+  }
+  /* El reloj que Chrome pone dentro del campo es blanco sobre negro y no se ve. */
+  .pl-hora-campo::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.5;cursor:pointer}
+
+  /* ── los bloques de estudio en la agenda del día ──
+     Van en su propia capa, **detrás** de las tareas y pegados al borde izquierdo: no son
+     tareas y no compiten por el mismo carril. Lo que se lee es que el rato de estudio está
+     debajo y lo que hay que hacer, encima. */
+  /* Los mismos márgenes que `.capa-tareas`: arrancaba en `inset:0` y los bloques se
+     pintaban **encima de la columna de las horas**, así que el «16:00» del bloque caía
+     sobre el «16:00» de la rejilla. */
+  .agenda .capa-bloques{position:absolute;left:62px;right:10px;top:0;bottom:0;z-index:1;pointer-events:none}
+
+  /* Un bloque es una **banda de tiempo de fondo**, no una pieza que compita por un carril.
+     La primera versión ocupaba el 34 % de la izquierda y se solapaba con las tareas: dos
+     cosas distintas peleando por el mismo sitio. Ahora ocupa el ancho entero muy flojito y
+     las tareas se colocan encima a plena intensidad, que es lo que dice esta pantalla —
+     el rato de estudio es el fondo y lo que hay que hacer va delante. */
+  .agenda .bloque-dia{
+    position:absolute;left:0;right:0;pointer-events:auto;cursor:grab;
+    display:flex;align-items:center;justify-content:flex-end;gap:8px;overflow:hidden;
+    padding:3px 10px;border-radius:var(--r-sm);
+    background:color-mix(in srgb,var(--tc) 7%,rgba(255,255,255,.015));
+    border:1px solid color-mix(in srgb,var(--tc) 16%,transparent);
+    border-left:3px solid color-mix(in srgb,var(--tc) 70%,transparent);
+  }
+  .agenda .bloque-dia:hover{background:color-mix(in srgb,var(--tc) 12%,rgba(255,255,255,.02))}
+  .agenda .bloque-dia:active{cursor:grabbing}
+  /* El rótulo va a la DERECHA: a la izquierda es donde empiezan las tareas, y dos textos
+     en la misma esquina se leen como uno mal maquetado. */
+  .bd-que{font-size:11px;color:var(--ink-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bd-cuando{
+    font-family:var(--data);font-size:10px;color:var(--ink-subtle);flex:none;
+    padding:1px 6px;border-radius:999px;background:rgba(0,0,0,.3);
+  }
+  /* Y las tareas siguen por encima: la capa de tareas ya es `position:absolute`, solo le
+     faltaba decir que va delante. */
+  .agenda .capa-tareas{z-index:2}
 
   /* ═══════════════════ mover cosas de día y de hora ═══════════════════
      La señal de soltar es **un anillo**, la misma que ya usan la carpeta de apuntes y la

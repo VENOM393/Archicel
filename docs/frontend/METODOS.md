@@ -220,6 +220,21 @@ ve el documento que se escribe, nunca la suma de los que ya están en la franja.
 acotan las reglas es que ninguno solo pase de 120. Se dice en vez de fingir que está
 cubierto.
 
+### Un bloque puede llevar hora, y entonces sale en la agenda del día
+
+`ini` —minutos desde medianoche, **opcional**— dice a qué hora se hace. El bloque que la
+lleva aparece en `/dia`; el que no, sigue en el plan pero sin sitio en el reloj, y la barra
+lo dice con «Sin hora»: no salir en la otra pantalla sin explicación sería un misterio.
+
+**No contradice que la franja no sea una hora del reloj.** Son dos cosas que conviven: la
+franja dice *en qué parte del día* va y sigue siendo la unidad con la que se organiza el
+plan; `ini` dice *a qué hora de esa parte*. Al ponerla por primera vez se propone 9:00,
+13:00, 17:00 o 21:00 según la parte — una propuesta, no un límite.
+
+**`/dia` lee la colección, no la copia.** Es el mismo documento visto desde otro sitio, así
+que arrastrar el bloque allí cambia el plan aquí. Copiarlo a una `Tarea` habría dado dos
+verdades que se separan en cuanto se toca una.
+
 ### Tres cosas de interfaz que no se deducen
 
 - **Su propio tipo de arrastre** (`application/x-archicel-bloque`), distinto del de los

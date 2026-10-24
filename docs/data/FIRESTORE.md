@@ -136,11 +136,16 @@ users/{uid}
     franja: "manana"               ← manana | mediodia | tarde | noche
     asignatura: "geometria"        ← la clave de ASIGNATURAS, ≤ 120
     minutos: 90                    ← 15 a 120, múltiplo de 15
+    ini: 1020                      ← opcional; a qué hora, en minutos desde medianoche
     creado / actualizado: <timestamp>   ← se ordena por `fecha`
 
     **La franja NO es una hora del reloj**, y de ahí sale todo lo demás: «mañana» no es
     «de 9 a 11». Por eso esto no es una `Tarea` —que sí ocupa una franja medida en
     minutos desde medianoche— y por eso no sale en la agenda del día ni en el mes.
+
+    `ini` no contradice lo de arriba: la franja sigue sin ser una hora del reloj. `ini`
+    dice a qué hora **de esa parte**, si ella quiere decirlo, y el bloque que la lleva
+    sale además en la agenda del día — que **lo lee, no lo copia**.
 
     El tope de dos horas por franja **lo vigila la pantalla, no las reglas**: una regla
     solo ve el documento que se escribe, nunca la suma de los que ya están. Lo que sí
@@ -274,7 +279,7 @@ cada colección declara sus campos opcionales en `almacen-firestore.ts`:
 | `carpetas` | `madre`, `etiquetas` |
 | `etiquetas` | — |
 | `sesiones` | `ini` |
-| `bloques` | — |
+| `bloques` | `ini` |
 
 Y `apuntes` lleva además `calificacion`, la nota del profesor.
 

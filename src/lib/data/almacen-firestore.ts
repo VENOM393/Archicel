@@ -151,7 +151,7 @@ export function crearAlmacenFirestore(uid: string): Almacen | null {
     /* Sin opcionales: los cuatro campos de un bloque son obligatorios. Se ordena por
        `fecha`, que lo es — ordenar por un opcional haría que Firestore excluyera en
        silencio los documentos que no lo llevan y devolviera una lista vacía. */
-    bloques: crearColeccion<Bloque>(db, `${raiz}/bloques`, 'fecha', []),
+    bloques: crearColeccion<Bloque>(db, `${raiz}/bloques`, 'fecha', ['ini']),
     ajustes: crearDocumento<Ajustes>(db, `${raiz}/ajustes/app`),
     layout: (superficie: string) => crearDocumento<Layout>(db, `${raiz}/layout/${superficie}`),
   };
