@@ -28,6 +28,11 @@
  * entonces entra la fila de puntos: uno por evento, que cabe siempre. Lo decide el CSS con
  * container queries. Antes, a esa altura, los eventos simplemente desaparecían sin dejar
  * rastro, y un día lleno se veía igual que uno vacío.
+ *
+ * **Mover un evento de día se activa con `alMover` y no viene de serie.** Sin esa función
+ * los chips no son arrastrables y las casillas no son dianas: el mes de una asignatura es
+ * una columna estrecha en modo puntos, donde arrastrar un punto de 6 px sería una promesa
+ * que el gesto no puede cumplir. El calendario grande sí la pasa.
  */
 
 import { useMemo, useState } from 'react';
@@ -38,6 +43,7 @@ import { Button } from '@/components/ui/button';
 import { useAhora } from '@/hooks/useDatos';
 import { MES } from '@/lib/ui/movimiento';
 import { TIPOS } from '@/lib/ui/catalogo';
+import { cargar, descargar, esDeLaAgenda } from '@/lib/ui/arrastre';
 import { aFecha, hhmm, type Evento, type Fecha } from '@/lib/data';
 import type { PeticionEvento } from '@/components/HojaEvento';
 
@@ -67,6 +73,7 @@ export function MesDeEventos({
   cabecera = true,
   leyenda = true,
   compacto = false,
+  alMover,
 }: {
   ref_: Date;
   setRef: (d: Date) => void;
@@ -80,8 +87,13 @@ export function MesDeEventos({
   leyenda?: boolean;
   /** En una columna estrecha la cabecera se encoge y el botón de crear se va. */
   compacto?: boolean;
+  /** Mover un evento a otro día. Sin ella no se puede arrastrar nada. */
+  alMover?: (id: string, fecha: Fecha) => void;
 }) {
   const ahora = useAhora();
+  /* Qué casilla está debajo del cursor. Uno solo y no un booleano por celda: solo puede
+     haber una diana encendida, y tenerlo así hace imposible que se queden dos. */
+  const [sobre, setSobre] = useState<string | null>(null);
   const anio = ref_.getFullYear();
   const mes = ref_.getMonth();
 
@@ -177,8 +189,29 @@ export function MesDeEventos({
               <div
                 key={dia}
                 role="gridcell"
-                className={`celda${fuera ? ' fuera' : ''}${dia === hoyClave ? ' hoy' : ''}${[0, 6].includes(d.getDay()) ? ' finde' : ''}`}
+                className={`celda${fuera ? ' fuera' : ''}${dia === hoyClave ? ' hoy' : ''}${[0, 6].includes(d.getDay()) ? ' finde' : ''}${sobre === dia ? ' diana' : ''}`}
                 onClick={alPulsarDia ? () => alPulsarDia(dia) : undefined}
+                onDragOver={
+                  alMover
+                    ? (e) => {
+                        if (!esDeLaAgenda(e.dataTransfer)) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        setSobre(dia);
+                      }
+                    : undefined
+                }
+                onDragLeave={alMover ? () => setSobre((s) => (s === dia ? null : s)) : undefined}
+                onDrop={
+                  alMover
+                    ? (e) => {
+                        e.preventDefault();
+                        setSobre(null);
+                        const c = descargar(e.dataTransfer);
+                        if (c?.que === 'evento') alMover(c.id, dia);
+                      }
+                    : undefined
+                }
               >
                 <span className="celda-top">
                   <span className="dia-num">{d.getDate()}</span>
@@ -203,7 +236,14 @@ export function MesDeEventos({
                       key={ev.id}
                       type="button"
                       className="chip-ev"
-                      title={`${TIPOS[ev.tipo].n} · ${ev.titulo}${ev.materia ? ` · ${ev.materia}` : ''}`}
+                      draggable={Boolean(alMover)}
+                      /* `onDragStartCapture` por costumbre de la casa: donde Motion anima
+                         la pieza, declara su propio `onDragStart` y tapa el del DOM. Aquí
+                         no lo hace, pero el día que anime un chip no habrá que acordarse. */
+                      onDragStartCapture={
+                        alMover ? (e) => cargar(e.dataTransfer, { que: 'evento', id: ev.id }) : undefined
+                      }
+                      title={`${TIPOS[ev.tipo].n} · ${ev.titulo}${ev.materia ? ` · ${ev.materia}` : ''}${alMover ? ' · arrástralo a otro día' : ''}`}
                       style={{ ['--tc' as string]: `var(--c-${TIPOS[ev.tipo].color})` }}
                       onClick={(e) => {
                         e.stopPropagation();

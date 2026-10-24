@@ -3798,6 +3798,43 @@
 
 
 
+
+  /* ═══════════════════ mover cosas de día y de hora ═══════════════════
+     La señal de soltar es **un anillo**, la misma que ya usan la carpeta de apuntes y la
+     parte del día del planificador. Toda la aplicación dice «aquí cae» igual.
+  */
+  .celda.diana,
+  .col-sem.diana{
+    border-color:var(--accent-linea);
+    box-shadow:0 0 0 1px var(--accent-linea),0 0 0 6px rgba(122,166,232,.1);
+  }
+
+  /* Lo que se puede coger lo dice el cursor, que es donde se mira. */
+  .chip-ev[draggable='true'],
+  .tarea-sem[draggable='true'],
+  .agenda .tarea[draggable='true']{cursor:grab}
+  .chip-ev[draggable='true']:active,
+  .tarea-sem[draggable='true']:active,
+  .agenda .tarea[draggable='true']:active{cursor:grabbing}
+
+  /* La línea de dónde va a caer, en la agenda del día.
+     Hace falta porque la pieza que arrastra el navegador es una copia suya que flota
+     donde está el cursor y no se pega a la rejilla: sin esta línea se suelta a ciegas y
+     el resultado siempre sorprende por quince minutos. */
+  .agenda .soltar-aqui{
+    position:absolute;left:0;right:0;height:0;z-index:4;pointer-events:none;
+    border-top:2px dashed var(--accent-linea);
+  }
+  .agenda .soltar-aqui span{
+    position:absolute;top:-10px;left:0;
+    padding:2px 7px;border-radius:999px;
+    background:var(--accent);color:var(--on-accent);
+    font-family:var(--data);font-size:10.5px;font-variant-numeric:tabular-nums;
+  }
+  /* Mientras se arrastra, las tareas dejan de robar el gesto: sin esto, pasar por encima
+     de una disparaba su `dragleave` y la línea parpadeaba. */
+  .agenda.soltando .capa-tareas{pointer-events:none}
+
   /* ═══════════════════ el modo foco ═══════════════════
      El mismo pomodoro de `/metodos`, a pantalla completa y con lo de esa asignatura
      delante. No es una pantalla nueva con un cronómetro nuevo.

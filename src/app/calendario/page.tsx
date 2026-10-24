@@ -23,6 +23,7 @@ import { MesDeEventos, mesEntero } from '@/components/MesDeEventos';
 import { HojaTarea, type PeticionTarea } from '@/components/HojaTarea';
 import { Button } from '@/components/ui/button';
 import { useEventos, useTareas } from '@/hooks/useDatos';
+import { cargar, descargar, esDeLaAgenda } from '@/lib/ui/arrastre';
 import { useArchicel } from '@/lib/firebase/sesion';
 import { NOMBRE_PROGRESO, aFecha, hhmm, progresoDe, type Tarea } from '@/lib/data';
 import { Icono, Nivel } from '@/lib/ui/catalogo';
@@ -153,8 +154,17 @@ function VistaMes({
   abrirEvento: (p: PeticionEvento) => void;
 }) {
   const router = useRouter();
+  const { almacen } = useArchicel();
   const { desde, hasta } = mesEntero(ref_);
   const eventos = useEventos({ desde, hasta });
+
+  /* Mover un evento es cambiarle la fecha y nada más: el documento entero, nunca un
+     trozo, porque `merge` conserva lo que no se manda. */
+  const mover = (id: string, fecha: string) => {
+    const ev = eventos.find((e) => e.id === id);
+    if (!ev || ev.fecha === fecha) return;
+    almacen.eventos.guardar({ ...ev, fecha }).catch(() => {});
+  };
 
   return (
     <MesDeEventos
@@ -163,6 +173,7 @@ function VistaMes({
       eventos={eventos}
       abrirEvento={abrirEvento}
       alPulsarDia={(clave) => router.push(`/dia?f=${clave}`)}
+      alMover={mover}
     />
   );
 }
@@ -202,6 +213,19 @@ function VistaSemana({
   }, [lunes]);
 
   const tareas = useTareas({ desde: aFecha(lunes), hasta: aFecha(domingo) });
+
+  /* Qué columna está debajo del cursor. Uno solo y no un booleano por columna: solo puede
+     haber una diana encendida a la vez, y así es imposible que se queden dos. */
+  const [sobre, setSobre] = useState<string | null>(null);
+
+  /* Mover una tarea de día no le toca la hora: si estaba a las 17:00 del martes, se queda
+     a las 17:00 del miércoles. Cambiar las dos cosas a la vez con un solo gesto es lo que
+     hace que luego nadie sepa qué pasó. */
+  const moverTarea = (id: string, fecha: string) => {
+    const t = tareas.find((x) => x.id === id);
+    if (!t || t.fecha === fecha) return;
+    almacen.tareas.guardar({ ...t, fecha }).catch(() => {});
+  };
 
   const porDia = useMemo(() => {
     const mapa: Record<string, Tarea[]> = {};
@@ -257,8 +281,21 @@ function VistaSemana({
           return (
             <div
               key={clave}
-              className={`col-sem${clave === hoyClave ? ' es-hoy' : ''}${i > 4 ? ' finde' : ''}`}
+              className={`col-sem${clave === hoyClave ? ' es-hoy' : ''}${i > 4 ? ' finde' : ''}${sobre === clave ? ' diana' : ''}`}
               style={{ ['--d' as string]: i }}
+              onDragOver={(e) => {
+                if (!esDeLaAgenda(e.dataTransfer)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                setSobre(clave);
+              }}
+              onDragLeave={() => setSobre((s) => (s === clave ? null : s))}
+              onDrop={(e) => {
+                e.preventDefault();
+                setSobre(null);
+                const c = descargar(e.dataTransfer);
+                if (c?.que === 'tarea') moverTarea(c.id, clave);
+              }}
             >
               {/* la cabecera es la puerta al día: la agenda ya no vive en el raíl */}
               <button
@@ -278,7 +315,9 @@ function VistaSemana({
                     <article
                       key={t.id}
                       className={`tarea-sem prog-${g}`}
-                      title={`${t.titulo} · ${NOMBRE_PROGRESO[g]}`}
+                      draggable
+                      onDragStartCapture={(e) => cargar(e.dataTransfer, { que: 'tarea', id: t.id })}
+                      title={`${t.titulo} · ${NOMBRE_PROGRESO[g]} · arrástrala a otro día`}
                       style={{ ['--tc' as string]: `var(--c-${t.color})` }}
                       onClick={() => abrirTarea({ tarea: t, fecha: clave })}
                     >

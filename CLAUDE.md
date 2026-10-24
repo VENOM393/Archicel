@@ -717,6 +717,42 @@ Cosas que no se deducen mirando:
   en ningún commit. Las variables de entorno y el dominio que hay que autorizar en Firebase,
   en [docs/tooling/DESPLIEGUE.md](docs/tooling/DESPLIEGUE.md).
 
+## Mover las cosas de sitio
+
+Lo que está puesto en un día se cambia **cogiéndolo**, en las tres vistas, y cada una mueve
+lo que enseña:
+
+| Vista | Qué se mueve | A dónde |
+|---|---|---|
+| Mes (`/calendario`) | un **evento** | a otro día |
+| Semana | una **tarea** | a otro día |
+| Día (`/dia`) | una **tarea** | a otra hora del mismo día |
+
+Cinco cosas que no se deducen:
+
+- **Mover de día no toca la hora.** Una tarea de las 17:00 del martes es de las 17:00 del
+  miércoles. Cambiar las dos cosas con un solo gesto es lo que hace que luego nadie sepa
+  qué pasó.
+- **Mover de hora conserva lo que dura.** Hora y media sigue durando hora y media, y si
+  arrastrándola al final del día no cabe entera se para en el borde: un bloque que acaba a
+  las 25:30 no existe.
+- **La agenda guarda por dónde se agarró la pieza** (`agarre` en la carga). Sin eso, al
+  soltar el borde superior se pega al cursor y la tarea salta hacia arriba una cantidad
+  distinta cada vez.
+- **Hay una línea de «aquí cae», con la hora.** La pieza que arrastra el navegador es una
+  copia que flota junto al cursor y no se pega a la rejilla, así que sin la línea se suelta
+  a ciegas y el resultado siempre sorprende por un cuarto de hora. Mientras se arrastra,
+  `.capa-tareas` deja de recibir el puntero: pasar sobre una tarea disparaba el
+  `dragleave` del contenedor y la línea parpadeaba.
+- **El arrastre de la agenda tiene su propio tipo** (`application/x-archicel-agenda`),
+  distinto del de los apuntes y del del planificador. Con un tipo común, un apunte soltado
+  sobre una casilla habría encendido la diana para después no hacer nada — y una diana que
+  se enciende es una promesa.
+
+Y una de reparto: **el mes solo deja arrastrar si recibe `alMover`**. El mes de una
+asignatura es una columna estrecha en modo puntos, y arrastrar un punto de 6 px sería una
+promesa que el gesto no puede cumplir. El vocabulario común está en `src/lib/ui/arrastre.ts`.
+
 ## Modo foco
 
 La píldora **Foco** de la barra del escritorio abre **el mismo pomodoro** de `/metodos` a

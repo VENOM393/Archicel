@@ -17,6 +17,7 @@ import { HojaEvento, type PeticionEvento } from '@/components/HojaEvento';
 import { HojaTarea, type PeticionTarea } from '@/components/HojaTarea';
 import { Button } from '@/components/ui/button';
 import { useEventos, useTareas } from '@/hooks/useDatos';
+import { cargar, descargar, esDeLaAgenda, minutosEn } from '@/lib/ui/arrastre';
 import { useArchicel } from '@/lib/firebase/sesion';
 import { NOMBRE_PROGRESO, aFecha, hhmm, progresoDe, type Prioridad, type Tarea } from '@/lib/data';
 import { ALTO_HORA, DIA_FIN, DIA_INICIO, Icono, Nivel, TIPOS } from '@/lib/ui/catalogo';
@@ -91,6 +92,34 @@ function Dia() {
   };
 
   /* la casilla alterna entre hecha y sin empezar; los demás estados se eligen en la hoja */
+  /* Dónde está el cursor mientras se arrastra, en minutos. Se pinta una línea ahí: sin
+     ella se suelta a ciegas, porque la pieza arrastrada la dibuja el navegador y no sigue
+     la rejilla. */
+  const [soltarEn, setSoltarEn] = useState<number | null>(null);
+
+  /**
+   * Mueve una tarea a otra hora del mismo día, **conservando lo que dura**.
+   *
+   * Mover es mover: una tarea de hora y media sigue durando hora y media en su sitio
+   * nuevo. Y si al arrastrarla hacia el final del día no cabe entera, se para en el
+   * borde en vez de desbordar — un bloque que acaba a las 25:30 no existe.
+   */
+  const moverTarea = (id: string, minutos: number) => {
+    const t = tareas.find((x) => x.id === id);
+    if (!t) return;
+    const dura = t.fin - t.ini;
+    const ini = Math.min(minutos, DIA_FIN * 60 - dura);
+    if (ini === t.ini) return;
+    almacen.tareas.guardar({ ...t, ini, fin: ini + dura }).catch(() => {});
+  };
+
+  /** De un gesto sobre la rejilla a los minutos donde caería el borde de arriba. */
+  const minutosDelGesto = (e: React.DragEvent, agarre = 0) => {
+    const caja = agenda.current?.querySelector('.capa-tareas')?.getBoundingClientRect();
+    if (!caja) return null;
+    return minutosEn(e.clientY - caja.top - agarre, { inicio: DIA_INICIO, fin: DIA_FIN, altoHora: ALTO_HORA });
+  };
+
   const marcar = (t: Tarea) => {
     const hecha = progresoDe(t) !== 'hecha';
     almacen.tareas.guardar({ ...t, hecha, progreso: hecha ? 'hecha' : 'sin-empezar' }).catch(() => {});
@@ -248,7 +277,35 @@ function Dia() {
           </Button>
         </m.div>
 
-        <m.div className="agenda" variants={PIEZA} ref={agenda}>
+        <m.div
+          className={`agenda${soltarEn !== null ? ' soltando' : ''}`}
+          variants={PIEZA}
+          ref={agenda}
+          onDragOver={(e) => {
+            if (!esDeLaAgenda(e.dataTransfer)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            /* En `dragover` no se puede leer la carga —el navegador la esconde hasta
+               soltar—, así que el agarre no se conoce aquí y la línea marca el cursor.
+               Al soltar sí se lee y la pieza va a su sitio exacto. */
+            setSoltarEn(minutosDelGesto(e));
+          }}
+          onDragLeave={(e) => {
+            /* Solo cuando se sale de la rejilla de verdad: pasar sobre una tarea de
+               dentro dispara `dragleave` del contenedor y la línea parpadeaba. */
+            if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+            setSoltarEn(null);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setSoltarEn(null);
+            const c = descargar(e.dataTransfer);
+            if (!c) return;
+            const minutos = minutosDelGesto(e, c.agarre ?? 0);
+            if (minutos === null) return;
+            if (c.que === 'tarea') moverTarea(c.id, minutos);
+          }}
+        >
           <div className="horas">
             {Array.from({ length: DIA_FIN - DIA_INICIO }, (_, i) => {
               const h = DIA_INICIO + i;
@@ -273,7 +330,14 @@ function Dia() {
                   <article
                     key={t.id}
                     className={`tarea prog-${progresoDe(t)}${progresoDe(t) === 'hecha' ? ' hecha' : ''}${t.fin - t.ini <= 45 ? ' corta' : ''}`}
-                    title={`${t.titulo} · ${NOMBRE_PROGRESO[progresoDe(t)]}`}
+                    draggable
+                    onDragStartCapture={(e) => {
+                      /* Por dónde se cogió: si no, la pieza salta al soltar una cantidad
+                         distinta cada vez según dónde estuviera el cursor dentro de ella. */
+                      const caja = e.currentTarget.getBoundingClientRect();
+                      cargar(e.dataTransfer, { que: 'tarea', id: t.id, agarre: e.clientY - caja.top });
+                    }}
+                    title={`${t.titulo} · ${NOMBRE_PROGRESO[progresoDe(t)]} · arrástrala a otra hora`}
                     style={{
                       ['--tc' as string]: `var(--c-${t.color})`,
                       top,
@@ -310,6 +374,12 @@ function Dia() {
               }),
             )}
           </div>
+
+          {soltarEn !== null && (
+            <div className="soltar-aqui" style={{ top: ((soltarEn - DIA_INICIO * 60) / 60) * ALTO_HORA }}>
+              <span>{hhmm(soltarEn)}</span>
+            </div>
+          )}
 
           {esHoy && minAhora >= DIA_INICIO * 60 && minAhora <= DIA_FIN * 60 && (
             <div className="ahora" style={{ top: ((minAhora - DIA_INICIO * 60) / 60) * ALTO_HORA }} />
